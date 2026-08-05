@@ -231,7 +231,7 @@ export default function BusinessCategory() {
         </div>
 
         {/* SHADCN CARDS RESPONSIVE GRID */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-24 sm:mb-32">
           {filteredShops.map((shop) => {
             const isSelected = selectedId === shop.id;
             const IconComponent = ICON_MAP[shop.iconName] || Store;

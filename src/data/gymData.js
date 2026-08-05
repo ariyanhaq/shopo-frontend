@@ -244,7 +244,11 @@ export const INITIAL_ATTENDANCE_LOGS = [
   { id: 'att-1', memberId: 'GM-1001', memberName: 'Mahmudur Rahman', timeIn: '08:30 AM', timeOut: '09:45 AM', date: '2026-08-05', status: 'Checked Out', trainer: 'Tanvir Ahmed' },
   { id: 'att-2', memberId: 'GM-1004', memberName: 'Farhana Akter', timeIn: '08:10 AM', timeOut: 'In Gym', date: '2026-08-05', status: 'In Workout', trainer: 'Sabrina Islam' },
   { id: 'att-3', memberId: 'GM-1002', memberName: 'Nusrat Jahan', timeIn: '05:15 PM', timeOut: '06:30 PM', date: '2026-08-04', status: 'Checked Out', trainer: 'Sabrina Islam' },
-  { id: 'att-4', memberId: 'GM-1003', memberName: 'Sajid Hossain', timeIn: '07:00 AM', timeOut: '08:15 AM', date: '2026-07-28', status: 'Checked Out', trainer: 'Rocky Chowdhury' }
+  { id: 'att-4', memberId: 'GM-1001', memberName: 'Mahmudur Rahman', timeIn: '06:00 AM', timeOut: '07:20 AM', date: '2026-08-04', status: 'Checked Out', trainer: 'Tanvir Ahmed' },
+  { id: 'att-5', memberId: 'GM-1003', memberName: 'Sajid Hossain', timeIn: '07:00 AM', timeOut: '08:15 AM', date: '2026-08-03', status: 'Checked Out', trainer: 'Rocky Chowdhury' },
+  { id: 'att-6', memberId: 'GM-1004', memberName: 'Farhana Akter', timeIn: '04:30 PM', timeOut: '05:45 PM', date: '2026-08-03', status: 'Checked Out', trainer: 'Sabrina Islam' },
+  { id: 'att-7', memberId: 'GM-1002', memberName: 'Nusrat Jahan', timeIn: '09:00 AM', timeOut: '10:15 AM', date: '2026-08-02', status: 'Checked Out', trainer: 'Sabrina Islam' },
+  { id: 'att-8', memberId: 'GM-1001', memberName: 'Mahmudur Rahman', timeIn: '05:00 PM', timeOut: '06:40 PM', date: '2026-08-01', status: 'Checked Out', trainer: 'Tanvir Ahmed' }
 ];
 
 export const INITIAL_GYM_PAYMENTS = [
