@@ -127,6 +127,40 @@ export const SHOP_TYPES = [
       { id: 'C-102', name: 'Ladies Jamdani Cotton Saree (Red)', category: 'Sarees', stock: 6, unit: 'Pcs', price: '৳ 4,500', status: 'Low Stock' },
       { id: 'C-103', name: 'Denim Stretch Jeans 32"', category: 'Pants', stock: 24, unit: 'Pcs', price: '৳ 1,850', status: 'In Stock' }
     ]
+  },
+  {
+    id: 'gym',
+    name: 'Gym & Fitness Center',
+    nameBn: 'জিমন্যাসিয়াম ও ফিটনেস সেন্টার',
+    category: 'services',
+    iconName: 'Dumbbell',
+    accentColor: '#ef4444',
+    tagline: 'Membership tracking, check-ins, trainers & class schedules',
+    taglineBn: 'মেম্বারশিপ, অ্যাটেনডেন্স, ট্রেইনার ও ওয়ার্কআউট প্ল্যান',
+    description: 'Complete member management, expiry alerts, check-in logs, trainer assignment & workout routines.',
+    descriptionBn: 'মেম্বারশিপ অটোমেশন, অ্যাটেনডেন্স চেক-ইন, ট্রেইনার ও ফিটনেস প্ল্যান।',
+    features: ['Member Management', 'QR & One-Click Check-In', 'Packages & Freeze', 'Workout Plans & Classes'],
+    featuresBn: ['মেম্বারশিপ ট্র্যাকিং', 'অ্যাটেনডেন্স চেক-ইন', 'প্যাকেজ ও রিনিউ', 'ওয়ার্কআউট প্ল্যান ও ক্লাস'],
+    popular: true,
+    stats: [
+      { id: 'members', label: 'Total Members', value: '450', change: '+18 this month', isPositive: true },
+      { id: 'active', label: 'Active Members', value: '382', change: '84.8%', isPositive: true },
+      { id: 'attendance', label: "Today's Attendance", value: '68', change: '+12 vs yesterday', isPositive: true },
+      { id: 'expiring', label: 'Expiring Soon', value: '14 members', change: 'Next 7 days', isPositive: false, alert: true },
+      { id: 'revenue', label: 'Revenue This Month', value: '৳ 385,000', change: '+15.4%', isPositive: true },
+      { id: 'todayRevenue', label: "Today's Revenue", value: '৳ 24,500', change: '8 payments', isPositive: true },
+      { id: 'pending', label: 'Pending Dues', value: '৳ 42,000', change: '12 members', isPositive: false, alert: true },
+      { id: 'newMembers', label: 'New Members (Mo)', value: '34', change: '+22.5%', isPositive: true }
+    ],
+    quickActions: [
+      { id: 'add_member', label: 'Add Member', icon: 'UserPlus', color: 'bg-emerald-500/10 text-emerald-600 font-medium' },
+      { id: 'check_in', label: 'Check In Member', icon: 'QrCode', color: 'bg-[#00df89]/10 text-emerald-600 font-medium' },
+      { id: 'record_payment', label: 'Record Payment', icon: 'CreditCard', color: 'bg-blue-500/10 text-blue-600 font-medium' },
+      { id: 'add_trainer', label: 'Add Trainer', icon: 'UserCheck', color: 'bg-purple-500/10 text-purple-600 font-medium' },
+      { id: 'add_package', label: 'Add Package', icon: 'Package', color: 'bg-amber-500/10 text-amber-600 font-medium' }
+    ],
+    widgets: ['gym_members_queue', 'gym_overview_stats', 'gym_membership_expiry'],
+    sampleInventory: []
   }
 ];
 

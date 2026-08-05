@@ -18,6 +18,10 @@ import {
   Customers, CustomerDetails,
   Employees, Salary,
   SalesReport, ProfitLoss, Analytics,
+  GymDashboard, GymMembers, GymMemberProfile, GymMemberships,
+  GymPackages, GymAttendance, GymPayments, GymTrainers,
+  GymWorkouts, GymClasses, GymEquipment, GymExpenses,
+  GymReports, GymSettings, GymProducts, GymSales, GymAccounting,
   NotFound
 } from '@/pages';
 
@@ -57,6 +61,25 @@ export default function AppRoutes() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/overview" element={<Overview />} />
           <Route path="/dashboard/settings" element={<Settings />} />
+
+          {/* Dedicated Gym Business Module Routes */}
+          <Route path="/gym/dashboard" element={<GymDashboard />} />
+          <Route path="/gym/sales" element={<GymSales />} />
+          <Route path="/gym/products" element={<GymProducts />} />
+          <Route path="/gym/accounting" element={<GymAccounting />} />
+          <Route path="/gym/members" element={<GymMembers />} />
+          <Route path="/gym/members/:id" element={<GymMemberProfile />} />
+          <Route path="/gym/memberships" element={<GymMemberships />} />
+          <Route path="/gym/attendance" element={<GymAttendance />} />
+          <Route path="/gym/payments" element={<GymPayments />} />
+          <Route path="/gym/packages" element={<GymPackages />} />
+          <Route path="/gym/trainers" element={<GymTrainers />} />
+          <Route path="/gym/workout-plans" element={<GymWorkouts />} />
+          <Route path="/gym/classes" element={<GymClasses />} />
+          <Route path="/gym/equipment" element={<GymEquipment />} />
+          <Route path="/gym/expenses" element={<GymExpenses />} />
+          <Route path="/gym/reports" element={<GymReports />} />
+          <Route path="/gym/settings" element={<GymSettings />} />
 
           {/* Distinct Core Feature Routes */}
           <Route path="/sales" element={<Orders />} />

@@ -11,6 +11,7 @@ export * from './sales';
 export * from './customers';
 export * from './employees';
 export * from './reports';
+export * from './gym';
 export { default as NotFound } from './NotFound';
 
 

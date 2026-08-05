@@ -21,11 +21,17 @@ import {
   Calendar, Plus, FileText, PackagePlus, AlertTriangle, ArrowRight
 } from 'lucide-react';
 
+import GymDashboard from '../gym/GymDashboard';
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { activeShop } = useShop();
   const { lang, t } = useLanguage();
   const [selectedPeriod, setSelectedPeriod] = useState('This Month');
+
+  if (activeShop?.id === 'gym') {
+    return <GymDashboard />;
+  }
 
   const d = t?.dashboard || {};
 
