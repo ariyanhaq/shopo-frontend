@@ -5,6 +5,13 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue
+} from '@/components/ui/select';
 import { X, Dumbbell, CheckCircle2, User, Phone, Mail, Clock, DollarSign } from 'lucide-react';
 
 export default function AddTrainerModal({ isOpen, onClose, onSaveTrainer, initialData }) {
@@ -110,17 +117,21 @@ export default function AddTrainerModal({ isOpen, onClose, onSaveTrainer, initia
 
           <div>
             <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Fitness Specialization</label>
-            <select
+            <Select
               value={formData.specialization}
-              onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
+              onValueChange={(val) => setFormData({ ...formData, specialization: val })}
             >
-              <option value="Bodybuilding & Heavy Strength">Bodybuilding & Heavy Strength</option>
-              <option value="Weight Loss & Pilates">Weight Loss & Pilates</option>
-              <option value="HIIT & Functional Conditioning">HIIT & Functional Conditioning</option>
-              <option value="Power Yoga & Flexibility">Power Yoga & Flexibility</option>
-              <option value="Cardio & Endurance">Cardio & Endurance</option>
-            </select>
+              <SelectTrigger className="w-full bg-slate-50 dark:bg-zinc-900">
+                <SelectValue placeholder="Fitness Specialization" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Bodybuilding & Heavy Strength">Bodybuilding & Heavy Strength</SelectItem>
+                <SelectItem value="Weight Loss & Pilates">Weight Loss & Pilates</SelectItem>
+                <SelectItem value="HIIT & Functional Conditioning">HIIT & Functional Conditioning</SelectItem>
+                <SelectItem value="Power Yoga & Flexibility">Power Yoga & Flexibility</SelectItem>
+                <SelectItem value="Cardio & Endurance">Cardio & Endurance</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

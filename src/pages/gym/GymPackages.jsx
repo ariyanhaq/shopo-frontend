@@ -1,54 +1,115 @@
-/**
- * @file GymPackages.jsx
- * @description Gym membership packages CRUD, feature matrix & tier configuration.
- */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
+import api from '@/services/api';
+import toast from 'react-hot-toast';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Package, Plus, CheckCircle2, Star, Edit3, Trash2,
-  Snowflake, Dumbbell, Apple, Sparkles, Check, X
+  Dumbbell, Sparkles, Check, X, Loader2
 } from 'lucide-react';
 
 import AddEditPackageModal from '@/components/gym/AddEditPackageModal';
-import { INITIAL_GYM_PACKAGES } from '@/data/gymData';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 
 export default function GymPackages() {
   const { lang } = useLanguage();
-  const [packages, setPackages] = useState(INITIAL_GYM_PACKAGES);
-
+  const [packages, setPackages] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [editingPackage, setEditingPackage] = useState(null);
+  const [confirmDeleteDialog, setConfirmDeleteDialog] = useState({
+    isOpen: false,
+    id: null,
+    name: '',
+  });
 
-  const handleSavePackage = (pkgToSave) => {
-    const exists = packages.find(p => p.id === pkgToSave.id);
-    if (exists) {
-      setPackages(packages.map(p => p.id === pkgToSave.id ? pkgToSave : p));
-    } else {
-      setPackages([...packages, pkgToSave]);
+  const fetchPackages = async () => {
+    try {
+      const res = await api.gym.packages.list();
+      if (res.data) {
+        setPackages(res.data);
+      }
+    } catch (err) {
+      console.warn('Failed to load gym packages:', err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleDelete = (id) => {
-    if (confirm('Are you sure you want to delete this membership package?')) {
-      setPackages(packages.filter(p => p.id !== id));
+  useEffect(() => {
+    fetchPackages();
+  }, []);
+
+  const handleSavePackage = async (pkgData) => {
+    setIsSubmitting(true);
+    try {
+      if (editingPackage && editingPackage._id) {
+        await api.gym.packages.update(editingPackage._id, {
+          name: pkgData.name,
+          price: pkgData.price,
+          duration: pkgData.duration,
+          features: pkgData.benefits,
+          popular: pkgData.popular || false,
+        });
+        toast.success(lang === 'bn' ? 'প্যাকেজ সফলভাবে আপডেট করা হয়েছে!' : 'Gym package updated successfully!');
+      } else {
+        await api.gym.packages.create({
+          name: pkgData.name,
+          price: pkgData.price,
+          duration: pkgData.duration,
+          features: pkgData.benefits,
+          popular: pkgData.popular || false,
+        });
+        toast.success(lang === 'bn' ? 'নতুন প্যাকেজ তৈরি করা হয়েছে!' : 'Gym package created successfully!');
+      }
+      setIsModalOpen(false);
+      fetchPackages();
+    } catch (err) {
+      toast.error(err.message || 'Failed to save package in database.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = (pkg) => {
+    setConfirmDeleteDialog({
+      isOpen: true,
+      id: pkg._id,
+      name: pkg.name,
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDeleteDialog.id) return;
+    setIsDeleting(true);
+    try {
+      await api.gym.packages.delete(confirmDeleteDialog.id);
+      toast.success(lang === 'bn' ? 'প্যাকেজ মুছে ফেলা হয়েছে!' : 'Membership package deleted.');
+      setConfirmDeleteDialog({ isOpen: false, id: null, name: '' });
+      fetchPackages();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete package.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   return (
-    <div className="space-y-6 font-sans font-normal text-slate-800 dark:text-zinc-200">
+    <div className="space-y-6 font-sans">
       
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white flex items-center gap-2.5">
             <Package className="w-6 h-6 text-[#00df89]" />
-            <span>Membership Packages & Pricing Tiers</span>
+            <span>{lang === 'bn' ? 'মেম্বারশিপ প্যাকেজ ও প্রাইসিং' : 'Membership Packages & Pricing Tiers'}</span>
           </h1>
-          <p className="text-xs text-slate-500 font-normal">
-            Configure recurring passes, durations, pricing & included personal trainer perks.
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
+            {lang === 'bn' ? 'বিভিন্ন মেয়াদের সাবস্ক্রিপশন প্ল্যান ও ফি কনফিগারেশন' : 'Configure recurring passes, durations, pricing & included athlete perks'}
           </p>
         </div>
 
@@ -57,102 +118,73 @@ export default function GymPackages() {
             setEditingPackage(null);
             setIsModalOpen(true);
           }}
-          className="bg-[#00df89] text-[#011812] hover:bg-[#00c97b] font-medium text-xs sm:text-sm h-11 px-4 gap-2 shadow-md shadow-emerald-500/20"
+          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs gap-1.5 shadow-xs"
         >
-          <Plus className="w-4 h-4" /> Create Custom Package
+          <Plus className="w-4 h-4 stroke-[2]" />
+          <span>{lang === 'bn' ? 'নতুন প্যাকেজ যোগ করুন' : 'Add New Package'}</span>
         </Button>
       </div>
 
-      {/* TOP KPI CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">Active Pass Tiers</span>
-          <div className="mt-1 text-2xl font-normal text-slate-900 dark:text-white">{packages.length} Tiers</div>
-        </Card>
-
-        <Card className="p-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">Most Popular Choice</span>
-          <div className="mt-1 text-base font-medium text-emerald-600 dark:text-[#00df89]">6-Month VIP Transformation</div>
-        </Card>
-
-        <Card className="p-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <span className="text-xs font-normal text-slate-500 dark:text-zinc-400">Avg Membership Pass Value</span>
-          <div className="mt-1 text-2xl font-normal text-blue-500">
-            ৳ {Math.round(packages.reduce((acc, p) => acc + p.price, 0) / (packages.length || 1)).toLocaleString()}
-          </div>
-        </Card>
-      </div>
-
-      {/* PACKAGES CARDS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {packages.map((pkg) => {
-          const isPopular = pkg.id === 'pkg-3';
-
-          return (
+      {/* PACKAGES GRID */}
+      {isLoading ? (
+        <div className="p-12 text-center text-slate-400">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-[#00df89]" />
+          Loading packages...
+        </div>
+      ) : packages.length === 0 ? (
+        <div className="p-12 text-center space-y-3 rounded-2xl bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800">
+          <Package className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto" />
+          <h3 className="text-sm font-medium text-slate-800 dark:text-zinc-200">No Packages Created Yet</h3>
+          <p className="text-xs text-slate-500 dark:text-zinc-400">Create your gym pass packages to start enrolling members.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {packages.map((pkg) => (
             <Card
-              key={pkg.id}
-              className={`p-6 border flex flex-col justify-between space-y-6 relative overflow-hidden transition-all ${
-                isPopular
-                  ? 'border-[#00df89] dark:bg-[#121215] shadow-lg shadow-emerald-500/10'
-                  : 'border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]'
+              key={pkg._id}
+              className={`p-6 flex flex-col justify-between space-y-6 transition-all duration-200 relative overflow-hidden ${
+                pkg.popular
+                  ? 'border-2 border-[#00df89] shadow-lg shadow-emerald-500/10 bg-emerald-500/[0.02] dark:bg-[#00df89]/[0.02]'
+                  : 'border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]'
               }`}
             >
-              {isPopular && (
-                <div className="absolute top-0 right-0 bg-[#00df89] text-[#011812] text-[9px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Most Popular
+              {pkg.popular && (
+                <div className="absolute top-0 right-0 bg-[#00df89] text-[#011812] px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-bl-xl shadow-xs">
+                  Most Popular Pass
                 </div>
               )}
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-[#00df89] border-emerald-500/20 text-[10px] font-normal">
-                    {pkg.duration}
-                  </Badge>
-                  <span className="text-[10px] text-slate-400 font-mono font-normal">{pkg.durationDays} Days Pass</span>
-                </div>
-
                 <div>
-                  <h3 className="font-medium text-lg text-slate-900 dark:text-white">{pkg.name}</h3>
-                  <p className="text-xs text-slate-500 mt-1 font-normal">{pkg.description}</p>
+                  <h3 className="text-lg font-medium text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>{pkg.name}</span>
+                  </h3>
+                  <div className="text-xs text-slate-500 dark:text-zinc-400 mt-1">{pkg.duration} pass</div>
                 </div>
 
-                <div className="text-2xl font-normal text-slate-900 dark:text-white tracking-tight">
-                  ৳ {pkg.price.toLocaleString()} <span className="text-xs font-normal text-slate-400">/ pass</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-medium text-slate-900 dark:text-white tracking-tight">
+                    ৳ {pkg.price.toLocaleString()}
+                  </span>
+                  <span className="text-xs text-slate-400">/{pkg.duration}</span>
                 </div>
 
-                {/* Perk Pills */}
-                <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                  {pkg.personalTrainer && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-500/20 flex items-center gap-1">
-                      <Dumbbell className="w-3 h-3" /> Trainer Included
-                    </span>
-                  )}
-                  {pkg.freezeAllowed && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-300 border border-blue-500/20 flex items-center gap-1">
-                      <Snowflake className="w-3 h-3" /> Freeze Pass
-                    </span>
-                  )}
-                  {pkg.dietPlan && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/20 flex items-center gap-1">
-                      <Apple className="w-3 h-3" /> Diet Plan
-                    </span>
-                  )}
-                </div>
-
-                {/* Benefits List */}
-                <div className="space-y-2 pt-3 border-t border-slate-100 dark:border-zinc-800/80">
-                  <span className="text-[11px] font-medium text-slate-700 dark:text-zinc-300 block">Package Benefits:</span>
-                  {pkg.benefits.map((b, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-xs text-slate-600 dark:text-zinc-400 font-normal">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#00df89] shrink-0" />
-                      <span>{b}</span>
+                {/* Features Checklist */}
+                <div className="space-y-2.5 pt-4 border-t border-slate-100 dark:border-zinc-800/80">
+                  <div className="text-xs font-medium text-slate-700 dark:text-zinc-300">Included Perks:</div>
+                  {(pkg.features || []).map((feat, fIdx) => (
+                    <div key={fIdx} className="flex items-center gap-2 text-xs text-slate-600 dark:text-zinc-400">
+                      <div className="w-4 h-4 rounded-full bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center shrink-0">
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                      </div>
+                      <span>{feat}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-4 border-t border-slate-100 dark:border-zinc-800/80 flex items-center gap-2">
+              <div className="pt-4 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -160,69 +192,49 @@ export default function GymPackages() {
                     setEditingPackage(pkg);
                     setIsModalOpen(true);
                   }}
-                  className="flex-1 text-xs font-medium dark:bg-[#09090b]"
+                  className="flex-1 text-xs gap-1.5"
                 >
-                  <Edit3 className="w-3.5 h-3.5 mr-1" /> Edit
+                  <Edit3 className="w-3.5 h-3.5" /> Edit
                 </Button>
-
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  onClick={() => handleDelete(pkg.id)}
-                  className="text-xs font-medium text-rose-500 hover:text-rose-600 dark:bg-[#09090b]"
+                  onClick={() => handleDelete(pkg)}
+                  className="text-rose-500 hover:text-rose-600 text-xs px-2"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
             </Card>
-          );
-        })}
-      </div>
-
-      {/* COMPARATIVE MATRIX TABLE */}
-      <Card className="p-6 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] space-y-4">
-        <h2 className="text-base font-medium text-slate-900 dark:text-white">Feature Comparison Matrix</h2>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead className="bg-slate-100 dark:bg-zinc-900/80 text-slate-500 font-normal uppercase text-[10px]">
-              <tr>
-                <th className="p-3.5 font-medium">Package Tier</th>
-                <th className="p-3.5 font-medium">Duration</th>
-                <th className="p-3.5 font-medium">Pricing</th>
-                <th className="p-3.5 font-medium text-center">Trainer Included</th>
-                <th className="p-3.5 font-medium text-center">Freeze Allowed</th>
-                <th className="p-3.5 font-medium text-center">Custom Diet Plan</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800 text-slate-800 dark:text-zinc-200 font-normal">
-              {packages.map((pkg) => (
-                <tr key={pkg.id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
-                  <td className="p-3.5 font-medium text-slate-900 dark:text-white">{pkg.name}</td>
-                  <td className="p-3.5 text-slate-500 font-normal">{pkg.duration}</td>
-                  <td className="p-3.5 font-medium text-emerald-600 dark:text-[#00df89]">৳ {pkg.price.toLocaleString()}</td>
-                  <td className="p-3.5 text-center">
-                    {pkg.personalTrainer ? <Check className="w-4 h-4 text-emerald-500 mx-auto" /> : <X className="w-4 h-4 text-slate-300 mx-auto" />}
-                  </td>
-                  <td className="p-3.5 text-center">
-                    {pkg.freezeAllowed ? <Check className="w-4 h-4 text-emerald-500 mx-auto" /> : <X className="w-4 h-4 text-slate-300 mx-auto" />}
-                  </td>
-                  <td className="p-3.5 text-center">
-                    {pkg.dietPlan ? <Check className="w-4 h-4 text-emerald-500 mx-auto" /> : <X className="w-4 h-4 text-slate-300 mx-auto" />}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          ))}
         </div>
-      </Card>
+      )}
 
-      {/* MODAL */}
+      {/* Create / Edit Modal */}
       <AddEditPackageModal
         isOpen={isModalOpen}
+        isSubmitting={isSubmitting}
         onClose={() => setIsModalOpen(false)}
         onSavePackage={handleSavePackage}
-        initialData={editingPackage}
+        initialData={editingPackage ? {
+          name: editingPackage.name,
+          price: editingPackage.price,
+          duration: editingPackage.duration,
+          benefits: editingPackage.features,
+          popular: editingPackage.popular,
+        } : null}
+      />
+
+      {/* Confirm Delete Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDeleteDialog.isOpen}
+        isLoading={isDeleting}
+        title={lang === 'bn' ? `'${confirmDeleteDialog.name}' প্যাকেজ মুছে ফেলতে চান?` : `Delete package '${confirmDeleteDialog.name}'?`}
+        description={lang === 'bn' ? 'এই প্যাকেজটি স্থায়ীভাবে মুছে ফেলা হবে।' : 'This membership package will be permanently deleted.'}
+        confirmText={lang === 'bn' ? 'হ্যাঁ, মুছে ফেলুন' : 'Yes, Delete'}
+        cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDeleteDialog({ isOpen: false, id: null, name: '' })}
       />
 
     </div>

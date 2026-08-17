@@ -1,103 +1,203 @@
 /**
  * @file NewSale.jsx
- * @description Interactive New Sale / Cash Memo creation page with product search, cart management, flat & % discount, payment method, and cash change calculator.
+ * @description Real-time Point of Sale Checkout & Cash Memo Generation with Flat/Percentage Discounts, Cash Given & Change Calculator.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { useAuth } from '@/context/AuthContext';
+import api from '@/services/api';
+import toast from 'react-hot-toast';
+import { Card, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Search, Plus, Minus, Trash2, ShoppingCart, DollarSign,
-  User, Phone, CreditCard, Wallet, Smartphone, CheckCircle2,
-  Printer, ArrowLeft, X, Percent, Tag, Calculator, Sparkles
+  ShoppingCart, Search, Plus, Minus, Trash2, CheckCircle2,
+  DollarSign, ArrowLeft, Printer, FileText, Smartphone, CreditCard,
+  Banknote, X, Sparkles, User, Phone, Check, RefreshCw, AlertCircle,
+  Loader2, Package, Percent, Coins, ArrowRight, Store
 } from 'lucide-react';
 
 export default function NewSale() {
   const navigate = useNavigate();
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
+  const { mongoShop } = useAuth();
 
-  // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-
-  // Sample Inventory Products List
-  const availableProducts = [
-    { id: 'P-101', name: 'Fresh Milk 1L (Pran)', sku: '89345001', category: 'Dairy', stock: 45, unit: 'Pcs', price: 90 },
-    { id: 'P-102', name: 'Miniket Rice Premium 25kg', sku: '89345002', category: 'Grains', stock: 12, unit: 'Bags', price: 1850 },
-    { id: 'P-103', name: 'Sunflower Oil 5L (Rupchanda)', sku: '89345003', category: 'Oil & Ghee', stock: 28, unit: 'Bottles', price: 890 },
-    { id: 'P-104', name: 'ACI Pure Salt 1kg', sku: '89345004', category: 'Spices', stock: 120, unit: 'Pcs', price: 42 },
-    { id: 'P-105', name: 'Farm Fresh Eggs (Layer)', sku: '89345005', category: 'Poultry', stock: 8, unit: 'Trays', price: 390 },
-    { id: 'P-106', name: 'Teer Fortified Soyabean Oil 2L', sku: '89345006', category: 'Oil & Ghee', stock: 15, unit: 'Bottles', price: 360 },
-    { id: 'P-107', name: 'Matador Pinpoint Ballpen Box', sku: '89345007', category: 'Stationery', stock: 80, unit: 'Boxes', price: 240 },
-    { id: 'P-108', name: 'Bashundhara A4 Paper 80GSM', sku: '89345008', category: 'Stationery', stock: 40, unit: 'Rims', price: 380 }
-  ];
+  const [availableProducts, setAvailableProducts] = useState([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [isProcessingSale, setIsProcessingSale] = useState(false);
 
   // Cart State
-  const [cart, setCart] = useState([
-    { id: 'P-102', name: 'Miniket Rice Premium 25kg', price: 1850, qty: 1, unit: 'Bags' }
-  ]);
+  const [cart, setCart] = useState([]);
 
-  // Customer Info State
+  // Customer & Discount Form
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-
-  // Discount State (Flat ৳ vs Percent %)
-  const [discountType, setDiscountType] = useState('flat'); // 'flat' | 'percent'
+  const [discountType, setDiscountType] = useState('flat'); // 'flat' or 'percentage'
   const [discountValue, setDiscountValue] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Cash'); // 'Cash', 'bKash', 'Nagad', 'Card'
+  const [cashGiven, setCashGiven] = useState('');
 
-  // Payment Method & Cash Received Calculator State
-  const [paymentMethod, setPaymentMethod] = useState('Cash'); // 'Cash' | 'bKash' | 'Nagad' | 'Card'
-  const [cashReceived, setCashReceived] = useState('');
-
-  // Completed Receipt Modal State
+  // Post-sale Receipt Modal
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
 
-  // Categories list
-  const categories = [
-    { id: 'all', label: lang === 'bn' ? 'সব পণ্য' : 'All Products' },
-    { id: 'Grains', label: lang === 'bn' ? 'চাল ও খাদ্য' : 'Grains' },
-    { id: 'Dairy', label: lang === 'bn' ? 'দুধ ও ডেইরি' : 'Dairy' },
-    { id: 'Oil & Ghee', label: lang === 'bn' ? 'তেল ও ঘি' : 'Oil & Ghee' },
-    { id: 'Spices', label: lang === 'bn' ? 'মসলা ও লবণ' : 'Spices' },
-    { id: 'Poultry', label: lang === 'bn' ? 'ডিম ও পোল্ট্রি' : 'Poultry' },
-    { id: 'Stationery', label: lang === 'bn' ? 'স্টেশনরি' : 'Stationery' }
-  ];
+  // Real-time Customer Recognition & Autocomplete State
+  const [matchedCustomer, setMatchedCustomer] = useState(null);
+  const [customerSuggestions, setCustomerSuggestions] = useState([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
 
-  // Filtered Products
+  // Debounced Customer Lookup by Phone or Name
+  useEffect(() => {
+    const q = customerPhone.trim();
+    if (q.length < 2) {
+      setCustomerSuggestions([]);
+      setShowCustomerDropdown(false);
+      if (!q) setMatchedCustomer(null);
+      return;
+    }
+
+    // If already matched exact phone, skip reopening dropdown
+    if (matchedCustomer && matchedCustomer.phone === q) {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingCustomer(true);
+      try {
+        const res = await api.customers.list({ search: q });
+        const list = Array.isArray(res?.data)
+          ? res.data
+          : Array.isArray(res?.data?.docs)
+          ? res.data.docs
+          : [];
+        setCustomerSuggestions(list);
+        setShowCustomerDropdown(list.length > 0);
+
+        // Exact match auto-select
+        const exact = list.find((c) => c.phone && c.phone === q);
+        if (exact) {
+          setMatchedCustomer(exact);
+          if (!customerName.trim() || customerName === 'Walk-in Customer') {
+            setCustomerName(exact.name || '');
+          }
+        }
+      } catch (err) {
+        console.warn('Customer lookup error:', err);
+        setCustomerSuggestions([]);
+      } finally {
+        setIsSearchingCustomer(false);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [customerPhone]);
+
+  const handleSelectCustomer = (cust) => {
+    setMatchedCustomer(cust);
+    setCustomerPhone(cust.phone || '');
+    setCustomerName(cust.name || '');
+    setShowCustomerDropdown(false);
+    setCustomerSuggestions([]);
+    toast.success(lang === 'bn' ? `'${cust.name}' গ্রাহক সিলেক্ট করা হয়েছে` : `Selected: ${cust.name}`);
+  };
+
+  const handleClearCustomer = () => {
+    setMatchedCustomer(null);
+    setCustomerPhone('');
+    setCustomerName('');
+    setShowCustomerDropdown(false);
+    setCustomerSuggestions([]);
+  };
+
+  const fetchCatalog = async () => {
+    setIsLoadingProducts(true);
+    try {
+      const res = await api.products.list();
+      const rawList = Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res?.data?.docs)
+        ? res.data.docs
+        : [];
+
+      const mapped = rawList.map((p) => ({
+        id: p._id,
+        name: p.name,
+        image_url: p.image_url || (Array.isArray(p.images) && p.images[0]) || '',
+        sku: p.sku || 'N/A',
+        category: p.category_id?.name || 'General',
+        stock: p.stock_quantity ?? 0,
+        unit: p.unit || 'Pcs',
+        price: p.selling_price ?? 0,
+      }));
+      setAvailableProducts(mapped);
+    } catch (err) {
+      console.warn('Could not load live product catalog:', err.message);
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCatalog();
+  }, []);
+
+  // Filter products by search and category
   const filteredProducts = useMemo(() => {
-    return availableProducts.filter(p => {
-      const matchesCat = selectedCategory === 'all' || p.category === selectedCategory;
+    return availableProducts.filter((p) => {
+      const matchesCategory =
+        selectedCategory === 'all' ||
+        p.category.toLowerCase() === selectedCategory.toLowerCase();
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
         p.name.toLowerCase().includes(q) ||
         p.sku.toLowerCase().includes(q) ||
         p.category.toLowerCase().includes(q);
-      return matchesCat && matchesSearch;
-    });
-  }, [searchQuery, selectedCategory]);
 
-  // Cart Handlers
-  const addToCart = (product) => {
-    setCart((prev) => {
-      const existing = prev.find(item => item.id === product.id);
-      if (existing) {
-        return prev.map(item =>
-          item.id === product.id ? { ...item, qty: item.qty + 1 } : item
-        );
-      }
-      return [...prev, { id: product.id, name: product.name, price: product.price, qty: 1, unit: product.unit }];
+      return matchesCategory && matchesSearch;
     });
+  }, [availableProducts, searchQuery, selectedCategory]);
+
+  // Categories list extracted from products
+  const categories = useMemo(() => {
+    const set = new Set(availableProducts.map((p) => p.category));
+    return ['all', ...Array.from(set)];
+  }, [availableProducts]);
+
+  // Add Item to Cart
+  const handleAddToCart = (product) => {
+    const existing = cart.find((item) => item.id === product.id);
+    if (existing) {
+      setCart(
+        cart.map((item) =>
+          item.id === product.id ? { ...item, qty: item.qty + 1 } : item
+        )
+      );
+    } else {
+      setCart([
+        ...cart,
+        {
+          id: product.id,
+          name: product.name,
+          sku: product.sku,
+          price: product.price,
+          qty: 1,
+          unit: product.unit,
+        },
+      ]);
+    }
   };
 
-  const updateCartQty = (id, delta) => {
-    setCart((prev) =>
-      prev
-        .map(item => {
+  // Update Item Quantity in Cart
+  const handleUpdateQty = (id, delta) => {
+    setCart(
+      cart
+        .map((item) => {
           if (item.id === id) {
             const newQty = item.qty + delta;
             return newQty > 0 ? { ...item, qty: newQty } : null;
@@ -105,64 +205,107 @@ export default function NewSale() {
           return item;
         })
         .filter(Boolean)
-    );
+      );
   };
 
-  const removeFromCart = (id) => {
-    setCart(prev => prev.filter(item => item.id !== id));
+  // Remove Item
+  const handleRemoveFromCart = (id) => {
+    setCart(cart.filter((item) => item.id !== id));
   };
 
-  // Subtotal Calculation
+  // Calculations
   const subtotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+    return cart.reduce((acc, item) => acc + item.price * item.qty, 0);
   }, [cart]);
 
-  // Discount Amount Calculation
   const discountAmount = useMemo(() => {
-    const val = Number(discountValue) || 0;
-    if (val <= 0) return 0;
-    if (discountType === 'percent') {
-      return Math.round((subtotal * Math.min(val, 100)) / 100);
+    const val = parseFloat(discountValue) || 0;
+    if (discountType === 'percentage') {
+      return (subtotal * val) / 100;
     }
     return Math.min(val, subtotal);
   }, [subtotal, discountType, discountValue]);
 
-  // Final Total Payable
-  const totalPayable = useMemo(() => {
-    return Math.max(0, subtotal - discountAmount);
-  }, [subtotal, discountAmount]);
+  const totalPayable = Math.max(0, subtotal - discountAmount);
 
-  // Cash Change Calculation (Return to Customer)
-  const cashGivenNum = Number(cashReceived) || 0;
-  const changeToReturn = useMemo(() => {
-    if (paymentMethod !== 'Cash' || cashGivenNum <= 0) return 0;
-    return Math.max(0, cashGivenNum - totalPayable);
-  }, [paymentMethod, cashGivenNum, totalPayable]);
+  const cashGivenNum = parseFloat(cashGiven) || 0;
+  const changeToReturn = Math.max(0, cashGivenNum - totalPayable);
+  const remainingDue = Math.max(0, totalPayable - cashGivenNum);
 
-  // Submit Sale Handler
-  const handleCompleteSale = () => {
-    if (cart.length === 0) return;
+  // Complete Sale and Save to MongoDB
+  const handleCompleteSale = async () => {
+    if (cart.length === 0) {
+      toast.error(lang === 'bn' ? 'অনুগ্রহ করে কার্টে পণ্য যোগ করুন।' : 'Please add items to cart.');
+      return;
+    }
+
+    setIsProcessingSale(true);
+    let generatedInvoice = `INV-${Date.now().toString().slice(-6)}`;
+
+    try {
+      const payload = {
+        items: cart.map((item) => ({
+          product_id: item.id,
+          quantity: item.qty,
+        })),
+        discount_type: discountType,
+        discount_value: parseFloat(discountValue) || 0,
+        discount: discountAmount,
+        paid_amount: totalPayable,
+        tendered_amount: paymentMethod === 'Cash' ? (cashGivenNum || totalPayable) : totalPayable,
+        change_amount: paymentMethod === 'Cash' ? changeToReturn : 0,
+        customer_name: customerName.trim() || undefined,
+        customer_phone: customerPhone.trim() || undefined,
+        payment_method: paymentMethod.toLowerCase(),
+        note: customerName.trim() ? `Customer: ${customerName} (${customerPhone})` : '',
+      };
+
+      const res = await api.sales.create(payload);
+      if (res.data?.invoice_number) {
+        generatedInvoice = res.data.invoice_number;
+      }
+      toast.success(lang === 'bn' ? `বিক্রি সম্পন্ন! ইনভয়েস: ${generatedInvoice}` : `Sale completed! Invoice: ${generatedInvoice}`);
+      fetchCatalog(); // Refresh live stock counts
+    } catch (err) {
+      toast.error(err.message || 'Failed to save sale in database.');
+      setIsProcessingSale(false);
+      return;
+    } finally {
+      setIsProcessingSale(false);
+    }
 
     const orderData = {
-      id: `INV-2024-${Math.floor(100 + Math.random() * 900)}`,
+      id: generatedInvoice,
       date: new Date().toLocaleString(),
       customer: customerName.trim() || (lang === 'bn' ? 'সাধারণ কাস্টমার' : 'Walk-in Customer'),
       phone: customerPhone.trim() || 'N/A',
       items: [...cart],
       subtotal,
+      discountType,
+      discountValue: parseFloat(discountValue) || 0,
       discount: discountAmount,
       total: totalPayable,
       method: paymentMethod,
-      cashReceived: paymentMethod === 'Cash' ? cashGivenNum : totalPayable,
-      changeToReturn: paymentMethod === 'Cash' ? changeToReturn : 0
+      cashReceived: paymentMethod === 'Cash' ? (cashGivenNum || totalPayable) : totalPayable,
+      changeToReturn: paymentMethod === 'Cash' ? changeToReturn : 0,
     };
 
     setCompletedOrder(orderData);
     setIsSuccessModalOpen(true);
   };
 
+  const handleResetSale = () => {
+    setCart([]);
+    setCustomerName('');
+    setCustomerPhone('');
+    setDiscountValue('');
+    setCashGiven('');
+    setIsSuccessModalOpen(false);
+    setCompletedOrder(null);
+  };
+
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
       {/* PAGE HEADER */}
       <div className="flex items-center justify-between gap-4">
@@ -171,446 +314,601 @@ export default function NewSale() {
             variant="outline"
             size="icon"
             onClick={() => navigate('/sales')}
-            className="w-9 h-9 rounded-xl dark:bg-[#121215]"
+            className="w-9 h-9 rounded-xl dark:bg-[#121215] border-slate-200 dark:border-zinc-800"
             title="Back to Sales List"
           >
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
-            <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight">
-              {lang === 'bn' ? 'নতুন বিক্রি ও মেমো তৈরি' : 'Create New Sale & Cash Memo'}
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+              {lang === 'bn' ? 'নতুন বিক্রি ও ক্যাশ মেমো' : 'Point of Sale & Cash Memo'}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
               {lang === 'bn'
-                ? 'পণ্য খুঁজুন, ডিসকাউন্ট দিন ও ক্যাশ মেমো জমা দিন।'
-                : 'Search products, apply discounts, choose payment method & calculate change.'}
+                ? 'পণ্য নির্বাচন করুন, ফ্ল্যাট বা শতকরা ডিসকাউন্ট দিন এবং ক্যাশ ট্র্যাকিং করুন।'
+                : 'Select items from catalog, apply flat or percentage discount, track cash tendered & change.'}
             </p>
           </div>
         </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleResetSale}
+          className="text-xs dark:bg-[#121215] border-slate-200 dark:border-zinc-800"
+        >
+          {lang === 'bn' ? 'কার্ট খালি করুন' : 'Clear Cart'}
+        </Button>
       </div>
 
       {/* TWO COLUMN POS LAYOUT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* LEFT COLUMN: PRODUCT CATALOG SEARCH & SELECTION (7 COLS) */}
+        {/* LEFT 7 COLS: PRODUCT PICKER & SEARCH */}
         <div className="lg:col-span-7 space-y-4">
           
-          {/* Search Input & Category Pills */}
-          <Card className="p-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] space-y-3">
-            
-            {/* Search Input */}
+          {/* SEARCH AND CATEGORY BAR */}
+          <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] space-y-3">
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 dark:text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <Input
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
                 type="text"
+                placeholder={lang === 'bn' ? 'পণ্য বা বারকোড খুঁজুন...' : 'Search items by name, SKU or barcode...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={lang === 'bn' ? 'পণ্যের নাম, আইডি (SKU) বা ক্যাটাগরি লিখুন...' : 'Search product name, category, or SKU ID...'}
-                className="pl-10 dark:bg-[#09090b]"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
               />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
             </div>
 
-            {/* Category Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-              {categories.map(cat => (
+            {/* Category pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              {categories.map((cat) => (
                 <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors shrink-0 cursor-pointer ${
-                    selectedCategory === cat.id
-                      ? 'bg-[#00df89] text-[#011812] shadow-xs'
-                      : 'bg-slate-100 dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200/60 dark:border-zinc-800/60 font-normal'
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                    selectedCategory === cat
+                      ? 'bg-[#00df89] text-[#011812]'
+                      : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-800'
                   }`}
                 >
-                  {cat.label}
+                  {cat === 'all' ? (lang === 'bn' ? 'সকল পণ্য' : 'All Items') : (cat.charAt(0).toUpperCase() + cat.slice(1))}
                 </button>
               ))}
             </div>
-
           </Card>
 
-          {/* Product Items Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {filteredProducts.map((prod) => {
-              const inCartItem = cart.find(c => c.id === prod.id);
-
-              return (
-                <Card
-                  key={prod.id}
-                  onClick={() => addToCart(prod)}
-                  className={`p-4 cursor-pointer transition-all duration-150 border flex flex-col justify-between select-none ${
-                    inCartItem
-                      ? 'border-[#00df89] bg-emerald-50/20 dark:bg-emerald-950/20 shadow-xs'
-                      : 'border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] hover:border-slate-300 dark:hover:border-zinc-700'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <Badge variant="secondary" className="text-[10px] font-normal">
-                        {prod.category}
-                      </Badge>
-                      <span className="text-[10px] text-slate-400 font-normal">SKU: {prod.sku}</span>
-                    </div>
-
-                    <h4 className="font-medium text-xs sm:text-sm text-slate-900 dark:text-white line-clamp-1">
-                      {prod.name}
-                    </h4>
-
-                    <div className="text-[11px] text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
-                      Stock: {prod.stock} {prod.unit}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 dark:border-zinc-800/80">
-                    <div className="font-medium text-sm text-slate-900 dark:text-white">
-                      ৳ {prod.price.toLocaleString()}
-                    </div>
-
-                    <Button
-                      variant={inCartItem ? 'default' : 'outline'}
-                      size="sm"
-                      className={`h-7 text-xs gap-1 font-medium ${
-                        inCartItem
-                          ? 'bg-[#00df89] text-[#011812] hover:bg-[#00c97b]'
-                          : 'dark:bg-[#09090b]'
-                      }`}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>{inCartItem ? `(${inCartItem.qty})` : (lang === 'bn' ? 'যুক্ত করুন' : 'Add')}</span>
-                    </Button>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
-
-          {filteredProducts.length === 0 && (
-            <Card className="p-8 text-center border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] text-xs text-slate-400 font-normal">
-              {lang === 'bn' ? 'কোনো পণ্য পাওয়া যায়নি।' : 'No products found for this search.'}
+          {/* PRODUCTS GRID */}
+          {isLoadingProducts ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <Skeleton key={i} className="h-32 w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <Card className="p-12 text-center space-y-3 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+              <Package className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto" />
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">No matching products found</h3>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">Add products to your catalog to start recording sales.</p>
             </Card>
-          )}
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+              {filteredProducts.map((product) => {
+                const inCart = cart.find((i) => i.id === product.id);
+                return (
+                  <Card
+                    key={product.id}
+                    onClick={() => handleAddToCart(product)}
+                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all duration-150 relative overflow-hidden flex flex-col justify-between hover:border-[#00df89] hover:shadow-md dark:bg-[#121215] ${
+                      inCart
+                        ? 'border-[#00df89] bg-emerald-500/5 shadow-xs'
+                        : 'border-slate-200/90 dark:border-zinc-800/80'
+                    }`}
+                  >
+                    {inCart && (
+                      <div className="absolute top-2.5 right-2.5 z-10 w-6 h-6 rounded-full bg-[#00df89] text-[#011812] flex items-center justify-center text-xs font-bold shadow-md">
+                        {inCart.qty}
+                      </div>
+                    )}
 
+                    <div className="space-y-2.5">
+                      {/* Consistent Image Container with Fallback */}
+                      <div className="w-full h-28 sm:h-32 rounded-xl overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60 border border-slate-200/60 dark:border-zinc-800/60 flex items-center justify-center relative group">
+                        {product.image_url ? (
+                          <img
+                            src={product.image_url}
+                            alt={product.name}
+                            className="w-full h-full object-contain p-1.5 transition-transform duration-200 group-hover:scale-105"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.nextSibling) {
+                                e.target.nextSibling.style.display = 'flex';
+                              }
+                            }}
+                          />
+                        ) : null}
+
+                        <div
+                          className={`w-full h-full flex flex-col items-center justify-center gap-1.5 text-slate-400 dark:text-zinc-600 ${
+                            product.image_url ? 'hidden' : 'flex'
+                          }`}
+                        >
+                          <Package className="w-8 h-8 stroke-[1.25] text-slate-300 dark:text-zinc-600" />
+                          <span className="text-[10px] font-medium text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                            {product.category || 'Product'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[11px] text-slate-400 font-mono block truncate tracking-wide">{product.sku}</span>
+                        <h4 className="text-sm sm:text-[15px] font-bold text-slate-900 dark:text-white line-clamp-2 leading-snug">
+                          {product.name}
+                        </h4>
+                      </div>
+                    </div>
+
+                    <div className="pt-2.5 mt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                      <span className="text-sm sm:text-base font-bold text-[#00a86b] dark:text-[#00df89]">
+                        ৳ {product.price.toLocaleString()}
+                      </span>
+                      <span className="text-xs text-slate-400 font-medium">
+                        {product.stock} {product.unit} left
+                      </span>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* RIGHT COLUMN: CART MEMO & CHECKOUT CALCULATOR (5 COLS) */}
+        {/* RIGHT 5 COLS: CART & CHECKOUT DRAWER */}
         <div className="lg:col-span-5 space-y-4">
-          
-          <Card className="p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] space-y-5">
+          <Card className="p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] space-y-4 shadow-sm">
             
-            {/* Header Title */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800/80">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800/80 pb-3">
               <div className="flex items-center gap-2">
                 <ShoppingCart className="w-4 h-4 text-[#00df89]" />
-                <h3 className="font-medium text-sm sm:text-base text-slate-900 dark:text-white">
-                  {lang === 'bn' ? 'ক্যাশ মেমো কার্ট' : 'Sale Cash Memo'}
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {lang === 'bn' ? 'ক্যাশ মেমো কার্ট' : 'Checkout Memo'}
                 </h3>
               </div>
-              <Badge variant="secondary" className="text-xs font-normal">
-                {cart.length} {lang === 'bn' ? 'টি আইটেম' : 'Items'}
+              <Badge variant="secondary" className="text-xs font-mono font-semibold">
+                {cart.reduce((a, b) => a + b.qty, 0)} items
               </Badge>
             </div>
 
             {/* CART ITEMS LIST */}
-            <div className="space-y-3 max-h-56 overflow-y-auto no-scrollbar pr-1">
-              {cart.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-[#09090b]/80 border border-slate-100 dark:border-zinc-800/80"
-                >
-                  <div className="min-w-0 flex-1 pr-2">
-                    <div className="font-medium text-xs sm:text-sm text-slate-900 dark:text-white truncate">
-                      {item.name}
+            {cart.length === 0 ? (
+              <div className="py-8 text-center space-y-2 text-slate-400">
+                <ShoppingCart className="w-8 h-8 mx-auto stroke-1" />
+                <p className="text-xs font-normal">Your cart is empty. Click items on the left to add.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                {cart.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <h5 className="font-semibold text-slate-900 dark:text-white truncate">{item.name}</h5>
+                      <span className="text-[11px] text-slate-400">
+                        ৳ {item.price.toLocaleString()} / {item.unit}
+                      </span>
                     </div>
-                    <div className="text-[11px] text-slate-400 font-normal">
-                      ৳{item.price} / {item.unit}
-                    </div>
-                  </div>
 
-                  {/* Qty Counter & Actions */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 border border-slate-200/80 dark:border-zinc-700/80 rounded-lg p-0.5">
+                    <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 rounded-lg p-0.5 border border-slate-200 dark:border-zinc-700">
                       <button
-                        onClick={() => updateCartQty(item.id, -1)}
-                        className="w-5 h-5 rounded flex items-center justify-center text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-700"
+                        onClick={() => handleUpdateQty(item.id, -1)}
+                        className="w-6 h-6 flex items-center justify-center text-slate-600 dark:text-zinc-300 hover:text-slate-900 cursor-pointer"
                       >
                         <Minus className="w-3 h-3" />
                       </button>
-                      <span className="w-6 text-center text-xs font-medium text-slate-900 dark:text-white">
-                        {item.qty}
-                      </span>
+                      <span className="w-6 text-center font-bold">{item.qty}</span>
                       <button
-                        onClick={() => updateCartQty(item.id, 1)}
-                        className="w-5 h-5 rounded flex items-center justify-center text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-700"
+                        onClick={() => handleUpdateQty(item.id, 1)}
+                        className="w-6 h-6 flex items-center justify-center text-slate-600 dark:text-zinc-300 hover:text-slate-900 cursor-pointer"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
                     </div>
 
-                    <div className="text-right min-w-[60px]">
-                      <div className="font-medium text-xs sm:text-sm text-slate-900 dark:text-white">
-                        ৳{(item.price * item.qty).toLocaleString()}
-                      </div>
+                    <div className="w-16 text-right font-bold text-slate-900 dark:text-white">
+                      ৳ {(item.price * item.qty).toLocaleString()}
                     </div>
 
                     <button
-                      onClick={() => removeFromCart(item.id)}
-                      className="text-slate-400 hover:text-rose-500 p-1"
+                      onClick={() => handleRemoveFromCart(item.id)}
+                      className="p-1 text-slate-400 hover:text-rose-500 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                </div>
-              ))}
-
-              {cart.length === 0 && (
-                <div className="p-6 text-center text-xs text-slate-400 font-normal">
-                  {lang === 'bn' ? 'মেমো কার্ট ফাঁকা। বাঁ পাশ থেকে পণ্য যোগ করুন।' : 'Cart is empty. Click a product to add.'}
-                </div>
-              )}
-            </div>
-
-            {/* CUSTOMER DETAILS (OPTIONAL) */}
-            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800/80 space-y-2">
-              <div className="text-xs font-medium text-slate-700 dark:text-zinc-300">
-                {lang === 'bn' ? 'কাস্টমারের তথ্য (ঐচ্ছিক)' : 'Customer Details (Optional)'}
+                ))}
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
+            )}
+
+            {/* CUSTOMER INFO & RETURNING CUSTOMER AUTOCOMPLETE */}
+            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800/80 space-y-2 relative">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                <div className="flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-[#00df89]" />
+                  <span>{lang === 'bn' ? 'গ্রাহক / কাস্টমার তথ্য' : 'Customer Information'}</span>
+                </div>
+                {isSearchingCustomer ? (
+                  <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                    <Loader2 className="w-3 h-3 animate-spin text-[#00df89]" />
+                    <span>Searching database...</span>
+                  </span>
+                ) : matchedCustomer ? (
+                  <button
+                    type="button"
+                    onClick={handleClearCustomer}
+                    className="text-[11px] text-rose-500 hover:underline flex items-center gap-0.5 cursor-pointer font-normal"
+                  >
+                    <X className="w-3 h-3" /> Clear Customer
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs relative">
+                {/* Phone Input with Autocomplete Dropdown */}
+                <div className="relative">
+                  <input
+                    type="tel"
+                    placeholder="Type Phone No. (e.g. 017...)"
+                    value={customerPhone}
+                    onChange={(e) => {
+                      setCustomerPhone(e.target.value);
+                      setShowCustomerDropdown(true);
+                    }}
+                    onFocus={() => {
+                      if (customerSuggestions.length > 0) setShowCustomerDropdown(true);
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-1 focus:ring-[#00df89]"
+                  />
+                  {matchedCustomer && (
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#00a86b] dark:text-[#00df89]">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </span>
+                  )}
+
+                  {/* AUTOCOMPLETE MATCHED CUSTOMERS DROPDOWN */}
+                  {showCustomerDropdown && customerSuggestions.length > 0 && (
+                    <div className="absolute top-full left-0 w-[180%] sm:w-[200%] mt-1 z-50 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-zinc-700 rounded-2xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                      <div className="px-2.5 py-1 text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 tracking-wider flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-1">
+                        <span>Matched Customers ({customerSuggestions.length})</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomerDropdown(false)}
+                          className="hover:text-slate-700 dark:hover:text-white"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {customerSuggestions.map((cust) => (
+                        <div
+                          key={cust._id}
+                          onClick={() => handleSelectCustomer(cust)}
+                          className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/80 cursor-pointer transition-all flex items-center justify-between gap-2 text-xs group"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                              <span>{cust.name}</span>
+                              <Badge className="bg-emerald-500/15 text-[#00a86b] dark:text-[#00df89] text-[9px] font-bold px-1 py-0 border-0">
+                                Loyal
+                              </Badge>
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-mono">
+                              {cust.phone}
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <div className="text-[11px] font-bold text-[#00a86b] dark:text-[#00df89]">
+                              ৳ {(cust.totalSpent || cust.total_spent || 0).toLocaleString()}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              {cust.totalOrders || cust.total_orders || 1} orders
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <input
                   type="text"
-                  placeholder={lang === 'bn' ? 'কাস্টমারের নাম' : 'Customer Name'}
+                  placeholder="Customer Name (Optional)"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="h-8 text-xs dark:bg-[#09090b]"
-                />
-                <Input
-                  type="text"
-                  placeholder={lang === 'bn' ? 'ফোন নাম্বার' : 'Phone Number'}
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="h-8 text-xs dark:bg-[#09090b]"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-1 focus:ring-[#00df89]"
                 />
               </div>
             </div>
 
-            {/* DISCOUNT CALCULATOR (FLAT ৳ VS PERCENT %) */}
-            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800/80 space-y-2">
-              <div className="flex items-center justify-between text-xs font-medium">
-                <span className="text-slate-700 dark:text-zinc-300">
-                  {lang === 'bn' ? 'ডিসকাউন্ট ছাড়' : 'Discount Deduction'}
-                </span>
-                
-                {/* Segmented Flat / Percent Toggle */}
-                <div className="bg-slate-100 dark:bg-[#09090b] p-0.5 rounded-lg flex items-center gap-0.5 border border-slate-200/80 dark:border-zinc-800/80">
+            {/* DISCOUNT CONFIGURATION (FLAT / PERCENTAGE) */}
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <label className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                  <Percent className="w-3.5 h-3.5 text-[#00df89]" />
+                  <span>Discount Option</span>
+                </label>
+
+                {/* Flat vs Percentage Toggle */}
+                <div className="flex items-center bg-slate-200 dark:bg-zinc-800 p-0.5 rounded-lg text-[11px]">
                   <button
+                    type="button"
                     onClick={() => setDiscountType('flat')}
-                    className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
+                    className={`px-2 py-0.5 rounded-md font-medium transition-all ${
                       discountType === 'flat'
-                        ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs'
-                        : 'text-slate-500 dark:text-zinc-400 font-normal'
+                        ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500'
                     }`}
                   >
-                    Flat ৳
+                    Flat (৳)
                   </button>
                   <button
-                    onClick={() => setDiscountType('percent')}
-                    className={`px-2 py-0.5 text-[10px] font-medium rounded transition-all ${
-                      discountType === 'percent'
-                        ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs'
-                        : 'text-slate-500 dark:text-zinc-400 font-normal'
+                    type="button"
+                    onClick={() => setDiscountType('percentage')}
+                    className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                      discountType === 'percentage'
+                        ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500'
                     }`}
                   >
-                    Percent %
+                    Percent (%)
                   </button>
                 </div>
               </div>
 
-              <Input
-                type="number"
-                placeholder={discountType === 'flat' ? '৳ 100' : '10 %'}
-                value={discountValue}
-                onChange={(e) => setDiscountValue(e.target.value)}
-                className="h-8 text-xs dark:bg-[#09090b]"
-              />
+              <div className="relative">
+                <input
+                  type="number"
+                  placeholder={discountType === 'flat' ? 'Discount Amount (৳ e.g. 50)' : 'Discount Percentage (% e.g. 10)'}
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-1 focus:ring-[#00df89]"
+                />
+                {discountAmount > 0 && (
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-rose-500">
+                    - ৳ {discountAmount.toLocaleString()}
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* PAYMENT METHOD SELECTOR */}
-            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800/80 space-y-2">
-              <div className="text-xs font-medium text-slate-700 dark:text-zinc-300">
-                {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
-              </div>
-
+            {/* PAYMENT METHOD PICKER */}
+            <div className="space-y-1.5 text-xs">
+              <label className="text-slate-500 block font-medium">Payment Method</label>
               <div className="grid grid-cols-4 gap-1.5">
-                {['Cash', 'bKash', 'Nagad', 'Card'].map(method => (
+                {['Cash', 'bKash', 'Nagad', 'Card'].map((pm) => (
                   <button
-                    key={method}
-                    onClick={() => setPaymentMethod(method)}
-                    className={`py-1.5 text-xs font-medium rounded-xl border transition-all cursor-pointer ${
-                      paymentMethod === method
-                        ? 'border-[#00df89] bg-[#00df89]/10 text-emerald-600 dark:text-[#00df89]'
-                        : 'border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 font-normal'
+                    key={pm}
+                    type="button"
+                    onClick={() => setPaymentMethod(pm)}
+                    className={`py-2 rounded-xl font-semibold border text-center transition-all cursor-pointer ${
+                      paymentMethod === pm
+                        ? 'border-[#00df89] bg-[#00df89]/10 text-slate-900 dark:text-white'
+                        : 'border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400'
                     }`}
                   >
-                    {method}
+                    {pm}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* CASH RECEIVED & CHANGE CALCULATOR (SHOWN WHEN CASH IS SELECTED) */}
+            {/* CASH GIVEN & CHANGE CALCULATOR (IF CASH SELECTED) */}
             {paymentMethod === 'Cash' && (
-              <div className="p-3.5 rounded-2xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 space-y-3">
-                <div className="space-y-1">
-                  <label className="block text-xs font-medium text-slate-800 dark:text-zinc-200">
-                    {lang === 'bn' ? 'গ্রাহক কত টাকা দিয়েছেন (ক্যাশ প্রাপ্তি)' : 'Cash Given by Customer (৳)'}
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <label className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                    <Coins className="w-3.5 h-3.5 text-[#00df89]" />
+                    <span>Cash Received & Change</span>
                   </label>
-                  <Input
-                    type="number"
-                    placeholder="e.g. 2000"
-                    value={cashReceived}
-                    onChange={(e) => setCashReceived(e.target.value)}
-                    className="h-9 text-sm font-medium dark:bg-[#09090b]"
-                  />
                 </div>
 
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="Customer Gave (৳)"
+                    value={cashGiven}
+                    onChange={(e) => setCashGiven(e.target.value)}
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs font-semibold outline-none focus:ring-1 focus:ring-[#00df89]"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCashGiven(String(totalPayable))}
+                    className="text-[11px] h-8 px-2 dark:bg-[#121215]"
+                  >
+                    Exact
+                  </Button>
+                </div>
+
+                {/* Quick denomination chips */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[50, 100, 500, 1000].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setCashGiven(String(amt))}
+                      className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 hover:border-[#00df89]"
+                    >
+                      ৳{amt}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Live Change Box */}
                 {cashGivenNum > 0 && (
-                  <div className="flex items-center justify-between text-xs sm:text-sm pt-1 border-t border-emerald-500/20">
-                    <span className="font-medium text-slate-700 dark:text-zinc-300">
-                      {lang === 'bn' ? 'কাস্টমারকে ফেরতযোগ্য টাকা:' : 'Change to Return:'}
-                    </span>
-                    <span className="font-bold text-base text-[#00a86b] dark:text-[#00df89]">
-                      ৳ {changeToReturn.toLocaleString()}
-                    </span>
+                  <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between text-xs">
+                    {cashGivenNum >= totalPayable ? (
+                      <>
+                        <span className="font-medium text-emerald-600 dark:text-[#00df89]">Change to Return:</span>
+                        <span className="font-bold text-sm text-emerald-600 dark:text-[#00df89]">
+                          ৳ {changeToReturn.toLocaleString()}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-medium text-amber-600">Remaining Due:</span>
+                        <span className="font-bold text-sm text-amber-600">
+                          ৳ {remainingDue.toLocaleString()}
+                        </span>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
             )}
 
-            {/* TOTALS SUMMARY BREAKDOWN */}
-            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800/80 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400 font-normal">
-                <span>Subtotal</span>
-                <span>৳ {subtotal.toLocaleString()}</span>
+            {/* BILL SUMMARY */}
+            <div className="pt-3 border-t border-slate-100 dark:border-zinc-800/80 space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-500">
+                <span>Subtotal ({cart.length} items)</span>
+                <span className="font-semibold text-slate-800 dark:text-zinc-200">৳ {subtotal.toLocaleString()}</span>
               </div>
-
               {discountAmount > 0 && (
-                <div className="flex items-center justify-between text-xs text-rose-500 font-normal">
-                  <span>Discount</span>
-                  <span>- ৳ {discountAmount.toLocaleString()}</span>
+                <div className="flex justify-between text-rose-500">
+                  <span>
+                    Discount {discountType === 'percentage' ? `(${discountValue}%)` : '(Flat)'}
+                  </span>
+                  <span className="font-bold">- ৳ {discountAmount.toLocaleString()}</span>
                 </div>
               )}
-
-              <div className="flex items-center justify-between text-base sm:text-lg font-medium text-slate-900 dark:text-white pt-2 border-t border-slate-100 dark:border-zinc-800">
-                <span>{lang === 'bn' ? 'সর্বমোট প্রদেয়' : 'Total Payable'}</span>
-                <span className="text-[#00a86b] dark:text-[#00df89]">
-                  ৳ {totalPayable.toLocaleString()}
-                </span>
+              <div className="flex justify-between items-baseline pt-2 border-t border-slate-100 dark:border-zinc-800 text-base font-bold text-slate-900 dark:text-white">
+                <span>Total Payable:</span>
+                <span className="text-xl text-[#00a86b] dark:text-[#00df89]">৳ {totalPayable.toLocaleString()}</span>
               </div>
             </div>
 
-            {/* COMPLETE SALE ACTION BUTTON */}
+            {/* CHECKOUT BUTTON */}
             <Button
-              variant="default"
-              disabled={cart.length === 0}
               onClick={handleCompleteSale}
-              className="w-full h-11 bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-sm shadow-xs"
+              disabled={cart.length === 0 || isProcessingSale}
+              className="w-full bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-sm h-11 gap-2 shadow-xs cursor-pointer"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{lang === 'bn' ? 'বিক্রি সম্পন্ন ও ক্যাশ মেমো প্রিন্ট' : 'Complete Sale & Print Memo'}</span>
+              {isProcessingSale ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />}
+              <span>{isProcessingSale ? 'Processing...' : 'Complete & Generate Cash Memo'}</span>
             </Button>
 
           </Card>
-
         </div>
 
       </div>
 
-      {/* COMPLETED SALE RECEIPT MODAL */}
+      {/* COMPLETED RECEIPT MODAL */}
       {isSuccessModalOpen && completedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white dark:bg-[#121215] rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-2xl p-6 space-y-6">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl relative">
             
-            {/* Success Icon Header */}
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 rounded-full bg-[#00df89]/20 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-6 h-6" />
+            {/* Top Right Close Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsSuccessModalOpen(false);
+                navigate('/sales');
+              }}
+              className="absolute top-4 right-4 p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800/80 transition-colors cursor-pointer"
+              title="Close & Go to Sales"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Header */}
+            <div className="text-center space-y-1 pt-1">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
               </div>
-              <h3 className="font-medium text-lg text-slate-900 dark:text-white">
-                {lang === 'bn' ? 'বিক্রি সফলভাবে সম্পন্ন হয়েছে 🎉' : 'Sale Completed Successfully 🎉'}
-              </h3>
-              <div className="text-xs text-slate-400 font-normal">
-                {completedOrder.id} • {completedOrder.date}
-              </div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Sale Completed Successfully!</h2>
+              <p className="text-xs text-slate-400 font-mono">Invoice: {completedOrder.id}</p>
             </div>
 
-            {/* Order Items Breakdown */}
-            <div className="space-y-2 bg-slate-50 dark:bg-[#09090b] p-3.5 rounded-xl border border-slate-100 dark:border-zinc-800">
-              <div className="text-xs font-medium text-slate-500 dark:text-zinc-400 pb-1 border-b border-slate-200/60 dark:border-zinc-800">
-                Customer: <span className="text-slate-900 dark:text-white font-medium">{completedOrder.customer} ({completedOrder.phone})</span>
+            {/* Printable Receipt Content */}
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-3 text-xs">
+              <div className="text-center pb-2 border-b border-slate-200 dark:border-zinc-800">
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">{mongoShop?.name || 'Shopo Store'}</h3>
+                <p className="text-[11px] text-slate-400">{completedOrder.date}</p>
               </div>
 
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-1 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Customer:</span>
+                  <span className="font-semibold text-slate-800 dark:text-zinc-200">{completedOrder.customer}</span>
+                </div>
+                {completedOrder.phone !== 'N/A' && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Phone:</span>
+                    <span className="font-mono text-slate-700 dark:text-zinc-300">{completedOrder.phone}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Payment:</span>
+                  <span className="font-semibold capitalize">{completedOrder.method}</span>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1.5">
                 {completedOrder.items.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs">
-                    <span className="text-slate-700 dark:text-zinc-300 font-medium">{item.name} (x{item.qty})</span>
-                    <span className="text-slate-900 dark:text-white font-medium">৳{item.price * item.qty}</span>
+                  <div key={idx} className="flex justify-between text-[11px]">
+                    <span className="truncate pr-2">{item.name} x {item.qty}</span>
+                    <span className="font-semibold shrink-0">৳ {(item.price * item.qty).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="pt-2 border-t border-slate-200/60 dark:border-zinc-800 space-y-1 text-xs">
-                <div className="flex items-center justify-between text-slate-500">
-                  <span>Subtotal</span>
-                  <span>৳ {completedOrder.subtotal}</span>
+              {/* Financial Totals */}
+              <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1 text-xs">
+                <div className="flex justify-between text-slate-500">
+                  <span>Subtotal:</span>
+                  <span>৳ {completedOrder.subtotal.toLocaleString()}</span>
                 </div>
                 {completedOrder.discount > 0 && (
-                  <div className="flex items-center justify-between text-rose-500">
-                    <span>Discount</span>
-                    <span>- ৳ {completedOrder.discount}</span>
+                  <div className="flex justify-between text-rose-500">
+                    <span>
+                      Discount {completedOrder.discountType === 'percentage' ? `(${completedOrder.discountValue}%)` : '(Flat)'}:
+                    </span>
+                    <span className="font-bold">- ৳ {completedOrder.discount.toLocaleString()}</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between font-medium text-slate-900 dark:text-white pt-1">
-                  <span>Paid ({completedOrder.method})</span>
-                  <span className="text-[#00a86b] dark:text-[#00df89]">৳ {completedOrder.total}</span>
+                <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-800">
+                  <span>Total Paid:</span>
+                  <span className="text-[#00a86b] dark:text-[#00df89]">৳ {completedOrder.total.toLocaleString()}</span>
                 </div>
-                {completedOrder.method === 'Cash' && (
-                  <div className="flex items-center justify-between font-medium text-emerald-600 dark:text-[#00df89] pt-1">
-                    <span>Change Returned:</span>
-                    <span>৳ {completedOrder.changeToReturn}</span>
-                  </div>
+
+                {completedOrder.method.toLowerCase() === 'cash' && (
+                  <>
+                    <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
+                      <span>Cash Received:</span>
+                      <span className="font-semibold">৳ {completedOrder.cashReceived.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-600 dark:text-[#00df89] font-bold">
+                      <span>Change Returned:</span>
+                      <span>৳ {completedOrder.changeToReturn.toLocaleString()}</span>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
 
             {/* Modal Actions */}
-            <div className="flex items-center gap-3">
-              <Button variant="outline" onClick={() => window.print()} className="flex-1 text-xs gap-1.5 dark:bg-[#09090b]">
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print Receipt</span>
-              </Button>
-
-              <Button
-                variant="default"
-                onClick={() => {
-                  setIsSuccessModalOpen(false);
-                  setCart([]);
-                  setDiscountValue('');
-                  setCashReceived('');
-                }}
-                className="flex-1 text-xs bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium"
-              >
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <Button variant="outline" size="sm" onClick={handleResetSale}>
                 New Sale
               </Button>
+              <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
+                <Printer className="w-3.5 h-3.5" /> Print Memo
+              </Button>
             </div>
-
-          </div>
+          </Card>
         </div>
       )}
 

@@ -1,420 +1,620 @@
 /**
  * @file Orders.jsx
- * @description Comprehensive, clean Sales Management page for Shopo supporting English & Bangla with New Sale navigation.
+ * @description Comprehensive Sales Management page with full View, Edit & Delete capabilities, Live DB sync, Discount & Cash Change tracking.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { useAuth } from '@/context/AuthContext';
+import api from '@/services/api';
+import toast from 'react-hot-toast';
+import { Card, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue
+} from '@/components/ui/select';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import {
   ShoppingCart, DollarSign, Plus, Search, Filter, Calendar,
-  FileText, Download, Printer, Eye, CheckCircle2, Clock, X,
-  ArrowUpRight, CreditCard, Wallet, Smartphone, ShieldCheck, ChevronRight
+  FileText, Printer, CheckCircle2, Clock, X, Loader2, Tag,
+  Coins, Percent, Edit2, Trash2, AlertTriangle, Sparkles
 } from 'lucide-react';
 
 export default function Orders() {
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
+  const { mongoShop } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [salesOrders, setSalesOrders] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // View Receipt Modal State
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-  // Sample sales orders dataset
-  const salesOrders = [
-    {
-      id: 'INV-2024-001',
-      date: '2026-08-03 11:24 AM',
-      customer: 'Tanvir Rahman',
-      phone: '+880 1712-345678',
-      items: [
-        { name: 'Miniket Rice 25kg', qty: 2, price: 1850 },
-        { name: 'Sunflower Oil 5L', qty: 1, price: 890 }
-      ],
-      method: 'bKash',
-      status: 'paid',
-      subtotal: 4590,
-      discount: 90,
-      total: 4500
-    },
-    {
-      id: 'INV-2024-002',
-      date: '2026-08-03 10:45 AM',
-      customer: 'Karim Traders',
-      phone: '+880 1819-876543',
-      items: [
-        { name: 'Bashundhara A4 Paper (Rim)', qty: 10, price: 380 },
-        { name: 'Matador Pen Box', qty: 5, price: 240 }
-      ],
-      method: 'Cash',
-      status: 'paid',
-      subtotal: 5000,
-      discount: 0,
-      total: 5000
-    },
-    {
-      id: 'INV-2024-003',
-      date: '2026-08-03 09:15 AM',
-      customer: 'Sabrina Fashion',
-      phone: '+880 1911-223344',
-      items: [
-        { name: 'Ladies Jamdani Saree', qty: 1, price: 4500 }
-      ],
-      method: 'Nagad',
-      status: 'pending',
-      subtotal: 4500,
-      discount: 300,
-      total: 4200
-    },
-    {
-      id: 'INV-2024-004',
-      date: '2026-08-02 04:30 PM',
-      customer: 'Rahim Electronics',
-      phone: '+880 1612-998877',
-      items: [
-        { name: 'Walton Refrigerator 220L', qty: 1, price: 32500 }
-      ],
-      method: 'Card',
-      status: 'paid',
-      subtotal: 32500,
-      discount: 500,
-      total: 32000
-    },
-    {
-      id: 'INV-2024-005',
-      date: '2026-08-02 02:10 PM',
-      customer: 'Walk-in Customer',
-      phone: 'N/A',
-      items: [
-        { name: 'ACI Pure Salt 1kg', qty: 5, price: 42 },
-        { name: 'Fresh Milk 1L', qty: 2, price: 90 }
-      ],
-      method: 'Cash',
-      status: 'paid',
-      subtotal: 390,
-      discount: 0,
-      total: 390
+  // Edit Sale Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingSale, setEditingSale] = useState(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const [editForm, setEditForm] = useState({
+    id: '',
+    invoice_number: '',
+    payment_method: 'cash',
+    discount_type: 'flat',
+    discount_value: '',
+    paid_amount: '',
+    tendered_amount: '',
+    note: '',
+  });
+
+  const fetchSales = async () => {
+    setIsLoading(true);
+    try {
+      const res = await api.sales.list();
+      const rawList = Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res?.data?.docs)
+        ? res.data.docs
+        : [];
+      setSalesOrders(rawList);
+    } catch (err) {
+      console.warn('Failed to load sales from DB:', err.message);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
 
-  // Filtered orders list
+  useEffect(() => {
+    fetchSales();
+  }, []);
+
   const filteredOrders = useMemo(() => {
-    return salesOrders.filter(order => {
-      const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+    return salesOrders.filter((order) => {
       const q = searchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        order.id.toLowerCase().includes(q) ||
-        order.customer.toLowerCase().includes(q) ||
-        order.phone.includes(q);
-      return matchesStatus && matchesSearch;
-    });
-  }, [searchQuery, statusFilter]);
+      const inv = order.invoice_number ? order.invoice_number.toLowerCase() : '';
+      const cust = order.customer_id?.name ? order.customer_id.name.toLowerCase() : 'walk-in customer';
+      const matchesSearch = !q || inv.includes(q) || cust.includes(q);
 
-  const handleOpenReceipt = (order) => {
-    setSelectedOrder(order);
-    setIsReceiptModalOpen(true);
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'paid' && (order.payment_status === 'paid' || (order.due_amount || 0) === 0)) ||
+        (statusFilter === 'due' && (order.due_amount || 0) > 0);
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [salesOrders, searchQuery, statusFilter]);
+
+  const totalRevenue = salesOrders.reduce((acc, o) => acc + (o.total || 0), 0);
+  const totalDue = salesOrders.reduce((acc, o) => acc + (o.due_amount || 0), 0);
+
+  // Open Edit Sale Modal
+  const handleOpenEdit = (order) => {
+    setEditingSale(order);
+    setEditForm({
+      id: order._id,
+      invoice_number: order.invoice_number,
+      payment_method: order.payment_method || 'cash',
+      discount_type: order.discount_type || 'flat',
+      discount_value: order.discount_value !== undefined ? String(order.discount_value) : String(order.discount || 0),
+      paid_amount: String(order.paid_amount !== undefined ? order.paid_amount : order.total),
+      tendered_amount: order.tendered_amount ? String(order.tendered_amount) : '',
+      note: order.note || '',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  // Submit Edit Sale
+  const handleUpdateSale = async (e) => {
+    e.preventDefault();
+    if (!editForm.id) return;
+
+    setIsUpdating(true);
+    try {
+      const discVal = parseFloat(editForm.discount_value) || 0;
+      const paid = parseFloat(editForm.paid_amount) || 0;
+      const tendered = parseFloat(editForm.tendered_amount) || paid;
+
+      await api.sales.update(editForm.id, {
+        payment_method: editForm.payment_method,
+        discount_type: editForm.discount_type,
+        discount_value: discVal,
+        paid_amount: paid,
+        tendered_amount: tendered,
+        note: editForm.note,
+      });
+
+      toast.success(lang === 'bn' ? 'বিক্রয় ইনভয়েস সফলভাবে আপডেট হয়েছে!' : 'Sale invoice updated successfully!');
+      setIsEditModalOpen(false);
+      setEditingSale(null);
+      fetchSales();
+    } catch (err) {
+      toast.error(err.message || 'Failed to update sale invoice.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Confirm Delete Dialog State
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmDeleteDialog, setConfirmDeleteDialog] = useState({
+    isOpen: false,
+    saleId: null,
+    invoiceNumber: '',
+  });
+
+  const handleDeleteSale = (orderId, invoiceNumber) => {
+    setConfirmDeleteDialog({
+      isOpen: true,
+      saleId: orderId,
+      invoiceNumber,
+    });
+  };
+
+  const handleConfirmDeleteSale = async () => {
+    if (!confirmDeleteDialog.saleId) return;
+    setIsDeleting(true);
+    try {
+      await api.sales.delete(confirmDeleteDialog.saleId);
+      toast.success(lang === 'bn' ? `ইনভয়েস '${confirmDeleteDialog.invoiceNumber}' মুছে ফেলা হয়েছে এবং স্টক ফেরত এসেছে!` : `Invoice '${confirmDeleteDialog.invoiceNumber}' deleted & stock restored!`);
+      if (selectedOrder?._id === confirmDeleteDialog.saleId) {
+        setSelectedOrder(null);
+      }
+      setConfirmDeleteDialog({ isOpen: false, saleId: null, invoiceNumber: '' });
+      fetchSales();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete sale invoice.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
-      {/* HEADER SECTION */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* ---------------------------------------------------- */}
+      {/* HEADER SECTION                                       */}
+      {/* ---------------------------------------------------- */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight">
-            {lang === 'bn' ? 'বিক্রয় অ্যাকাউন্টস ও অর্ডারস' : 'Sales Orders & Invoices'}
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
+            <ShoppingCart className="w-6 h-6 text-[#00df89]" />
+            <span>{lang === 'bn' ? 'বিক্রয় ও ইনভয়েস হিস্ট্রি' : 'Sales History & Invoices'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
             {lang === 'bn'
-              ? 'আপনার দোকানের সকল বিক্রি, ক্যাশ মেমো ও পেমেন্ট রসিদ ম্যানেজ করুন।'
-              : 'Track daily sales revenue, cash memos, customer invoices & payment status.'}
+              ? 'সকল ক্যাশ মেমো, ডিসকাউন্ট, ক্যাশ হিসাব এবং এডিট ও ডিলিট অপশন'
+              : 'Track live sales, edit transaction details, restore stock on delete, and print cash memos.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs font-medium dark:bg-[#121215]">
-            <Download className="w-3.5 h-3.5" />
-            <span>{lang === 'bn' ? 'রিপোর্ট নামান' : 'Export Sales'}</span>
-          </Button>
-
           <Button
-            variant="default"
-            size="sm"
             onClick={() => navigate('/sales/new')}
-            className="gap-1.5 bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium"
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
           >
-            <Plus className="w-4 h-4 stroke-[2]" />
-            <span>{lang === 'bn' ? 'নতুন বিক্রি' : 'New Sale'}</span>
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>{lang === 'bn' ? 'নতুন বিক্রি তৈরি করুন' : 'New Sale / POS'}</span>
           </Button>
         </div>
       </div>
 
-      {/* SALES SUMMARY KPI CARDS (4 COLUMNS) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
-              {lang === 'bn' ? 'মোট বিক্রি আয়' : 'Total Revenue'}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
-            </div>
+      {/* ---------------------------------------------------- */}
+      {/* KPI STAT CARDS                                       */}
+      {/* ---------------------------------------------------- */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Sales Recorded</span>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <Skeleton className="h-8 w-20 my-0.5" /> : salesOrders.length}
           </div>
-          <div className="mt-3 space-y-1">
-            <div className="text-2xl font-medium text-slate-900 dark:text-white">
-              {lang === 'bn' ? '৳ ৪৬,০৮০' : '৳ 46,080'}
-            </div>
-            <div className="text-xs text-[#00a86b] dark:text-[#00df89] font-medium">
-              +12.4% {lang === 'bn' ? 'গত মাস থেকে' : 'from last month'}
-            </div>
-          </div>
+          <div className="text-xs text-slate-500 mt-1">Invoices issued</div>
         </Card>
 
-        <Card className="p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
-              {lang === 'bn' ? 'মোট ইনভয়েস সংখ্যা' : 'Total Orders'}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-              <ShoppingCart className="w-4 h-4" />
-            </div>
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Revenue Collected</span>
+          <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] mt-2">
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${totalRevenue.toLocaleString()}`}
           </div>
-          <div className="mt-3 space-y-1">
-            <div className="text-2xl font-medium text-slate-900 dark:text-white">
-              {lang === 'bn' ? '৫টি মেমো' : '5 Invoices'}
-            </div>
-            <div className="text-xs text-[#00a86b] dark:text-[#00df89] font-medium">
-              +8.1% {lang === 'bn' ? 'নতুন বিক্রি' : 'new orders'}
-            </div>
-          </div>
+          <div className="text-xs text-[#00a86b] dark:text-[#00df89] mt-1">Gross sales</div>
         </Card>
 
-        <Card className="p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
-              {lang === 'bn' ? 'গড় অর্ডার মূল্য' : 'Avg Order Value'}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-              <Wallet className="w-4 h-4" />
-            </div>
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Customer Due</span>
+          <div className="text-2xl sm:text-3xl font-bold text-amber-500 mt-2">
+            {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${totalDue.toLocaleString()}`}
           </div>
-          <div className="mt-3 space-y-1">
-            <div className="text-2xl font-medium text-slate-900 dark:text-white">
-              {lang === 'bn' ? '৳ ৯,২১৬' : '৳ 9,216'}
-            </div>
-            <div className="text-xs text-slate-500 dark:text-zinc-400 font-normal">
-              {lang === 'bn' ? 'প্রতি বিক্রির গড়' : 'Per transaction average'}
-            </div>
-          </div>
+          <div className="text-xs text-amber-500 mt-1">Pending payments</div>
         </Card>
 
-        <Card className="p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
-              {lang === 'bn' ? 'পরিশোধিত বনাম বকেয়া' : 'Paid vs Pending'}
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
-              <Clock className="w-4 h-4" />
-            </div>
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Average Order Size</span>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${salesOrders.length > 0 ? Math.round(totalRevenue / salesOrders.length).toLocaleString() : 0}`}
           </div>
-          <div className="mt-3 space-y-1">
-            <div className="text-2xl font-medium text-slate-900 dark:text-white flex items-center gap-2">
-              <span>4</span>
-              <span className="text-xs font-normal text-slate-400">/ 1 Pending</span>
-            </div>
-            <div className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-              ৳ ৪,২০০ {lang === 'bn' ? 'বকেয়া বাকি' : 'Pending payment'}
-            </div>
-          </div>
+          <div className="text-xs text-slate-500 mt-1">Per invoice</div>
         </Card>
       </div>
 
-      {/* FILTER & SEARCH CONTROL BAR */}
-      <Card className="p-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between gap-4">
-        
-        {/* Search Bar */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 dark:text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <Input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={lang === 'bn' ? 'ইনভয়েস #, কাস্টমারের নাম বা ফোন নাম্বার খুঁজুন...' : 'Search Invoice #, customer name or phone...'}
-            className="pl-10 dark:bg-[#09090b]"
-          />
-        </div>
+      {/* ---------------------------------------------------- */}
+      {/* FILTER & SEARCH                                      */}
+      {/* ---------------------------------------------------- */}
+      <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="w-full sm:w-80 relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder={lang === 'bn' ? 'ইনভয়েস বা কাস্টমার খুঁজুন...' : 'Search by invoice # or customer...'}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
+            />
+          </div>
 
-        {/* Status Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {[
-            { id: 'all', label: lang === 'bn' ? 'সব মেমো' : 'All Orders' },
-            { id: 'paid', label: lang === 'bn' ? 'পরিশোধিত' : 'Paid' },
-            { id: 'pending', label: lang === 'bn' ? 'বকেয়া' : 'Pending' }
-          ].map((st) => (
-            <button
-              key={st.id}
-              onClick={() => setStatusFilter(st.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors shrink-0 cursor-pointer ${
-                statusFilter === st.id
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
-                  : 'bg-slate-100 dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-800'
-              }`}
-            >
-              {st.label}
-            </button>
-          ))}
+          <div className="flex items-center gap-2">
+            {['all', 'paid', 'due'].map((st) => (
+              <button
+                key={st}
+                onClick={() => setStatusFilter(st)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold uppercase transition-all cursor-pointer ${
+                  statusFilter === st
+                    ? 'bg-slate-900 text-white dark:bg-zinc-800'
+                    : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400'
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
         </div>
-
       </Card>
 
-      {/* SALES ORDERS TABLE */}
-      <Card className="border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs sm:text-sm">
-            <thead>
-              <tr className="border-b border-slate-200/80 dark:border-zinc-800/80 bg-slate-50/50 dark:bg-zinc-900/50 text-slate-500 dark:text-zinc-400 font-medium">
-                <th className="p-4">{lang === 'bn' ? 'ইনভয়েস #' : 'Invoice #'}</th>
-                <th className="p-4">{lang === 'bn' ? 'তারিখ ও সময়' : 'Date & Time'}</th>
-                <th className="p-4">{lang === 'bn' ? 'কাস্টমার' : 'Customer'}</th>
-                <th className="p-4">{lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}</th>
-                <th className="p-4 text-right">{lang === 'bn' ? 'মোট টাকা' : 'Total Amount'}</th>
-                <th className="p-4 text-center">{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
-                <th className="p-4 text-right">{lang === 'bn' ? 'অ্যাকশন' : 'Actions'}</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60">
-              {filteredOrders.map((order) => (
-                <tr
-                  key={order.id}
-                  className="hover:bg-slate-50/60 dark:hover:bg-zinc-800/40 transition-colors"
-                >
-                  <td className="p-4 font-medium text-slate-900 dark:text-white">
-                    {order.id}
-                  </td>
-                  <td className="p-4 text-slate-500 dark:text-zinc-400 font-normal">
-                    {order.date}
-                  </td>
-                  <td className="p-4">
-                    <div className="font-medium text-slate-900 dark:text-white">{order.customer}</div>
-                    <div className="text-[11px] text-slate-400 font-normal">{order.phone}</div>
-                  </td>
-                  <td className="p-4 text-slate-700 dark:text-zinc-300 font-normal">
-                    {order.method}
-                  </td>
-                  <td className="p-4 text-right font-medium text-slate-900 dark:text-white">
-                    ৳ {order.total.toLocaleString()}
-                  </td>
-                  <td className="p-4 text-center">
-                    <Badge variant={order.status === 'paid' ? 'default' : 'warning'} className="uppercase text-[10px] font-normal">
-                      {order.status === 'paid' ? (lang === 'bn' ? 'পরিশোধিত' : 'paid') : (lang === 'bn' ? 'বকেয়া' : 'pending')}
-                    </Badge>
-                  </td>
-                  <td className="p-4 text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenReceipt(order)}
-                      className="h-7 text-xs gap-1 font-medium dark:bg-[#09090b]"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>{lang === 'bn' ? 'রসিদ' : 'Receipt'}</span>
-                    </Button>
-                  </td>
+      {/* ---------------------------------------------------- */}
+      {/* SALES ORDERS TABLE                                   */}
+      {/* ---------------------------------------------------- */}
+      <Card className="p-0 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
+        {isLoading ? (
+          <div className="p-5 space-y-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="p-12 text-center space-y-3">
+            <ShoppingCart className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto" />
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">No Sales Orders Found</h3>
+            <p className="text-xs text-slate-500 dark:text-zinc-400">Generate your first cash memo or sale transaction.</p>
+            <Button size="sm" onClick={() => navigate('/sales/new')} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold">
+              <Plus className="w-3.5 h-3.5 mr-1" /> New Sale
+            </Button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-500 border-b border-slate-200 dark:border-zinc-800">
+                <tr>
+                  <th className="p-3.5">Invoice #</th>
+                  <th className="p-3.5">Customer</th>
+                  <th className="p-3.5">Items</th>
+                  <th className="p-3.5">Discount</th>
+                  <th className="p-3.5">Date & Time</th>
+                  <th className="p-3.5">Payment Method</th>
+                  <th className="p-3.5">Net Total (৳)</th>
+                  <th className="p-3.5 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredOrders.length === 0 && (
-          <div className="p-8 text-center text-xs sm:text-sm text-slate-400 font-normal">
-            {lang === 'bn' ? 'কোনো সেলস মেমো পাওয়া যায়নি।' : 'No sales records match your search filter.'}
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                {filteredOrders.map((order) => (
+                  <tr key={order._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
+                    <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                      <FileText className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{order.invoice_number}</span>
+                    </td>
+                    <td className="p-3.5 text-slate-800 dark:text-zinc-200 font-medium">
+                      {order.customer_id?.name || 'Walk-in Customer'}
+                    </td>
+                    <td className="p-3.5 text-slate-600 dark:text-zinc-300">
+                      {order.items?.map(it => `${it.name} (${it.quantity})`).join(', ') || '1 item'}
+                    </td>
+                    <td className="p-3.5 text-rose-500 font-medium">
+                      {order.discount > 0 ? (
+                        <span>- ৳ {order.discount.toLocaleString()} {order.discount_type === 'percentage' ? `(${order.discount_value}%)` : ''}</span>
+                      ) : (
+                        <span className="text-slate-400">None</span>
+                      )}
+                    </td>
+                    <td className="p-3.5 text-slate-500">
+                      {new Date(order.created_at).toLocaleString()}
+                    </td>
+                    <td className="p-3.5">
+                      <Badge variant="default" className="text-[10px] uppercase font-normal">
+                        {order.payment_method || 'Cash'}
+                      </Badge>
+                    </td>
+                    <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89]">
+                      ৳ {(order.total || 0).toLocaleString()}
+                    </td>
+                    <td className="p-3.5 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedOrder(order)}
+                          className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-[#00df89]"
+                          title="View Receipt Memo"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenEdit(order)}
+                          className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500"
+                          title="Edit Sale Details"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteSale(order._id, order.invoice_number)}
+                          className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                          title="Delete Sale & Restore Stock"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </Card>
 
-      {/* CASH MEMO RECEIPT MODAL */}
-      {isReceiptModalOpen && selectedOrder && (
+      {/* ---------------------------------------------------- */}
+      {/* EDIT SALE MODAL                                      */}
+      {/* ---------------------------------------------------- */}
+      {isEditModalOpen && editingSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white dark:bg-[#121215] rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-2xl p-6 space-y-6">
-            
-            {/* Receipt Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-zinc-800/80">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
               <div>
-                <h3 className="font-medium text-base text-slate-900 dark:text-white">
-                  {lang === 'bn' ? 'ডিজিটাল ক্যাশ মেমো' : 'Digital Cash Memo'}
-                </h3>
-                <div className="text-xs text-slate-400 font-normal">{selectedOrder.id} • {selectedOrder.date}</div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">Edit Sale: {editForm.invoice_number}</h2>
+                <p className="text-xs text-slate-400">Update payment method, discount, cash received or notes</p>
               </div>
-
-              <button
-                onClick={() => setIsReceiptModalOpen(false)}
-                className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center"
-              >
-                <X className="w-4 h-4" />
+              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Receipt Items Breakdown */}
-            <div className="space-y-3">
-              <div className="text-xs font-medium text-slate-500 dark:text-zinc-400 uppercase tracking-wider">
-                {lang === 'bn' ? 'পণ্যের তালিকা' : 'Purchased Items'}
+            <form onSubmit={handleUpdateSale} className="space-y-3.5 text-xs">
+              {/* Payment Method */}
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Payment Method</label>
+                <Select
+                  value={editForm.payment_method}
+                  onValueChange={(val) => setEditForm({ ...editForm, payment_method: val })}
+                >
+                  <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                    <SelectValue placeholder="Payment Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bkash">bKash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="rocket">Rocket</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="due">Due / Credit</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="space-y-2 border-b border-slate-100 dark:border-zinc-800/80 pb-3">
-                {selectedOrder.items.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs sm:text-sm">
-                    <div>
-                      <div className="font-medium text-slate-800 dark:text-zinc-200">{item.name}</div>
-                      <div className="text-[11px] text-slate-400 font-normal">{item.qty} x ৳{item.price}</div>
-                    </div>
-                    <div className="font-medium text-slate-900 dark:text-white">
-                      ৳ {item.qty * item.price}
-                    </div>
+              {/* Discount Controls */}
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-700 dark:text-zinc-300">Discount Option</span>
+                  <div className="flex bg-slate-200 dark:bg-zinc-800 p-0.5 rounded-lg text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, discount_type: 'flat' })}
+                      className={`px-2 py-0.5 rounded-md font-medium transition-all ${editForm.discount_type === 'flat' ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'}`}
+                    >
+                      Flat (৳)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, discount_type: 'percentage' })}
+                      className={`px-2 py-0.5 rounded-md font-medium transition-all ${editForm.discount_type === 'percentage' ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'}`}
+                    >
+                      Percent (%)
+                    </button>
+                  </div>
+                </div>
+
+                <input
+                  type="number"
+                  placeholder={editForm.discount_type === 'flat' ? 'Discount Amount (৳)' : 'Discount (%)'}
+                  value={editForm.discount_value}
+                  onChange={(e) => setEditForm({ ...editForm, discount_value: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-1 focus:ring-[#00df89]"
+                />
+              </div>
+
+              {/* Paid & Tendered Amount */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Paid Amount (৳)</label>
+                  <input
+                    type="number"
+                    value={editForm.paid_amount}
+                    onChange={(e) => setEditForm({ ...editForm, paid_amount: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Cash Given (৳)</label>
+                  <input
+                    type="number"
+                    value={editForm.tendered_amount}
+                    onChange={(e) => setEditForm({ ...editForm, tendered_amount: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Note / Remarks</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Discount given by manager"
+                  value={editForm.note}
+                  onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsEditModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isUpdating}
+                  size="sm"
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold"
+                >
+                  {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save Changes'}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* DETAILED RECEIPT MEMO MODAL                          */}
+      {/* ---------------------------------------------------- */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">Cash Memo / Receipt</h2>
+                <p className="text-xs text-slate-400 font-mono">{selectedOrder.invoice_number}</p>
+              </div>
+              <button onClick={() => setSelectedOrder(null)} className="text-slate-400 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-3 text-xs">
+              <div className="text-center pb-2 border-b border-slate-200 dark:border-zinc-800">
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">{mongoShop?.name || 'Shopo Store'}</h3>
+                <p className="text-[11px] text-slate-400">{new Date(selectedOrder.created_at).toLocaleString()}</p>
+              </div>
+
+              <div className="space-y-1 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Customer:</span>
+                  <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                    {selectedOrder.customer_id?.name || 'Walk-in Customer'}
+                  </span>
+                </div>
+                {selectedOrder.customer_id?.phone && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Phone:</span>
+                    <span className="font-mono text-slate-700 dark:text-zinc-300">{selectedOrder.customer_id.phone}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Payment Method:</span>
+                  <span className="font-semibold capitalize">{selectedOrder.payment_method}</span>
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1.5">
+                <div className="font-semibold text-slate-700 dark:text-zinc-300 text-[11px]">Purchased Items:</div>
+                {selectedOrder.items?.map((it, i) => (
+                  <div key={i} className="flex justify-between text-[11px]">
+                    <span className="truncate pr-2">{it.name} x {it.quantity}</span>
+                    <span className="font-semibold shrink-0">৳ {(it.subtotal || it.unit_price * it.quantity).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
 
-              {/* Totals Calculation */}
-              <div className="space-y-1.5 text-xs sm:text-sm pt-1">
-                <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400">
-                  <span>Subtotal</span>
-                  <span>৳ {selectedOrder.subtotal}</span>
+              {/* Financial Calculations Breakdown */}
+              <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1 text-xs">
+                <div className="flex justify-between text-slate-500">
+                  <span>Subtotal:</span>
+                  <span>৳ {(selectedOrder.subtotal || selectedOrder.total).toLocaleString()}</span>
                 </div>
-                {selectedOrder.discount > 0 && (
-                  <div className="flex items-center justify-between text-rose-500 font-normal">
-                    <span>Discount</span>
-                    <span>-৳ {selectedOrder.discount}</span>
+                {(selectedOrder.discount || 0) > 0 && (
+                  <div className="flex justify-between text-rose-500">
+                    <span>
+                      Discount {selectedOrder.discount_type === 'percentage' ? `(${selectedOrder.discount_value}%)` : '(Flat)'}:
+                    </span>
+                    <span className="font-bold">- ৳ {selectedOrder.discount.toLocaleString()}</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between text-sm font-medium text-slate-900 dark:text-white pt-2 border-t border-slate-100 dark:border-zinc-800">
-                  <span>Total Amount Paid ({selectedOrder.method})</span>
-                  <span className="text-[#00a86b] dark:text-[#00df89]">৳ {selectedOrder.total}</span>
+                <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-800">
+                  <span>Total Payable:</span>
+                  <span className="text-[#00a86b] dark:text-[#00df89]">৳ {(selectedOrder.total || 0).toLocaleString()}</span>
                 </div>
+
+                {/* Tendered & Change Breakdown */}
+                {selectedOrder.payment_method?.toLowerCase() === 'cash' && (selectedOrder.tendered_amount || 0) > 0 && (
+                  <>
+                    <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
+                      <span>Cash Given by Customer:</span>
+                      <span className="font-semibold">৳ {selectedOrder.tendered_amount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-600 dark:text-[#00df89] font-bold">
+                      <span>Change Returned:</span>
+                      <span>৳ {(selectedOrder.change_amount || 0).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Modal Actions */}
-            <div className="flex items-center gap-3 pt-2">
-              <Button variant="outline" className="flex-1 text-xs gap-1.5 dark:bg-[#09090b]">
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print Memo</span>
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800">
+              <Button variant="outline" size="sm" onClick={() => setSelectedOrder(null)}>
+                Close
               </Button>
-
-              <Button variant="default" onClick={() => setIsReceiptModalOpen(false)} className="flex-1 text-xs bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium">
-                Done
+              <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
+                <Printer className="w-3.5 h-3.5" /> Print Receipt
               </Button>
             </div>
-
-          </div>
+          </Card>
         </div>
       )}
+
+      {/* ---------------------------------------------------- */}
+      {/* CONFIRM DELETE MODAL                                 */}
+      {/* ---------------------------------------------------- */}
+      <ConfirmDialog
+        isOpen={confirmDeleteDialog.isOpen}
+        isLoading={isDeleting}
+        title={lang === 'bn' ? `ইনভয়েস '${confirmDeleteDialog.invoiceNumber}' মুছে ফেলতে চান?` : `Delete invoice '${confirmDeleteDialog.invoiceNumber}'?`}
+        description={lang === 'bn' ? 'এই বিক্রিটি মুছে ফেলা হবে এবং সংশ্লিষ্ট পণ্যগুলোর স্টক পুনরায় ইনভেন্টরিতে ফেরত আসবে।' : 'This sale will be permanently deleted and all product stock will be restored back to your inventory.'}
+        confirmText={lang === 'bn' ? 'হ্যাঁ, মুছে ফেলুন' : 'Yes, Delete'}
+        cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
+        onConfirm={handleConfirmDeleteSale}
+        onCancel={() => setConfirmDeleteDialog({ isOpen: false, saleId: null, invoiceNumber: '' })}
+      />
 
     </div>
   );

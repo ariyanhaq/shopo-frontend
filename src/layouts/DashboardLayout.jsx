@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useShop } from '@/context/ShopContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { useAuth } from '@/context/AuthContext';
 import Sidebar from '@/components/sidebar/Sidebar';
 import QuickActionModal from '@/components/dashboard/QuickActionModal';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const { activeShop, theme, toggleTheme } = useShop();
   const { lang, setLang, t } = useLanguage();
+  const { mongoShop } = useAuth();
 
   const [isQuickModalOpen, setIsQuickModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -64,9 +66,9 @@ export default function DashboardLayout() {
             <div className="flex items-center gap-2 text-slate-800 dark:text-zinc-200 font-medium text-sm sm:text-base">
               <LayoutDashboard className="w-4 h-4 text-slate-500 dark:text-zinc-400" />
               <span>{t?.dashboard?.title || 'Dashboard'}</span>
-              {activeShop && (
+              {(mongoShop?.name || activeShop?.name) && (
                 <span className="hidden sm:inline-block text-xs font-normal text-slate-400 dark:text-zinc-500">
-                  / {activeShop.name}
+                  / {mongoShop?.name || activeShop?.name}
                 </span>
               )}
             </div>

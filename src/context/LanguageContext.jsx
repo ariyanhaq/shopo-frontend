@@ -1,8 +1,10 @@
 /**
  * @file LanguageContext.jsx
- * @description Context API provider for language state management (English & Bangla) with exact pricing rates (৳99, ৳199, ৳499).
+ * @description Context API provider for language state management (English & Bangla) with DB persistence, toast notifications, and comprehensive translations.
  */
 import { createContext, useContext, useState } from 'react';
+import toast from 'react-hot-toast';
+import api from '@/services/api';
 
 const LanguageContext = createContext();
 
@@ -16,7 +18,14 @@ export const dictionary = {
       pricing: "Pricing",
       about: "About",
       login: "Login",
-      getStarted: "Get Started"
+      getStarted: "Get Started",
+      dashboard: "Dashboard",
+      pos: "POS & Billing",
+      sales: "Sales",
+      products: "Products",
+      customers: "Customers",
+      accounting: "Accounting & Finance",
+      settings: "Settings"
     },
     hero: {
       badge: "No. 1 Shop Operating System in Bangladesh",
@@ -167,12 +176,13 @@ export const dictionary = {
       sidebar: {
         platform: "Platform",
         dashboard: "Dashboard",
-        sales: "Sales",
-        products: "Products",
+        sales: "Sales & Invoices",
+        products: "Products & Stock",
         inventory: "Inventory",
-        pos: "POS & Retail",
+        pos: "POS & Retail Counter",
         accounting: "Accounting & Finance",
-        settings: "Settings"
+        settings: "Store Settings",
+        customers: "Customers & Accounts"
       }
     }
   },
@@ -186,7 +196,14 @@ export const dictionary = {
       pricing: "মূল্য তালিকা",
       about: "আমাদের সম্পর্কে",
       login: "লগইন",
-      getStarted: "শুরু করুন"
+      getStarted: "শুরু করুন",
+      dashboard: "ড্যাশবোর্ড",
+      pos: "কাউন্টার ও পিওএস",
+      sales: "বিক্রির খতিয়ান",
+      products: "প্রোডাক্টস ও পণ্য",
+      customers: "কাস্টমার তালিকা",
+      accounting: "হিসাব ও অর্থায়ন",
+      settings: "সেটিংস"
     },
     hero: {
       badge: "বাংলাদেশের ১ নম্বর শপ অপারেটিং সিস্টেম",
@@ -212,7 +229,7 @@ export const dictionary = {
         { id: 'f1', title: 'স্টক ও ইনভেন্টরি ম্যানেজমেন্ট', desc: 'বারকোড স্ক্যানিং, কম স্টকের অ্যালার্ট, ভ্যারিয়েন্ট ট্র্যাকিং ও স্টক রিমাইন্ডার।' },
         { id: 'f2', title: 'বিক্রি ও পিওএস বিলিং', desc: 'দ্রুত ক্যাশ মেমো প্রিন্ট, ডিসকাউন্ট ছাড়, বিকাশ/নগদ/কার্ড পেমেন্ট গ্রহণ।' },
         { id: 'f3', title: 'কাস্টমার বাকি খাতা (Digital Khata)', desc: 'ডিজিটাল বাকি খাতা, অটোমেটিক এসএমএস রিমাইন্ডার ও কাস্টমার ক্রেডিট ইতিহাস।' },
-        { id: 'f4', title: 'কর্মচারীদের বেতন ও পারমিশন', desc: 'স্টাফ এক্সেস পারমিশন, শিফট অ্যাটেনডেন্স, কমিশন ও মাসিক বেতন হিসাব।' },
+        { id: 'f4', title: 'কর্মচারীদের বেতন ও পারমিশন', desc: 'স্টাফ এক্সেস পারমিশন, শিফট অ্যাটেনডেন্স, commission ও মাসিক বেতন হিসাব।' },
         { id: 'f5', title: 'হিসাব ও লাভ-লোকসান রিপোর্ট', desc: 'অটোমেটিক লাভ-লোকসান হিসাব, ক্যাশবুক লেজার ও দৈনিক আয়-ব্যয়ের সামারি।' },
         { id: 'f6', title: 'এআই স্মার্ট বিজনেস অ্যানালিটিক্স', desc: 'স্মার্ট বিক্রয় পূর্বাভাস, সেরা বিক্রীত পণ্যের তথ্য ও ইনভেন্টরি টিপস।' }
       ]
@@ -220,11 +237,11 @@ export const dictionary = {
     solutions: {
       badge: "ব্যবসার সমাধান",
       title: "আপনার ইন্ডাস্ট্রি অনুযায়ী বিশেষায়িত সমাধান",
-      subtitle: "আপনার দোকান বা ব্যবসার ধরন অনুযায়ী বেছে নিন উপযুক্ত ফিচার ও ড্যাশবোর্ড layout।",
+      subtitle: "আপনার দোকান বা ব্যবসার ধরন অনুযায়ী বেছে নিন উপযুক্ত ফিচার ও ড্যাশবোর্ড লেআউট।",
       sectors: [
         { title: 'মুদি দোকান ও সুপারশপ', desc: 'মেয়াদের অ্যালার্ট, ডিজিটাল স্কেল ওজন ও ফাস্ট মেমো প্রিন্ট।' },
         { title: 'পোশাক ও ফ্যাশন শপ', desc: 'সাইজ ও কালার ম্যাট্রিক্স (S/M/L/XL), প্রাইজ ট্যাগ ও ঈদের অফার ছাড়।' },
-        { title: 'রেস্তোরাঁ ও ক্যাফে', desc: 'কচিন ডিসপ্লে সিস্টেম (KDS), টেবিল ম্যানেজমেন্ট ও অর্ডার রসিদ।' },
+        { title: 'রেস্তোরাঁ ও ক্যাফে', desc: 'কিচেন ডিসপ্লে সিস্টেম (KDS), টেবিল ম্যানেজমেন্ট ও অর্ডার রসিদ।' },
         { title: 'ইলেকট্রনিক্স ও গ্যাজেট', desc: 'IMEI ও সিরিয়াল নম্বর ট্র্যাকিং, ওয়ারেন্টি কার্ড ও সার্ভিস লগ।' },
         { title: 'জিম ও ফিটনেস সেন্টার', desc: 'মেম্বারশিপ প্যাকেজ, কার্ড এন্ট্রি ও মাসিক সাবস্ক্রিপশন ফি।' },
         { title: 'স্টেশনরি ও বইয়ের দোকান', desc: 'আইএসবিএন বই সার্চ, ফটোকপি বিল ও স্টুডেন্ট বাকি খাতা।' }
@@ -251,7 +268,7 @@ export const dictionary = {
         {
           id: 'starter',
           name: 'স্টার্টার',
-          price: '৳ ৯৯',
+          price: '৳ 99',
           period: '/মাস',
           desc: 'ছোট বা একক কাউন্টার খুচরা দোকানের জন্য উপযোগী।',
           features: ['১টি দোকান আউটলেট', 'সর্বোচ্চ ১,০০০টি পণ্য', '১ জন ইউজার এক্সেস', 'পিওএস ও বিক্রয় মেমো', 'স্ট্যান্ডার্ড সাপোর্ট'],
@@ -261,7 +278,7 @@ export const dictionary = {
         {
           id: 'business',
           name: 'বিজনেস',
-          price: '৳ ১৯৯',
+          price: '৳ 199',
           period: '/মাস',
           desc: 'ক্রমবর্ধমান দোকান, একাধিক স্টাফ ও বাকি খাতা ব্যবহারকারীদের জন্য।',
           features: ['৩টি দোকান শাখা', 'আনলিমিটেড পণ্য তালিকা', '৫ জন স্টাফ লগইন', 'বাকি খাতা ও এসএমএস অ্যালার্ট', '২৪/৭ অগ্রাধিকার সাপোর্ট'],
@@ -271,7 +288,7 @@ export const dictionary = {
         {
           id: 'premium',
           name: 'প্রিমিয়াম',
-          price: '৳ ৪৯৯',
+          price: '৳ 499',
           period: '/মাস',
           desc: 'পাইকারি ব্যবসায়ী, চেইন শপ ও মাল্টি-ব্রাঞ্চ আউটলেটের জন্য।',
           features: ['আনলিমিটেড শাখা', 'আনলিমিটেড আইটেম ও SKU', 'কাস্টম স্টাফ পারমিশন', 'ডেডিকেটেড একাউন্ট ম্যানেজার', 'কাস্টম এপিআই সংযোগ'],
@@ -306,8 +323,8 @@ export const dictionary = {
     },
     dashboard: {
       title: "ড্যাশবোর্ড",
-      switchLanguage: "ভাষা",
-      totalRevenue: "মোট আয়",
+      switchLanguage: "ভাষা পরিবর্তন",
+      totalRevenue: "মোট বিক্রয় আয়",
       totalSales: "মোট বিক্রি",
       activeCustomers: "সক্রিয় গ্রাহক",
       totalOrders: "মোট অর্ডার",
@@ -322,7 +339,7 @@ export const dictionary = {
       newSale: "নতুন বিক্রি",
       newPurchase: "নতুন ক্রয়",
       newInvoice: "নতুন ইনভয়েস",
-      addProduct: "পণ্য যুক্ত করুন",
+      addProduct: "পণ্য যোগ করুন",
       viewAllActions: "সব অ্যাকশন দেখুন",
       recentTransactions: "সাম্প্রতিক লেনদেন",
       recentTransSub: "সর্বশেষ বিক্রি ও ক্রয়ের তালিকা",
@@ -342,23 +359,82 @@ export const dictionary = {
         inventory: "স্টক (ইনভেন্টরি)",
         pos: "কাউন্টার ও পিওএস",
         accounting: "হিসাব ও অর্থায়ন",
-        settings: "সেটিংস"
+        settings: "দোকান সেটিংস",
+        customers: "কাস্টমার ও গ্রাহক"
       }
     }
   }
 };
 
 export function LanguageProvider({ children }) {
-  const [lang, setLang] = useState('en');
+  // Default language is 'en' (English)
+  const [lang, setLangState] = useState(() => {
+    try {
+      return localStorage.getItem('shopo_lang') || 'en';
+    } catch {
+      return 'en';
+    }
+  });
+
+  // Change Language and persist in DB + LocalStorage + Toast Notification
+  const setLang = async (newLang) => {
+    if (!newLang || (newLang !== 'en' && newLang !== 'bn')) return;
+    
+    setLangState(newLang);
+    try {
+      localStorage.setItem('shopo_lang', newLang);
+    } catch (e) {
+      console.warn('LocalStorage error:', e);
+    }
+
+    // Persist to MongoDB database in background if user is authenticated
+    try {
+      await api.shops.update({
+        settings: { language: newLang }
+      });
+    } catch (err) {
+      // Ignored for unauthenticated users
+    }
+
+    // Show toast notification
+    if (newLang === 'bn') {
+      toast.success('ভাষা পরিবর্তন সফল হয়েছে (বাংলা)!');
+    } else {
+      toast.success('Language changed to English!');
+    }
+  };
 
   const toggleLang = () => {
-    setLang((prev) => (prev === 'en' ? 'bn' : 'en'));
+    setLang(lang === 'en' ? 'bn' : 'en');
   };
 
   const t = dictionary[lang] || dictionary.en;
 
+  /**
+   * Helper to format numbers with standard numerals and comma separation
+   */
+  const formatNumber = (val) => {
+    if (val === undefined || val === null || val === '') return '';
+    const num = typeof val === 'number' ? val : (parseFloat(val) || 0);
+    return num.toLocaleString('en-US');
+  };
+
+  /**
+   * Helper to format currency (e.g. ৳ 1,250)
+   */
+  const formatPrice = (val, prefix = '৳ ') => {
+    return `${prefix}${formatNumber(val)}`;
+  };
+
+  /**
+   * Helper returning raw values
+   */
+  const toBn = (val) => {
+    return String(val ?? '');
+  };
+
   return (
-    <LanguageContext.Provider value={{ lang, setLang, toggleLang, t }}>
+    <LanguageContext.Provider value={{ lang, setLang, toggleLang, t, formatNumber, formatPrice, toBn }}>
       {children}
     </LanguageContext.Provider>
   );

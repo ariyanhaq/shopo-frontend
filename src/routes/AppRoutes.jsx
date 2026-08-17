@@ -7,6 +7,7 @@ import MainLayout from '@/layouts/MainLayout';
 import AuthLayout from '@/layouts/AuthLayout';
 import DashboardLayout from '@/layouts/DashboardLayout';
 import ProtectedRoute from './ProtectedRoute';
+import PublicRoute from './PublicRoute';
 
 import {
   Landing, Home, Pricing, Features, Testimonials, Contact,
@@ -38,16 +39,19 @@ export default function AppRoutes() {
         <Route path="/contact" element={<Contact />} />
       </Route>
 
-      {/* Auth Pages */}
-      <Route element={<AuthLayout />}>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
+      {/* Auth Pages (Protected from already logged-in users) */}
+      <Route element={<PublicRoute />}>
+        <Route element={<AuthLayout />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+        </Route>
       </Route>
 
       {/* Onboarding Flow (Full screen experience) */}
       <Route element={<ProtectedRoute />}>
+        <Route path="/onboarding/business-data" element={<BusinessCategory />} />
         <Route path="/onboarding/business-category" element={<BusinessCategory />} />
         <Route path="/onboarding/select-shop" element={<BusinessCategory />} />
         <Route path="/onboarding/create-shop" element={<CreateShop />} />
@@ -89,9 +93,10 @@ export default function AppRoutes() {
 
           {/* Products & Inventory Routes */}
           <Route path="/products" element={<Products />} />
+          <Route path="/products/add" element={<Products />} />
           <Route path="/inventory" element={<Products />} />
           <Route path="/inventory/products" element={<Products />} />
-          <Route path="/inventory/add-product" element={<AddProduct />} />
+          <Route path="/inventory/add-product" element={<Products />} />
           <Route path="/inventory/categories" element={<Categories />} />
           <Route path="/inventory/stock-history" element={<StockHistory />} />
 

@@ -5,9 +5,9 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
-import { X, Package, Plus, CheckCircle2, Dumbbell } from 'lucide-react';
+import { X, Package, Plus, CheckCircle2, Dumbbell, Loader2 } from 'lucide-react';
 
-export default function AddEditPackageModal({ isOpen, onClose, onSavePackage, initialData }) {
+export default function AddEditPackageModal({ isOpen, onClose, onSavePackage, initialData, isSubmitting = false }) {
   const { lang } = useLanguage();
 
   const [formData, setFormData] = useState({
@@ -183,8 +183,22 @@ export default function AddEditPackageModal({ isOpen, onClose, onSavePackage, in
             <Button variant="outline" type="button" onClick={onClose} className="text-xs font-medium">
               Cancel
             </Button>
-            <Button type="submit" className="bg-[#00df89] text-[#011812] hover:bg-[#00c97b] font-medium text-xs px-5 gap-1.5">
-              <CheckCircle2 className="w-4 h-4" /> Save Package Pass
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="bg-[#00df89] text-[#011812] hover:bg-[#00c97b] font-medium text-xs px-5 gap-1.5"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Save Package Pass</span>
+                </>
+              )}
             </Button>
           </div>
         </form>

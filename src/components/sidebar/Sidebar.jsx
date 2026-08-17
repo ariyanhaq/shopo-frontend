@@ -4,23 +4,34 @@
  */
 import { useShop } from '@/context/ShopContext';
 import { useLanguage } from '@/context/LanguageContext';
-import { NavLink, Link, useLocation } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator
+} from '@/components/ui/dropdown-menu';
 import {
   Store, LayoutDashboard, ShoppingCart, Package, Users, UserCheck,
   BarChart3, Settings, ChevronRight, ChevronsUpDown, ShieldCheck,
   Wallet, HelpCircle, Layers, Building2, Sparkles, FolderPlus,
   ArrowLeftRight, Dumbbell, CreditCard, Calendar, Flame, Activity,
-  Wrench, DollarSign, Award, Clock
+  Wrench, DollarSign, Award, Clock, LogOut, User, PlusCircle
 } from 'lucide-react';
 
 export default function Sidebar({ collapsed }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { activeShop } = useShop();
   const { lang, t } = useLanguage();
+  const { currentUser, mongoShop, logout } = useAuth();
 
   const sb = t?.dashboard?.sidebar || {};
 
-  const isGym = activeShop?.id === 'gym';
+  const isGym = (mongoShop?.business_type || activeShop?.id) === 'gym';
 
   const defaultMenuSections = [
     {
@@ -29,7 +40,8 @@ export default function Sidebar({ collapsed }) {
         { label: sb.dashboard || 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
         { label: sb.sales || 'Sales', path: '/sales', icon: ShoppingCart, hasChevron: true },
         { label: sb.products || 'Products', path: '/products', icon: Package, hasChevron: true },
-        { label: sb.pos || 'POS & Retail', path: '/pos', icon: Store, isComingSoon: true },
+        { label: lang === 'bn' ? 'কাস্টমার ও গ্রাহক' : 'Customers', path: '/customers', icon: Users, hasChevron: true },
+        { label: sb.pos || 'POS & Retail', path: '/pos', icon: Store },
         { label: sb.accounting || 'Accounting & Finance', path: '/accounting', icon: Wallet, hasChevron: true },
         { label: sb.settings || 'Settings', path: '/dashboard/settings', icon: Settings, hasChevron: true }
       ]
@@ -64,31 +76,54 @@ export default function Sidebar({ collapsed }) {
       }`}
     >
       {/* TOP BRAND HEADER (PINNED) */}
-      <div className="p-4 pb-2 shrink-0">
-        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80">
-          <Link to="/" className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-[#00df89] text-[#011812] flex items-center justify-center font-medium shadow-xs shrink-0">
-              <Store className="w-5 h-5 stroke-[2]" />
-            </div>
-            {!collapsed && (
-              <div className="min-w-0">
-                <div className="font-medium text-sm text-slate-900 dark:text-white truncate">
-                  {activeShop ? activeShop.name : 'Shopo Enterprise'}
+      <div className="p-3 pb-2 shrink-0 w-full relative z-30">
+        <DropdownMenu className="w-full">
+          <DropdownMenuTrigger className="w-full block outline-none">
+            <div className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 hover:border-slate-300 dark:hover:border-zinc-700 transition-all text-left min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
+                <div className="w-9 h-9 rounded-xl bg-[#00df89] text-[#011812] flex items-center justify-center font-bold shadow-xs shrink-0">
+                  <Store className="w-5 h-5 stroke-[2.2]" />
                 </div>
-                <div className="text-xs text-slate-500 dark:text-zinc-400 font-normal truncate">
-                  {lang === 'bn' ? 'ওয়ার্কস্পেস ইন্টারপ্রাইজ' : 'Enterprise Workspace'}
-                </div>
+                {!collapsed && (
+                  <div className="w-0 flex-1 min-w-0 overflow-hidden">
+                    <div className="font-bold text-sm text-slate-900 dark:text-white truncate block w-full">
+                      {mongoShop?.name || activeShop?.name || 'Shopo Store'}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-zinc-400 font-normal truncate block w-full capitalize">
+                      {mongoShop?.business_type ? `${mongoShop.business_type} ${lang === 'bn' ? 'স্টোর' : 'Store'}` : (lang === 'bn' ? 'স্টোর ওয়ার্কস্পেস' : 'Store Workspace')}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </Link>
-          {!collapsed && (
-            <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0 cursor-pointer" />
-          )}
-        </div>
+              {!collapsed && (
+                <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0 ml-1.5" />
+              )}
+            </div>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent align="left" width="w-58">
+            <DropdownMenuLabel>
+              {lang === 'bn' ? 'স্টোর ম্যানেজমেন্ট' : 'Store Workspace'}
+            </DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => navigate('/dashboard/settings')}>
+              <Settings className="w-3.5 h-3.5 text-slate-400" />
+              <span>{lang === 'bn' ? 'স্টোর সেটিংস' : 'Store Settings'}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/onboarding/create-shop')}>
+              <PlusCircle className="w-3.5 h-3.5 text-[#00a86b] dark:text-[#00df89]" />
+              <span>{lang === 'bn' ? '+ নতুন দোকান তৈরি করুন' : '+ Create New Shop'}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate('/dashboard')}>
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-400" />
+              <span>{lang === 'bn' ? 'ড্যাশবোর্ড ওভারভিউ' : 'Dashboard Overview'}</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* MIDDLE SECTION NAV LIST (VERTICALLY SCROLLABLE WITH HIDDEN SCROLLBAR) */}
-      <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-2 space-y-4">
+      <div className="flex-1 overflow-y-auto no-scrollbar px-3 py-2 space-y-4">
         <nav className="space-y-4">
           {menuSections.map((sec, sIdx) => (
             <div key={sIdx} className="space-y-1">
@@ -108,7 +143,7 @@ export default function Sidebar({ collapsed }) {
                   <div key={iIdx} className="space-y-1">
                     <NavLink
                       to={item.path}
-                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                         isActive
                           ? 'bg-slate-100 dark:bg-zinc-800/80 text-slate-900 dark:text-white shadow-xs'
                           : 'text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800/40 hover:text-slate-900 dark:hover:text-white font-normal'
@@ -136,23 +171,57 @@ export default function Sidebar({ collapsed }) {
 
       {/* BOTTOM USER PROFILE BADGE (PINNED AT BOTTOM) */}
       {!collapsed && (
-        <div className="p-3 border-t border-slate-200/90 dark:border-zinc-800/80 shrink-0">
-          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 cursor-pointer">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-full bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] font-medium text-xs flex items-center justify-center shrink-0">
-                SM
-              </div>
-              <div className="min-w-0">
-                <div className="font-medium text-sm text-slate-900 dark:text-white truncate">
-                  {lang === 'bn' ? 'শিহাব মুহাম্মদ' : 'Sheehab Muhammad'}
+        <div className="p-3 border-t border-slate-200/90 dark:border-zinc-800/80 shrink-0 w-full relative z-30">
+          <DropdownMenu className="w-full">
+            <DropdownMenuTrigger className="w-full block outline-none">
+              <div className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 hover:border-slate-300 dark:hover:border-zinc-700 transition-all text-left min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
+                  {currentUser?.photoURL ? (
+                    <img
+                      src={currentUser.photoURL}
+                      alt="User Avatar"
+                      className="w-9 h-9 rounded-xl shrink-0 object-cover"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-xl bg-[#00df89] text-[#011812] font-bold text-xs flex items-center justify-center shrink-0">
+                      {(currentUser?.displayName || currentUser?.email || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div className="w-0 flex-1 min-w-0 overflow-hidden">
+                    <div className="font-semibold text-xs text-slate-900 dark:text-white truncate block w-full">
+                      {currentUser?.displayName || (currentUser?.email ? currentUser.email.split('@')[0] : (lang === 'bn' ? 'ব্যবহারকারী' : 'User'))}
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-zinc-400 font-normal truncate block w-full">
+                      {currentUser?.email || (lang === 'bn' ? 'মালিক ও ম্যানেজার' : 'Owner & Manager')}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs text-slate-500 dark:text-zinc-400 font-normal truncate">
-                  {lang === 'bn' ? 'মালিক ও ম্যানেজার' : 'Owner & Manager'}
-                </div>
+
+                <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0 ml-1.5" />
               </div>
-            </div>
-            <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0" />
-          </div>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent align="left" width="w-58" className="bottom-full mb-1.5 mt-0">
+              <DropdownMenuLabel>
+                {lang === 'bn' ? 'অ্যাকাউন্ট' : 'My Account'}
+              </DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => navigate('/dashboard/settings')}>
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                <span>{lang === 'bn' ? 'প্রোফাইল সেটিংস' : 'Profile Settings'}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="danger"
+                onClick={async () => {
+                  await logout();
+                  navigate('/login');
+                }}
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>{lang === 'bn' ? 'লগআউট করুন' : 'Log out'}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
     </aside>

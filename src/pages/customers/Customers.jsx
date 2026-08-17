@@ -1,9 +1,1040 @@
 /**
  * @file Customers.jsx
- * @description Customer directory list page component.
+ * @description Comprehensive Customer CRM & Purchase History Viewer with Edit/Delete customer profiles and Edit/Delete individual purchases.
  */
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useLanguage } from '@/context/LanguageContext';
+import { useAuth } from '@/context/AuthContext';
+import api from '@/services/api';
+import toast from 'react-hot-toast';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue
+} from '@/components/ui/select';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
+import {
+  Users, Plus, Phone, Mail, MapPin, Search, Trash2, Edit2, Loader2,
+  X, DollarSign, ShoppingBag, ArrowRight, FileText, Calendar,
+  CreditCard, Banknote, Printer, ChevronRight, CheckCircle2, Clock,
+  Coins, Percent, Sparkles, UserCheck, AlertTriangle
+} from 'lucide-react';
+
 export default function Customers() {
+  const navigate = useNavigate();
+  const { lang, t } = useLanguage();
+  const { mongoShop } = useAuth();
+
+  const [customers, setCustomers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Edit Customer Profile State
+  const [isEditCustomerModalOpen, setIsEditCustomerModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [editCustomerForm, setEditCustomerForm] = useState({
+    id: '',
+    name: '',
+    phone: '',
+    address: '',
+  });
+
+  // Customer Details & Purchase History State
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [customerHistory, setCustomerHistory] = useState(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Edit Sale / Invoice from Customer History State
+  const [isEditSaleModalOpen, setIsEditSaleModalOpen] = useState(false);
+  const [editingSale, setEditingSale] = useState(null);
+  const [isUpdatingSale, setIsUpdatingSale] = useState(false);
+  const [editSaleForm, setEditSaleForm] = useState({
+    id: '',
+    invoice_number: '',
+    payment_method: 'cash',
+    discount_type: 'flat',
+    discount_value: '',
+    paid_amount: '',
+    tendered_amount: '',
+    note: '',
+  });
+
+  // Confirm Dialog States & Loaders
+  const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
+  const [isDeletingSale, setIsDeletingSale] = useState(false);
+  const [confirmCustomerDelete, setConfirmCustomerDelete] = useState({
+    isOpen: false,
+    customerId: null,
+    customerName: '',
+  });
+  const [confirmSaleDelete, setConfirmSaleDelete] = useState({
+    isOpen: false,
+    saleId: null,
+    invoiceNumber: '',
+  });
+
+  // New Customer Form State
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
+  });
+
+  const fetchCustomers = async () => {
+    setIsLoading(true);
+    try {
+      const res = await api.customers.list();
+      const rawList = Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res?.data?.docs)
+        ? res.data.docs
+        : [];
+      setCustomers(rawList);
+    } catch (err) {
+      console.warn('Failed to load customers from DB:', err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  // Fetch full customer purchase history
+  const handleOpenCustomerHistory = async (customer) => {
+    setSelectedCustomerId(customer._id);
+    setIsLoadingHistory(true);
+    try {
+      const res = await api.customers.getHistory(customer._id);
+      if (res?.data) {
+        setCustomerHistory(res.data);
+      } else {
+        setCustomerHistory({ customer, sales: [] });
+      }
+    } catch (err) {
+      console.warn('Could not fetch customer history:', err.message);
+      setCustomerHistory({ customer, sales: [] });
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const reloadCustomerHistory = async (customerId) => {
+    if (!customerId) return;
+    try {
+      const res = await api.customers.getHistory(customerId);
+      if (res?.data) {
+        setCustomerHistory(res.data);
+      }
+    } catch (err) {
+      console.warn('Could not reload history:', err.message);
+    }
+  };
+
+  const handleCloseHistory = () => {
+    setSelectedCustomerId(null);
+    setCustomerHistory(null);
+  };
+
+  // Create Customer Profile
+  const handleCreateCustomer = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim() && !form.phone.trim()) {
+      toast.error(lang === 'bn' ? 'অনুগ্রহ করে নাম অথবা ফোন নম্বর দিন।' : 'Please enter customer name or phone number.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await api.customers.create({
+        name: form.name.trim() || `Customer (${form.phone.trim()})`,
+        phone: form.phone.trim(),
+        email: form.email.trim() || undefined,
+        address: form.address.trim() || undefined,
+      });
+      toast.success(lang === 'bn' ? 'কাস্টমার সফলভাবে যুক্ত হয়েছে!' : 'Customer created successfully!');
+      setIsAddModalOpen(false);
+      setForm({ name: '', phone: '', email: '', address: '' });
+      fetchCustomers();
+    } catch (err) {
+      toast.error(err.message || 'Failed to create customer.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Open Edit Customer Modal
+  const handleOpenEditCustomer = (customer, e) => {
+    e?.stopPropagation();
+    setEditingCustomer(customer);
+    setEditCustomerForm({
+      id: customer._id,
+      name: customer.name || '',
+      phone: customer.phone || '',
+      address: customer.address || '',
+    });
+    setIsEditCustomerModalOpen(true);
+  };
+
+  // Submit Edit Customer
+  const handleUpdateCustomer = async (e) => {
+    e.preventDefault();
+    if (!editCustomerForm.id) return;
+
+    setIsSubmitting(true);
+    try {
+      await api.customers.update(editCustomerForm.id, {
+        name: editCustomerForm.name.trim(),
+        phone: editCustomerForm.phone.trim(),
+        address: editCustomerForm.address.trim(),
+      });
+      toast.success(lang === 'bn' ? 'কাস্টমার প্রোফাইল আপডেট হয়েছে!' : 'Customer profile updated!');
+      setIsEditCustomerModalOpen(false);
+      setEditingCustomer(null);
+      fetchCustomers();
+      if (selectedCustomerId === editCustomerForm.id) {
+        reloadCustomerHistory(editCustomerForm.id);
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to update customer profile.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Delete Customer Profile Request
+  const handleDeleteCustomer = (customer, e) => {
+    e?.stopPropagation();
+    setConfirmCustomerDelete({
+      isOpen: true,
+      customerId: customer._id,
+      customerName: customer.name || customer.phone || 'Customer',
+    });
+  };
+
+  const handleConfirmDeleteCustomer = async () => {
+    if (!confirmCustomerDelete.customerId) return;
+    setIsDeletingCustomer(true);
+    try {
+      await api.customers.delete(confirmCustomerDelete.customerId);
+      toast.success(lang === 'bn' ? `'${confirmCustomerDelete.customerName}' মুছে ফেলা হয়েছে!` : `'${confirmCustomerDelete.customerName}' deleted successfully!`);
+      if (selectedCustomerId === confirmCustomerDelete.customerId) {
+        handleCloseHistory();
+      }
+      setConfirmCustomerDelete({ isOpen: false, customerId: null, customerName: '' });
+      fetchCustomers();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete customer.');
+    } finally {
+      setIsDeletingCustomer(false);
+    }
+  };
+
+  // Open Edit Sale Modal from Purchase History
+  const handleOpenEditSale = (sale) => {
+    setEditingSale(sale);
+    setEditSaleForm({
+      id: sale._id,
+      invoice_number: sale.invoice_number,
+      payment_method: sale.payment_method || 'cash',
+      discount_type: sale.discount_type || 'flat',
+      discount_value: sale.discount_value !== undefined ? String(sale.discount_value) : String(sale.discount || 0),
+      paid_amount: String(sale.paid_amount !== undefined ? sale.paid_amount : sale.total),
+      tendered_amount: sale.tendered_amount ? String(sale.tendered_amount) : '',
+      note: sale.note || '',
+    });
+    setIsEditSaleModalOpen(true);
+  };
+
+  // Submit Edit Sale from Purchase History
+  const handleUpdateSale = async (e) => {
+    e.preventDefault();
+    if (!editSaleForm.id) return;
+
+    setIsUpdatingSale(true);
+    try {
+      const discVal = parseFloat(editSaleForm.discount_value) || 0;
+      const paid = parseFloat(editSaleForm.paid_amount) || 0;
+      const tendered = parseFloat(editSaleForm.tendered_amount) || paid;
+
+      await api.sales.update(editSaleForm.id, {
+        payment_method: editSaleForm.payment_method,
+        discount_type: editSaleForm.discount_type,
+        discount_value: discVal,
+        paid_amount: paid,
+        tendered_amount: tendered,
+        note: editSaleForm.note,
+      });
+
+      toast.success(lang === 'bn' ? 'বিক্রয় বিবরণ সফলভাবে আপডেট হয়েছে!' : 'Sale invoice updated successfully!');
+      setIsEditSaleModalOpen(false);
+      setEditingSale(null);
+      if (selectedCustomerId) {
+        reloadCustomerHistory(selectedCustomerId);
+      }
+      fetchCustomers();
+    } catch (err) {
+      toast.error(err.message || 'Failed to update sale invoice.');
+    } finally {
+      setIsUpdatingSale(false);
+    }
+  };
+
+  // Delete Sale from Purchase History Request
+  const handleDeleteSale = (saleId, invoiceNumber) => {
+    setConfirmSaleDelete({
+      isOpen: true,
+      saleId,
+      invoiceNumber,
+    });
+  };
+
+  const handleConfirmDeleteSale = async () => {
+    if (!confirmSaleDelete.saleId) return;
+    setIsDeletingSale(true);
+    try {
+      await api.sales.delete(confirmSaleDelete.saleId);
+      toast.success(lang === 'bn' ? `ইনভয়েস '${confirmSaleDelete.invoiceNumber}' মুছে ফেলা হয়েছে এবং স্টক ফেরত এসেছে!` : `Invoice '${confirmSaleDelete.invoiceNumber}' deleted & stock restored!`);
+      if (selectedCustomerId) {
+        reloadCustomerHistory(selectedCustomerId);
+      }
+      setConfirmSaleDelete({ isOpen: false, saleId: null, invoiceNumber: '' });
+      fetchCustomers();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete sale transaction.');
+    } finally {
+      setIsDeletingSale(false);
+    }
+  };
+
+  const filtered = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return customers;
+    return customers.filter(c =>
+      (c.name && c.name.toLowerCase().includes(q)) ||
+      (c.phone && c.phone.toLowerCase().includes(q)) ||
+      (c.address && c.address.toLowerCase().includes(q))
+    );
+  }, [customers, searchTerm]);
+
+  const totalSpentAll = customers.reduce((acc, c) => acc + (c.total_spent || c.total_purchases || 0), 0);
+  const totalDuesAll = customers.reduce((acc, c) => acc + (c.total_due || 0), 0);
+
   return (
-    <div>Customers Page</div>
+    <div className="space-y-6 font-sans pb-12">
+      
+      {/* ---------------------------------------------------- */}
+      {/* HEADER SECTION                                       */}
+      {/* ---------------------------------------------------- */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
+            <Users className="w-6 h-6 text-[#00df89]" />
+            <span>{lang === 'bn' ? 'কাস্টমার ও গ্রাহক ডিরেক্টরি' : 'Customers & Purchase History'}</span>
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
+            {lang === 'bn'
+              ? 'সকল কাস্টমারদের তালিকা, ক্রয়ের ইতিহাস, এডিট ও ডিলিট অপশন'
+              : 'Manage customer profiles, edit/delete customer data and edit/delete individual purchases.'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <Button
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>{lang === 'bn' ? 'নতুন কাস্টমার যোগ করুন' : 'Add Customer'}</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* ---------------------------------------------------- */}
+      {/* KPI METRIC CARDS                                     */}
+      {/* ---------------------------------------------------- */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Registered Customers</span>
+            <Users className="w-4 h-4 text-slate-400" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <Skeleton className="h-8 w-20 my-0.5" /> : customers.length}
+          </div>
+          <div className="text-xs text-slate-500 mt-1">With name or phone number</div>
+        </Card>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Lifetime Customer Purchases</span>
+            <DollarSign className="w-4 h-4 text-[#00a86b] dark:text-[#00df89]" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] mt-2">
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${totalSpentAll.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-[#00a86b] dark:text-[#00df89] mt-1">Total volume from customers</div>
+        </Card>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Outstanding Customer Dues</span>
+            <DollarSign className="w-4 h-4 text-amber-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-amber-500 mt-2">
+            {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${totalDuesAll.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-amber-500 mt-1">Receivables pending</div>
+        </Card>
+      </div>
+
+      {/* ---------------------------------------------------- */}
+      {/* SEARCH BAR                                           */}
+      {/* ---------------------------------------------------- */}
+      <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+        <div className="w-full sm:w-80 relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder={lang === 'bn' ? 'নাম বা ফোন নম্বর খুঁজুন...' : 'Search by name or phone number...'}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
+          />
+        </div>
+      </Card>
+
+      {/* ---------------------------------------------------- */}
+      {/* CUSTOMERS DIRECTORY TABLE                            */}
+      {/* ---------------------------------------------------- */}
+      <Card className="p-0 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
+        {isLoading ? (
+          <div className="p-5 space-y-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="p-12 text-center space-y-3">
+            <Users className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto" />
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">No Customers Found</h3>
+            <p className="text-xs text-slate-500 dark:text-zinc-400">
+              Customers who enter their phone number or name during checkout will automatically appear here.
+            </p>
+            <Button size="sm" onClick={() => setIsAddModalOpen(true)} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold">
+              <Plus className="w-3.5 h-3.5 mr-1" /> Add First Customer
+            </Button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-500 border-b border-slate-200 dark:border-zinc-800 select-none">
+                <tr>
+                  <th className="p-3.5">Customer</th>
+                  <th className="p-3.5">Phone Number</th>
+                  <th className="p-3.5">Total Orders</th>
+                  <th className="p-3.5">Total Purchases (৳)</th>
+                  <th className="p-3.5">Due Remaining (৳)</th>
+                  <th className="p-3.5">Last Active</th>
+                  <th className="p-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                {filtered.map((c) => {
+                  const spent = c.total_spent || c.total_purchases || 0;
+                  const ordersCount = c.total_orders || (spent > 0 ? 1 : 0);
+
+                  return (
+                    <tr
+                      key={c._id}
+                      onClick={() => handleOpenCustomerHistory(c)}
+                      className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors cursor-pointer group"
+                    >
+                      <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-bold text-xs shrink-0">
+                          {c.name ? c.name.slice(0, 2).toUpperCase() : 'CU'}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="group-hover:text-[#00a86b] dark:group-hover:text-[#00df89] transition-colors">
+                            {c.name || 'Unnamed Customer'}
+                          </span>
+                          {c.address && (
+                            <span className="block text-[10px] text-slate-400 font-normal truncate max-w-xs">{c.address}</span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="p-3.5 text-slate-700 dark:text-zinc-300 font-mono">
+                        {c.phone ? (
+                          <div className="flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-slate-400" />
+                            <span>{c.phone}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">No phone</span>
+                        )}
+                      </td>
+
+                      <td className="p-3.5 text-slate-700 dark:text-zinc-300 font-medium">
+                        <Badge variant="secondary" className="text-[10px]">
+                          {ordersCount} {ordersCount === 1 ? 'order' : 'orders'}
+                        </Badge>
+                      </td>
+
+                      <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89]">
+                        ৳ {spent.toLocaleString()}
+                      </td>
+
+                      <td className="p-3.5 font-semibold">
+                        {(c.total_due || 0) > 0 ? (
+                          <span className="text-amber-500">৳ {c.total_due.toLocaleString()}</span>
+                        ) : (
+                          <span className="text-slate-400">৳ 0</span>
+                        )}
+                      </td>
+
+                      <td className="p-3.5 text-slate-500 text-[11px]">
+                        {c.last_order_date
+                          ? new Date(c.last_order_date).toLocaleDateString()
+                          : c.created_at
+                          ? new Date(c.created_at).toLocaleDateString()
+                          : 'Recent'}
+                      </td>
+
+                      <td className="p-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenCustomerHistory(c);
+                            }}
+                            className="h-7 text-xs px-2 text-[#00a86b] dark:text-[#00df89] hover:bg-emerald-500/10 gap-1 font-semibold"
+                            title="View Purchases"
+                          >
+                            <span>View Purchases</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => handleOpenEditCustomer(c, e)}
+                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500"
+                            title="Edit Customer Profile"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => handleDeleteCustomer(c, e)}
+                            className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                            title="Delete Customer Profile"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* ---------------------------------------------------- */}
+      {/* CUSTOMER PURCHASE HISTORY MODAL                      */}
+      {/* ---------------------------------------------------- */}
+      {selectedCustomerId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-2xl w-full max-h-[90vh] flex flex-col bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#00df89] text-[#011812] flex items-center justify-center font-bold text-sm">
+                  {customerHistory?.customer?.name ? customerHistory.customer.name.slice(0, 2).toUpperCase() : 'CU'}
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    {customerHistory?.customer?.name || 'Customer Purchases'}
+                  </h2>
+                  <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    {customerHistory?.customer?.phone && (
+                      <span className="flex items-center gap-1 font-mono">
+                        <Phone className="w-3 h-3 text-[#00df89]" /> {customerHistory.customer.phone}
+                      </span>
+                    )}
+                    {customerHistory?.customer?.address && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-slate-400" /> {customerHistory.customer.address}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={handleCloseHistory} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content / Invoices List */}
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              {isLoadingHistory ? (
+                <div className="p-12 text-center text-slate-400">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-[#00df89]" />
+                  Loading purchase history...
+                </div>
+              ) : !customerHistory?.sales || customerHistory.sales.length === 0 ? (
+                <div className="p-8 text-center space-y-2 border border-dashed border-slate-200 dark:border-zinc-800 rounded-xl">
+                  <ShoppingBag className="w-8 h-8 text-slate-300 dark:text-zinc-600 mx-auto" />
+                  <h4 className="text-xs font-semibold text-slate-700 dark:text-zinc-300">No Sales Recorded Yet</h4>
+                  <p className="text-[11px] text-slate-400">When this customer purchases items, complete breakdowns will appear here.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Bar */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-center">
+                      <span className="text-[10px] text-slate-500 uppercase font-semibold">Total Orders</span>
+                      <div className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+                        {customerHistory.sales.length}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-center">
+                      <span className="text-[10px] text-slate-500 uppercase font-semibold">Lifetime Spent</span>
+                      <div className="text-lg font-bold text-[#00a86b] dark:text-[#00df89] mt-0.5">
+                        ৳ {(customerHistory.customer?.total_spent || 0).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-center">
+                      <span className="text-[10px] text-slate-500 uppercase font-semibold">Pending Due</span>
+                      <div className="text-lg font-bold text-amber-500 mt-0.5">
+                        ৳ {(customerHistory.customer?.total_due || 0).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* List of Invoices with Edit & Delete */}
+                  <div className="space-y-3 pt-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      All Purchases & Cash Transactions ({customerHistory.sales.length})
+                    </h3>
+
+                    {customerHistory.sales.map((sale) => (
+                      <div
+                        key={sale._id}
+                        className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-3 text-xs"
+                      >
+                        {/* Invoice Header with Actions */}
+                        <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-2">
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-slate-400" />
+                            <span className="font-bold text-slate-900 dark:text-white">{sale.invoice_number}</span>
+                            <Badge variant="default" className="text-[10px] uppercase font-normal">
+                              {sale.payment_method || 'Cash'}
+                            </Badge>
+                          </div>
+                          
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-slate-500 mr-1">
+                              {new Date(sale.created_at).toLocaleString()}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenEditSale(sale)}
+                              className="h-6 text-xs px-1.5 text-slate-500 hover:text-amber-500"
+                              title="Edit this sale transaction"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteSale(sale._id, sale.invoice_number)}
+                              className="h-6 text-xs px-1.5 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                              title="Delete sale & restore inventory"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Items Purchased Table */}
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-semibold text-slate-600 dark:text-zinc-400">
+                            Items Purchased:
+                          </div>
+                          <div className="divide-y divide-slate-200 dark:divide-zinc-800/80">
+                            {sale.items?.map((it, idx) => (
+                              <div key={idx} className="py-1.5 flex items-center justify-between text-xs">
+                                <div>
+                                  <span className="font-semibold text-slate-800 dark:text-zinc-200">{it.name}</span>
+                                  <span className="text-slate-400 text-[11px] ml-2">
+                                    (৳{it.unit_price} × {it.quantity})
+                                  </span>
+                                </div>
+                                <span className="font-bold text-slate-900 dark:text-white">
+                                  ৳ {(it.subtotal || it.unit_price * it.quantity).toLocaleString()}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Financial Calculation & Cash Given / Return */}
+                        <div className="p-3 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-xs">
+                          <div className="flex justify-between text-slate-500">
+                            <span>Subtotal:</span>
+                            <span>৳ {(sale.subtotal || sale.total).toLocaleString()}</span>
+                          </div>
+
+                          {(sale.discount || 0) > 0 && (
+                            <div className="flex justify-between text-rose-500">
+                              <span>
+                                Discount {sale.discount_type === 'percentage' ? `(${sale.discount_value}%)` : '(Flat)'}:
+                              </span>
+                              <span className="font-bold">- ৳ {sale.discount.toLocaleString()}</span>
+                            </div>
+                          )}
+
+                          <div className="flex justify-between font-bold text-slate-900 dark:text-white pt-1 border-t border-slate-100 dark:border-zinc-800">
+                            <span>Net Total Paid:</span>
+                            <span className="text-[#00a86b] dark:text-[#00df89]">৳ {(sale.total || 0).toLocaleString()}</span>
+                          </div>
+
+                          {/* Cash Given & Change Returned */}
+                          {sale.payment_method?.toLowerCase() === 'cash' && (
+                            <div className="grid grid-cols-2 gap-2 pt-2 mt-1 border-t border-slate-100 dark:border-zinc-800 text-[11px]">
+                              <div className="p-1.5 rounded bg-slate-50 dark:bg-zinc-900/60 flex items-center justify-between">
+                                <span className="text-slate-500">Cash Given:</span>
+                                <span className="font-bold text-slate-900 dark:text-white">
+                                  ৳ {(sale.tendered_amount || sale.paid_amount || sale.total).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="p-1.5 rounded bg-emerald-500/10 flex items-center justify-between text-emerald-600 dark:text-[#00df89]">
+                                <span className="font-medium">Change Return:</span>
+                                <span className="font-bold">
+                                  ৳ {(sale.change_amount || 0).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-zinc-800 flex justify-end gap-2 shrink-0">
+              <Button variant="outline" size="sm" onClick={handleCloseHistory}>
+                Close
+              </Button>
+              <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
+                <Printer className="w-3.5 h-3.5" /> Print Statement
+              </Button>
+            </div>
+
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* EDIT CUSTOMER PROFILE MODAL                          */}
+      {/* ---------------------------------------------------- */}
+      {isEditCustomerModalOpen && editingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Edit Customer Profile</h2>
+              <button onClick={() => setIsEditCustomerModalOpen(false)} className="text-slate-400 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCustomer} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Customer Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editCustomerForm.name}
+                  onChange={(e) => setEditCustomerForm({ ...editCustomerForm, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Phone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  value={editCustomerForm.phone}
+                  onChange={(e) => setEditCustomerForm({ ...editCustomerForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Address</label>
+                <input
+                  type="text"
+                  value={editCustomerForm.address}
+                  onChange={(e) => setEditCustomerForm({ ...editCustomerForm, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsEditCustomerModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  size="sm"
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold"
+                >
+                  {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save Changes'}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* EDIT SALE MODAL (FROM CUSTOMER PURCHASES)             */}
+      {/* ---------------------------------------------------- */}
+      {isEditSaleModalOpen && editingSale && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">Edit Purchase: {editSaleForm.invoice_number}</h2>
+                <p className="text-xs text-slate-400">Update payment method, discount, cash received or notes</p>
+              </div>
+              <button onClick={() => setIsEditSaleModalOpen(false)} className="text-slate-400 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateSale} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Payment Method</label>
+                <Select
+                  value={editSaleForm.payment_method}
+                  onValueChange={(val) => setEditSaleForm({ ...editSaleForm, payment_method: val })}
+                >
+                  <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                    <SelectValue placeholder="Payment Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bkash">bKash</SelectItem>
+                    <SelectItem value="nagad">Nagad</SelectItem>
+                    <SelectItem value="rocket">Rocket</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="due">Due / Credit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-700 dark:text-zinc-300">Discount Option</span>
+                  <div className="flex bg-slate-200 dark:bg-zinc-800 p-0.5 rounded-lg text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setEditSaleForm({ ...editSaleForm, discount_type: 'flat' })}
+                      className={`px-2 py-0.5 rounded-md font-medium transition-all ${editSaleForm.discount_type === 'flat' ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'}`}
+                    >
+                      Flat (৳)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditSaleForm({ ...editSaleForm, discount_type: 'percentage' })}
+                      className={`px-2 py-0.5 rounded-md font-medium transition-all ${editSaleForm.discount_type === 'percentage' ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'}`}
+                    >
+                      Percent (%)
+                    </button>
+                  </div>
+                </div>
+
+                <input
+                  type="number"
+                  placeholder={editSaleForm.discount_type === 'flat' ? 'Discount Amount (৳)' : 'Discount (%)'}
+                  value={editSaleForm.discount_value}
+                  onChange={(e) => setEditSaleForm({ ...editSaleForm, discount_value: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-1 focus:ring-[#00df89]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Paid Amount (৳)</label>
+                  <input
+                    type="number"
+                    value={editSaleForm.paid_amount}
+                    onChange={(e) => setEditSaleForm({ ...editSaleForm, paid_amount: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Cash Given (৳)</label>
+                  <input
+                    type="number"
+                    value={editSaleForm.tendered_amount}
+                    onChange={(e) => setEditSaleForm({ ...editSaleForm, tendered_amount: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Note / Remarks</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Adjusted price"
+                  value={editSaleForm.note}
+                  onChange={(e) => setEditSaleForm({ ...editSaleForm, note: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsEditSaleModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isUpdatingSale}
+                  size="sm"
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold"
+                >
+                  {isUpdatingSale ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save Changes'}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* CREATE CUSTOMER MODAL                                */}
+      {/* ---------------------------------------------------- */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Add Customer Profile</h2>
+              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCustomer} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Customer Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Rafiqul Islam"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Phone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="e.g. 01712345678"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Address (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Dhanmondi, Dhaka"
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsAddModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  size="sm"
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold"
+                >
+                  {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save Customer'}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* CONFIRM DELETE CUSTOMER MODAL                        */}
+      {/* ---------------------------------------------------- */}
+      <ConfirmDialog
+        isOpen={confirmCustomerDelete.isOpen}
+        isLoading={isDeletingCustomer}
+        title={lang === 'bn' ? `'${confirmCustomerDelete.customerName}' কাস্টমার প্রোফাইল মুছে ফেলতে চান?` : `Delete customer profile for '${confirmCustomerDelete.customerName}'?`}
+        description={lang === 'bn' ? 'এই কাস্টমারের প্রোফাইল ও তথ্য মুছে ফেলা হবে। এই কাজটি পুনরায় ফিরিয়ে আনা যাবে না।' : 'This customer profile will be permanently deleted. This action cannot be undone.'}
+        confirmText={lang === 'bn' ? 'হ্যাঁ, মুছে ফেলুন' : 'Yes, Delete'}
+        cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
+        onConfirm={handleConfirmDeleteCustomer}
+        onCancel={() => setConfirmCustomerDelete({ isOpen: false, customerId: null, customerName: '' })}
+      />
+
+      {/* ---------------------------------------------------- */}
+      {/* CONFIRM DELETE SALE MODAL (FROM PURCHASES)           */}
+      {/* ---------------------------------------------------- */}
+      <ConfirmDialog
+        isOpen={confirmSaleDelete.isOpen}
+        isLoading={isDeletingSale}
+        title={lang === 'bn' ? `ইনভয়েস '${confirmSaleDelete.invoiceNumber}' মুছে ফেলতে চান?` : `Delete invoice '${confirmSaleDelete.invoiceNumber}'?`}
+        description={lang === 'bn' ? 'এই বিক্রিটি মুছে ফেলা হবে এবং সংশ্লিষ্ট পণ্যগুলোর স্টক পুনরায় ইনভেন্টরিতে ফেরত আসবে।' : 'This transaction will be deleted and product quantities will be restored back to your stock.'}
+        confirmText={lang === 'bn' ? 'হ্যাঁ, মুছে ফেলুন' : 'Yes, Delete'}
+        cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
+        onConfirm={handleConfirmDeleteSale}
+        onCancel={() => setConfirmSaleDelete({ isOpen: false, saleId: null, invoiceNumber: '' })}
+      />
+
+    </div>
   );
 }

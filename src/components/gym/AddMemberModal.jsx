@@ -1,21 +1,28 @@
-/**
- * @file AddMemberModal.jsx
- * @description 5-step multi-step modal for registering new gym members with admission fee & monthly subscription billing.
- */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
+import api from '@/services/api';
+import toast from 'react-hot-toast';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue
+} from '@/components/ui/select';
+import {
   X, User, Phone, ShieldAlert, HeartPulse, CheckCircle2,
-  Calendar, CreditCard, ChevronRight, ChevronLeft, Dumbbell, Wallet
+  Calendar, CreditCard, ChevronRight, ChevronLeft, Dumbbell, Wallet, Loader2
 } from 'lucide-react';
-import { INITIAL_GYM_PACKAGES, INITIAL_GYM_TRAINERS } from '@/data/gymData';
 
 export default function AddMemberModal({ isOpen, onClose, onAddMember }) {
   const { lang } = useLanguage();
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [packages, setPackages] = useState([]);
+  const [trainers, setTrainers] = useState([]);
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -32,13 +39,42 @@ export default function AddMemberModal({ isOpen, onClose, onAddMember }) {
     weight: '72',
     bmi: '23.5',
     fitnessGoal: 'Muscle Gain',
-    preferredTrainer: 'Tanvir Ahmed',
-    packageId: 'pkg-1',
+    preferredTrainer: 'General Trainer',
+    packageId: '',
     admissionFee: 1000,
     monthlySubscriptionFee: 1500,
     startDate: new Date().toISOString().split('T')[0],
     lockerNumber: 'L-15'
   });
+
+  useEffect(() => {
+    if (isOpen) {
+      // Fetch available packages and trainers from DB
+      const loadOptions = async () => {
+        try {
+          const [pkgRes, trainerRes] = await Promise.all([
+            api.gym.packages.list(),
+            api.gym.trainers.list(),
+          ]);
+          if (pkgRes.data && pkgRes.data.length > 0) {
+            setPackages(pkgRes.data);
+            setFormData(prev => ({
+              ...prev,
+              packageId: pkgRes.data[0]._id,
+              monthlySubscriptionFee: pkgRes.data[0].price,
+              admissionFee: pkgRes.data[0].admission_fee || 1000,
+            }));
+          }
+          if (trainerRes.data) {
+            setTrainers(trainerRes.data);
+          }
+        } catch (err) {
+          console.warn('Failed to load packages/trainers in modal:', err.message);
+        }
+      };
+      loadOptions();
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -52,384 +88,374 @@ export default function AddMemberModal({ isOpen, onClose, onAddMember }) {
           updated.bmi = (wKg / (hM * hM)).toFixed(1);
         }
       }
+      if (field === 'packageId') {
+        const selected = packages.find(p => p._id === val);
+        if (selected) {
+          updated.monthlySubscriptionFee = selected.price;
+          updated.admissionFee = selected.admission_fee || 0;
+        }
+      }
       return updated;
     });
   };
 
-  const selectedPackage = INITIAL_GYM_PACKAGES.find(p => p.id === formData.packageId) || INITIAL_GYM_PACKAGES[0];
   const totalUpfrontPayment = parseFloat(formData.admissionFee || 0) + parseFloat(formData.monthlySubscriptionFee || 0);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const newMember = {
-      id: `GM-${Math.floor(1000 + Math.random() * 9000)}`,
-      ...formData,
-      height: `${formData.height} cm`,
-      weight: `${formData.weight} kg`,
-      joiningDate: formData.startDate,
-      membershipPackage: selectedPackage.name,
-      endDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-      status: 'Active',
-      remainingDays: 30,
-      lastVisit: 'Just Joined',
-      attendanceCount: 0,
-      paidAmount: totalUpfrontPayment,
-      totalDue: 0
-    };
-    onAddMember(newMember);
-    onClose();
+  const handleSubmit = async () => {
+    if (!formData.fullName.trim() || !formData.phone.trim()) {
+      toast.error(lang === 'bn' ? 'অনুগ্রহ করে সদস্যের নাম ও মোবাইল নম্বর পূরণ করুন।' : 'Please provide member full name and phone number.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const selectedPkg = packages.find(p => p._id === formData.packageId);
+      const res = await api.gym.members.create({
+        fullName: formData.fullName,
+        phone: formData.phone,
+        email: formData.email,
+        gender: formData.gender,
+        dob: formData.dob,
+        emergencyContact: formData.emergencyContact,
+        nid: formData.nid,
+        address: formData.address,
+        medicalNotes: formData.medicalNotes,
+        bloodGroup: formData.bloodGroup,
+        height: formData.height,
+        weight: formData.weight,
+        bmi: formData.bmi,
+        fitnessGoal: formData.fitnessGoal,
+        trainer: formData.preferredTrainer,
+        membershipPackage: selectedPkg?.name || 'Standard Monthly',
+        package_id: formData.packageId || null,
+        admissionFee: parseFloat(formData.admissionFee || 0),
+        monthlyFee: parseFloat(formData.monthlySubscriptionFee || 0),
+        paidAmount: totalUpfrontPayment,
+        dueAmount: 0,
+        startDate: formData.startDate,
+        lockerNumber: formData.lockerNumber,
+      });
+
+      toast.success(lang === 'bn' ? 'জিম সদস্য সফলভাবে নিবন্ধিত হয়েছে!' : 'Gym member registered successfully!');
+      if (onAddMember) {
+        onAddMember(res.data);
+      }
+      onClose();
+    } catch (err) {
+      toast.error(err.message || 'Failed to register member in database.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm font-sans font-normal text-slate-800 dark:text-zinc-200">
-      <div className="bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <Card className="max-w-2xl w-full p-6 sm:p-8 bg-white dark:bg-[#121215] border-slate-200/90 dark:border-zinc-800/80 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto no-scrollbar relative">
         
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50/50 dark:bg-zinc-900/40">
-          <div>
-            <h2 className="text-lg font-medium text-slate-900 dark:text-white flex items-center gap-2">
-              <Dumbbell className="w-5 h-5 text-[#00df89]" />
-              <span>{lang === 'bn' ? 'নতুন মেম্বার নিবন্ধন' : 'Register New Gym Member'}</span>
-            </h2>
-            <p className="text-xs text-slate-500 font-normal">
-              Step {step} of 5 — {
-                step === 1 ? 'Personal Information' :
-                step === 2 ? 'Contact Details' :
-                step === 3 ? 'Admission & Monthly Subscription' :
-                step === 4 ? 'Health & Fitness' : 'Review & Submit'
-              }
-            </p>
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800/80 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-medium">
+              <Dumbbell className="w-5 h-5 stroke-[2]" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-medium text-slate-900 dark:text-white">
+                {lang === 'bn' ? 'নতুন জিম সদস্য নিবন্ধন' : 'Register New Athlete / Member'}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-zinc-400">
+                {lang === 'bn' ? `ধাপ ${step} এর ৩: তথ্য পূরণ করুন` : `Step ${step} of 3: Member details & plan`}
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-xl">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800/60">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Step Progress Bar */}
-        <div className="w-full bg-slate-100 dark:bg-zinc-800 h-1.5 flex">
-          <div style={{ width: `${(step / 5) * 100}%` }} className="bg-[#00df89] transition-all duration-300 h-full" />
-        </div>
-
-        {/* Body Form */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-4 text-xs font-normal">
-          
-          {/* STEP 1: Personal Information */}
-          {step === 1 && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.fullName}
-                    onChange={(e) => handleInputChange('fullName', e.target.value)}
-                    placeholder="e.g. Tanvir Hossain"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Gender</label>
-                  <select
-                    value={formData.gender}
-                    onChange={(e) => handleInputChange('gender', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Date of Birth</label>
-                  <input
-                    type="date"
-                    value={formData.dob}
-                    onChange={(e) => handleInputChange('dob', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">National ID / Passport (Optional)</label>
-                  <input
-                    type="text"
-                    value={formData.nid}
-                    onChange={(e) => handleInputChange('nid', e.target.value)}
-                    placeholder="13 or 17 digit NID"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 2: Contact Details */}
-          {step === 2 && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Mobile Phone Number *</label>
-                  <input
-                    type="tel"
-                    required
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                    placeholder="01700-000000"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Email Address</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    placeholder="member@gmail.com"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Emergency Contact Person & Phone</label>
-                  <input
-                    type="text"
-                    value={formData.emergencyContact}
-                    onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
-                    placeholder="01800-112233 (Father/Spouse)"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Locker Number</label>
-                  <input
-                    type="text"
-                    value={formData.lockerNumber}
-                    onChange={(e) => handleInputChange('lockerNumber', e.target.value)}
-                    placeholder="e.g. L-15"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
+        {/* Step 1: Personal & Contact */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'পূর্ণ নাম' : 'Full Name'} *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Mahmudur Rahman"
+                  value={formData.fullName}
+                  onChange={(e) => handleInputChange('fullName', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs focus:ring-2 focus:ring-[#00df89] outline-none"
+                />
               </div>
 
-              <div>
-                <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Residential Address</label>
-                <textarea
-                  rows={2}
-                  value={formData.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                  placeholder="House, Road, Area, City"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'মোবাইল নম্বর' : 'Phone Number'} *
+                </label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="017XXXXXXXX"
+                  value={formData.phone}
+                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs focus:ring-2 focus:ring-[#00df89] outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'ইমেইল' : 'Email Address'}
+                </label>
+                <input
+                  type="email"
+                  placeholder="athlete@domain.com"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs focus:ring-2 focus:ring-[#00df89] outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'জরুরি যোগাযোগ নম্বর' : 'Emergency Contact'}
+                </label>
+                <input
+                  type="tel"
+                  placeholder="018XXXXXXXX"
+                  value={formData.emergencyContact}
+                  onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs focus:ring-2 focus:ring-[#00df89] outline-none"
                 />
               </div>
             </div>
-          )}
 
-          {/* STEP 3: Admission Fee & Monthly Subscription */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm text-slate-900 dark:text-white">Monthly Subscription Billing Structure</span>
-                  <Badge className="bg-emerald-500/20 text-emerald-600 dark:text-[#00df89] text-[10px] font-normal">
-                    Joining + Monthly Plan
-                  </Badge>
-                </div>
-                <p className="text-xs text-slate-500 font-normal">
-                  New members pay a one-time admission fee upon joining, plus their first month's subscription. Subscriptions can be renewed monthly or anytime at the end of the term.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">One-Time Admission Fee (ভর্তি ফি) ৳</label>
-                  <input
-                    type="number"
-                    value={formData.admissionFee}
-                    onChange={(e) => handleInputChange('admissionFee', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Monthly Subscription Fee (মাসিক ফি) ৳</label>
-                  <input
-                    type="number"
-                    value={formData.monthlySubscriptionFee}
-                    onChange={(e) => handleInputChange('monthlySubscriptionFee', parseFloat(e.target.value) || 0)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-              </div>
-
-              {/* Total Upfront Box */}
-              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
-                <div>
-                  <span className="font-medium text-xs text-slate-700 dark:text-zinc-300 block">Total Initial Payment Due Now</span>
-                  <span className="text-[11px] text-slate-400 font-normal">Admission Fee (৳{formData.admissionFee}) + 1st Month Subscription (৳{formData.monthlySubscriptionFee})</span>
-                </div>
-                <div className="text-xl font-medium text-emerald-600 dark:text-[#00df89]">
-                  ৳ {totalUpfrontPayment.toLocaleString()}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Subscription Start Date</label>
-                  <input
-                    type="date"
-                    value={formData.startDate}
-                    onChange={(e) => handleInputChange('startDate', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Assigned Personal Trainer</label>
-                  <select
-                    value={formData.preferredTrainer}
-                    onChange={(e) => handleInputChange('preferredTrainer', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  >
-                    {INITIAL_GYM_TRAINERS.map((t) => (
-                      <option key={t.id} value={t.name}>{t.name} ({t.specialization})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: Health & Fitness */}
-          {step === 4 && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Height (cm)</label>
-                  <input
-                    type="number"
-                    value={formData.height}
-                    onChange={(e) => handleInputChange('height', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Weight (kg)</label>
-                  <input
-                    type="number"
-                    value={formData.weight}
-                    onChange={(e) => handleInputChange('weight', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Calculated BMI</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={formData.bmi}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-200/60 dark:bg-zinc-800 font-medium text-sm text-emerald-600 dark:text-[#00df89]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Blood Group</label>
-                  <select
-                    value={formData.bloodGroup}
-                    onChange={(e) => handleInputChange('bloodGroup', e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
-                  >
-                    {['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-'].map(b => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Primary Fitness Goal</label>
-                <select
-                  value={formData.fitnessGoal}
-                  onChange={(e) => handleInputChange('fitnessGoal', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Gender</label>
+                <Select
+                  value={formData.gender}
+                  onValueChange={(val) => handleInputChange('gender', val)}
                 >
-                  <option value="Muscle Gain">Muscle Gain & Strength</option>
-                  <option value="Weight Loss">Weight Loss & Fat Reduction</option>
-                  <option value="General Fitness">General Cardio & Stamina</option>
-                  <option value="Bodybuilding">Competitive Bodybuilding</option>
-                  <option value="Rehabilitation">Rehabilitation & Flexibility</option>
-                </select>
+                  <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b]">
+                    <SelectValue placeholder="Gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div>
-                <label className="font-medium text-slate-700 dark:text-zinc-300 mb-1 block">Medical Notes & Allergies</label>
-                <textarea
-                  rows={2}
-                  value={formData.medicalNotes}
-                  onChange={(e) => handleInputChange('medicalNotes', e.target.value)}
-                  placeholder="Mention joint issues, asthma, back pain, or surgery history..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-[#00df89]"
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Blood Group</label>
+                <Select
+                  value={formData.bloodGroup}
+                  onValueChange={(val) => handleInputChange('bloodGroup', val)}
+                >
+                  <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b]">
+                    <SelectValue placeholder="Blood Group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="O+">O+</SelectItem>
+                    <SelectItem value="A+">A+</SelectItem>
+                    <SelectItem value="B+">B+</SelectItem>
+                    <SelectItem value="AB+">AB+</SelectItem>
+                    <SelectItem value="O-">O-</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Locker No</label>
+                <input
+                  type="text"
+                  placeholder="L-12"
+                  value={formData.lockerNumber}
+                  onChange={(e) => handleInputChange('lockerNumber', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs outline-none"
                 />
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* STEP 5: Review & Submit */}
-          {step === 5 && (
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-3">
-                <div>
-                  <h3 className="font-medium text-base text-slate-900 dark:text-white">{formData.fullName || 'Member Name'}</h3>
-                  <p className="text-xs text-slate-500 font-normal">{formData.phone} • {formData.email || 'No email'}</p>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-500/20 text-xs font-normal">
-                  <div><span className="text-slate-400 block">One-Time Admission Fee:</span> <span className="font-medium text-slate-900 dark:text-white">৳ {formData.admissionFee}</span></div>
-                  <div><span className="text-slate-400 block">Monthly Subscription:</span> <span className="font-medium text-[#00df89]">৳ {formData.monthlySubscriptionFee} / mo</span></div>
-                  <div><span className="text-slate-400 block">Total Due Upfront:</span> <span className="font-medium text-emerald-600 dark:text-[#00df89]">৳ {totalUpfrontPayment}</span></div>
-                  <div><span className="text-slate-400 block">Assigned Trainer:</span> <span className="font-medium text-slate-800 dark:text-zinc-200">{formData.preferredTrainer}</span></div>
-                  <div><span className="text-slate-400 block">Locker Number:</span> <span className="font-medium text-slate-800 dark:text-zinc-200">{formData.lockerNumber}</span></div>
-                  <div><span className="text-slate-400 block">Start Date:</span> <span className="font-medium text-slate-800 dark:text-zinc-200">{formData.startDate}</span></div>
+        {/* Step 2: Body Stats & Goals */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Height (cm)</label>
+                <input
+                  type="number"
+                  value={formData.height}
+                  onChange={(e) => handleInputChange('height', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs outline-none"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Weight (kg)</label>
+                <input
+                  type="number"
+                  value={formData.weight}
+                  onChange={(e) => handleInputChange('weight', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs outline-none"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Calculated BMI</label>
+                <div className="px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[#00a86b] dark:text-[#00df89] font-medium text-xs text-center">
+                  {formData.bmi || '22.5'} BMI
                 </div>
               </div>
             </div>
-          )}
 
-        </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Fitness Goal</label>
+                <Select
+                  value={formData.fitnessGoal}
+                  onValueChange={(val) => handleInputChange('fitnessGoal', val)}
+                >
+                  <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b]">
+                    <SelectValue placeholder="Fitness Goal" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Muscle Gain & Bulking">Muscle Gain & Bulking</SelectItem>
+                    <SelectItem value="Fat Loss & Shred">Fat Loss & Shred</SelectItem>
+                    <SelectItem value="General Fitness & Cardio">General Fitness & Cardio</SelectItem>
+                    <SelectItem value="Strength & Powerlifting">Strength & Powerlifting</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-        {/* Footer Buttons */}
-        <div className="p-4 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50/50 dark:bg-zinc-900/40">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Assigned Trainer</label>
+                <Select
+                  value={formData.preferredTrainer}
+                  onValueChange={(val) => handleInputChange('preferredTrainer', val)}
+                >
+                  <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b]">
+                    <SelectValue placeholder="Select Trainer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="General Coach">General Coach</SelectItem>
+                    {trainers.map((t, idx) => (
+                      <SelectItem key={idx} value={t.name}>{t.name} ({t.specialization})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Medical Notes / Injuries</label>
+              <input
+                type="text"
+                placeholder="e.g. Lower back pain, none"
+                value={formData.medicalNotes}
+                onChange={(e) => handleInputChange('medicalNotes', e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs outline-none"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Package & Billing */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'মেম্বারশিপ প্যাকেজ' : 'Membership Package'}
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {packages.map((pkg) => (
+                  <div
+                    key={pkg._id}
+                    onClick={() => handleInputChange('packageId', pkg._id)}
+                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                      formData.packageId === pkg._id
+                        ? 'border-[#00df89] bg-emerald-500/5 dark:bg-[#00df89]/5'
+                        : 'border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-[#09090b]/80'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center font-medium text-xs text-slate-900 dark:text-white">
+                      <span>{pkg.name}</span>
+                      <span className="text-[#00a86b] dark:text-[#00df89]">৳ {pkg.price}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">{pkg.duration}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Admission Fee (৳)</label>
+                <input
+                  type="number"
+                  value={formData.admissionFee}
+                  onChange={(e) => handleInputChange('admissionFee', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs outline-none font-medium"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-700 dark:text-zinc-300">Subscription Fee (৳)</label>
+                <input
+                  type="number"
+                  value={formData.monthlySubscriptionFee}
+                  onChange={(e) => handleInputChange('monthlySubscriptionFee', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs outline-none font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Total Billing Receipt Preview */}
+            <div className="p-4 rounded-xl bg-slate-100 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800/80 flex items-center justify-between">
+              <div>
+                <div className="text-xs text-slate-500 dark:text-zinc-400">Total Upfront Fee Collected:</div>
+                <div className="text-xl font-medium text-slate-900 dark:text-white">৳ {totalUpfrontPayment.toLocaleString()}</div>
+              </div>
+              <Badge variant="default" className="bg-[#00df89] text-[#011812] text-xs">
+                Auto-Invoiced in DB
+              </Badge>
+            </div>
+          </div>
+        )}
+
+        {/* Footer Navigation */}
+        <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-zinc-800/80">
           {step > 1 ? (
-            <Button variant="outline" onClick={() => setStep(s => s - 1)} className="gap-1.5 text-xs font-medium">
-              <ChevronLeft className="w-4 h-4" /> Back
-            </Button>
-          ) : <div />}
-
-          {step < 5 ? (
-            <Button
-              onClick={() => {
-                if (step === 1 && !formData.fullName) return alert('Please enter member name');
-                if (step === 2 && !formData.phone) return alert('Please enter phone number');
-                setStep(s => s + 1);
-              }}
-              className="bg-[#00df89] text-[#011812] hover:bg-[#00c97b] font-medium text-xs gap-1.5"
-            >
-              Continue <ChevronRight className="w-4 h-4" />
+            <Button variant="outline" size="sm" onClick={() => setStep(step - 1)} className="gap-1.5 text-xs">
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Back</span>
             </Button>
           ) : (
-            <Button onClick={handleSubmit} className="bg-[#00df89] text-[#011812] hover:bg-[#00c97b] font-medium text-xs gap-1.5">
-              <CheckCircle2 className="w-4 h-4" /> Complete Registration & Issue Memo
+            <div />
+          )}
+
+          {step < 3 ? (
+            <Button size="sm" onClick={() => setStep(step + 1)} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium gap-1.5 text-xs">
+              <span>Next</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={isSubmitting}
+              onClick={handleSubmit}
+              className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium gap-1.5 text-xs"
+            >
+              {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 stroke-[2]" />}
+              <span>{isSubmitting ? 'Saving to DB...' : 'Complete & Save Member'}</span>
             </Button>
           )}
         </div>
 
-      </div>
+      </Card>
     </div>
   );
 }

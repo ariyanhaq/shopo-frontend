@@ -1,9 +1,9 @@
 /**
  * @file CompleteSetup.jsx
- * @description Onboarding Complete Setup confirmation page component.
+ * @description Onboarding Complete Setup unified with 2-step BusinessCategory.
  */
+import BusinessCategory from './BusinessCategory';
+
 export default function CompleteSetup() {
-  return (
-    <div>CompleteSetup Page</div>
-  );
+  return <BusinessCategory />;
 }

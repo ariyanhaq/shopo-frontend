@@ -1,20 +1,34 @@
 /**
  * @file ForgotPassword.jsx
- * @description Premium Forgot Password page component for Shopo.
+ * @description Forgot Password page integrated with Firebase sendPasswordResetEmail.
  */
 import { useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
-import { Store, Mail, ArrowRight, ArrowLeft, CheckCircle2, ShieldCheck, Globe } from 'lucide-react';
+import { useAuth, getAuthErrorMessage } from '@/context/AuthContext';
+import { Store, Mail, ArrowRight, ArrowLeft, CheckCircle2, ShieldCheck, Globe, AlertCircle, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function ForgotPassword() {
   const { lang, setLang } = useLanguage();
-  const [identifier, setIdentifier] = useState('');
+  const { resetPassword } = useAuth();
+  const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
+    setErrorMessage('');
+    setIsLoading(true);
+
+    try {
+      await resetPassword(email);
+      setSubmitted(true);
+    } catch (err) {
+      setErrorMessage(getAuthErrorMessage(err, lang));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -44,8 +58,8 @@ export default function ForgotPassword() {
           </h4>
           <p className="text-xs text-slate-300 leading-relaxed">
             {lang === 'bn'
-              ? 'আপনার নিবন্ধিত মোবাইল নম্বর বা ইমেইলে পাসওয়ার্ড রিসেট লিংক বা পিন পাঠানো হবে।'
-              : 'We will send an instant password reset link or OTP to your registered contact.'}
+              ? 'আপনার নিবন্ধিত ইমেইলে পাসওয়ার্ড রিসেট লিংক পাঠানো হবে।'
+              : 'We will send an instant password reset link to your registered email address.'}
           </p>
         </div>
 
@@ -79,7 +93,7 @@ export default function ForgotPassword() {
             <button
               type="button"
               onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}
-              className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 hover:bg-emerald-50 transition-all flex items-center gap-1"
+              className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 hover:bg-emerald-50 transition-all flex items-center gap-1 cursor-pointer"
             >
               <Globe className="w-3 h-3 text-emerald-600" />
               <span>{lang === 'en' ? 'English' : 'বাংলা'}</span>
@@ -92,10 +106,17 @@ export default function ForgotPassword() {
             </h2>
             <p className="text-sm text-slate-500">
               {lang === 'bn'
-                ? 'আপনার রেজিস্টার্ড ফোন নম্বর বা ইমেইল লিখুন।'
-                : 'Enter your registered phone number or email address below.'}
+                ? 'আপনার রেজিস্টার্ড ইমেইল এড্রেস লিখুন।'
+                : 'Enter your registered email address below.'}
             </p>
           </div>
+
+          {errorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-medium flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+              <div className="flex-1">{errorMessage}</div>
+            </div>
+          )}
 
           {submitted ? (
             <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl space-y-2">
@@ -105,8 +126,8 @@ export default function ForgotPassword() {
               </div>
               <p className="font-normal text-slate-600 leading-relaxed">
                 {lang === 'bn'
-                  ? 'আমরা আপনার তথ্যে পাসওয়ার্ড রিসেট লিংক পাঠিয়েছি। ইনবক্স বা এসএমএস চেক করুন।'
-                  : 'We have dispatched a password reset link to your contact address.'}
+                  ? 'আমরা আপনার ইমেইলে পাসওয়ার্ড রিসেট লিংক পাঠিয়েছি। অনুগ্রহ করে আপনার ইনবক্স চেক করুন।'
+                  : 'We have dispatched a password reset link to your email address. Please check your inbox.'}
               </p>
               <div className="pt-2">
                 <Link to="/login" className="text-xs font-bold text-emerald-700 underline">
@@ -118,16 +139,17 @@ export default function ForgotPassword() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">
-                  {lang === 'bn' ? 'মোবাইল নম্বর অথবা ইমেইল' : 'Mobile Number or Email'}
+                  {lang === 'bn' ? 'ইমেইল এড্রেস' : 'Email Address'}
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                   <input
-                    type="text"
+                    type="email"
                     required
-                    placeholder={lang === 'bn' ? 'যেমন: 01700-000000' : '01700-000000 or email@shop.com'}
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
+                    disabled={isLoading}
+                    placeholder={lang === 'bn' ? 'যেমন: user@example.com' : 'email@example.com'}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-medium transition-all"
                   />
                 </div>
@@ -135,10 +157,20 @@ export default function ForgotPassword() {
 
               <button
                 type="submit"
-                className="w-full py-3.5 px-4 bg-gradient-to-r from-[#022c22] via-[#033a2d] to-[#011e17] text-[#00df89] hover:bg-emerald-950 font-bold rounded-xl text-sm shadow-lg shadow-[#022c22]/20 flex items-center justify-center gap-2 transition-all"
+                disabled={isLoading}
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-[#022c22] via-[#033a2d] to-[#011e17] text-[#00df89] hover:bg-emerald-950 font-bold rounded-xl text-sm shadow-lg shadow-[#022c22]/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
               >
-                <span>{lang === 'bn' ? 'রিসেট লিংক পাঠান' : 'Send Reset Link'}</span>
-                <ArrowRight className="w-4 h-4 text-[#00df89]" />
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-[#00df89]" />
+                    <span>{lang === 'bn' ? 'পাঠানো হচ্ছে...' : 'Sending link...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{lang === 'bn' ? 'রিসেট লিংক পাঠান' : 'Send Reset Link'}</span>
+                    <ArrowRight className="w-4 h-4 text-[#00df89]" />
+                  </>
+                )}
               </button>
             </form>
           )}

@@ -6,6 +6,13 @@ import { useState } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { User, Store, Mail, Lock, Eye, EyeOff, ArrowRight, CheckCircle2, Globe, Building2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue
+} from '@/components/ui/select';
 
 export default function RegisterForm() {
   const { lang, setLang } = useLanguage();
@@ -69,14 +76,14 @@ export default function RegisterForm() {
         {/* Full Name */}
         <div className="space-y-1.5">
           <label className="text-xs font-bold text-slate-700">
-            {lang === 'bn' ? 'আপনার পূর্ণ নাম' : 'Full Name'}
+            {lang === 'bn' ? 'আপনার নাম' : 'Full Name'}
           </label>
           <div className="relative">
             <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
               required
-              placeholder={lang === 'bn' ? 'যেমন: কামাল হোসেন' : 'e.g. Kamal Hossain'}
+              placeholder={lang === 'bn' ? 'যেমন: আরিয়ান হক' : 'e.g. Ariyan Haque'}
               value={formData.fullName}
               onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
               className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium transition-all"
@@ -85,17 +92,17 @@ export default function RegisterForm() {
         </div>
 
         {/* Shop Name & Category Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700">
-              {lang === 'bn' ? 'দোকানের নাম' : 'Shop / Business Name'}
+              {lang === 'bn' ? 'দোকান / ব্যবসার নাম' : 'Shop / Business Name'}
             </label>
             <div className="relative">
               <Store className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
                 type="text"
                 required
-                placeholder={lang === 'bn' ? 'যেমন: রহমান স্টোর' : 'e.g. Rahman Store'}
+                placeholder={lang === 'bn' ? 'যেমন: হক জেনারেল স্টোর' : 'e.g. Haque Super Shop'}
                 value={formData.shopName}
                 onChange={(e) => setFormData({ ...formData, shopName: e.target.value })}
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium transition-all"
@@ -107,21 +114,22 @@ export default function RegisterForm() {
             <label className="text-xs font-bold text-slate-700">
               {lang === 'bn' ? 'ব্যবসার ক্যাটাগরি' : 'Business Category'}
             </label>
-            <div className="relative">
-              <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium transition-all appearance-none cursor-pointer"
-              >
-                <option value="grocery">{lang === 'bn' ? 'মুদি দোকান' : 'Grocery Shop'}</option>
-                <option value="clothing">{lang === 'bn' ? 'পোশাকের দোকান' : 'Clothing Store'}</option>
-                <option value="restaurant">{lang === 'bn' ? 'রেস্তোরাঁ ও ক্যাফে' : 'Restaurant & Cafe'}</option>
-                <option value="electronics">{lang === 'bn' ? 'ইলেকট্রনিক্স শপ' : 'Electronics Shop'}</option>
-                <option value="gym">{lang === 'bn' ? 'জিমে ও ফিটনেস' : 'Gym & Fitness'}</option>
-                <option value="stationery">{lang === 'bn' ? 'লাইব্রেরি ও স্টেশনারি' : 'Stationery Shop'}</option>
-              </select>
-            </div>
+            <Select
+              value={formData.category}
+              onValueChange={(val) => setFormData({ ...formData, category: val })}
+            >
+              <SelectTrigger className="w-full bg-slate-50 border-slate-200 text-slate-800 text-xs rounded-xl h-[42px]">
+                <SelectValue placeholder="Select Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="grocery">{lang === 'bn' ? 'মুদি দোকান' : 'Grocery Shop'}</SelectItem>
+                <SelectItem value="clothing">{lang === 'bn' ? 'পোশাকের দোকান' : 'Clothing Store'}</SelectItem>
+                <SelectItem value="restaurant">{lang === 'bn' ? 'রেস্তোরাঁ ও ক্যাফে' : 'Restaurant & Cafe'}</SelectItem>
+                <SelectItem value="electronics">{lang === 'bn' ? 'ইলেকট্রনিক্স শপ' : 'Electronics Shop'}</SelectItem>
+                <SelectItem value="gym">{lang === 'bn' ? 'জিমে ও ফিটনেস' : 'Gym & Fitness'}</SelectItem>
+                <SelectItem value="stationery">{lang === 'bn' ? 'লাইব্রেরি ও স্টেশনারি' : 'Stationery Shop'}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

@@ -14,4 +14,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://pftboyjzu9xpthebqljyvgu1.129.121.121.8.sslip.io',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 });

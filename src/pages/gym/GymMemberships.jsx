@@ -1,24 +1,43 @@
 /**
  * @file GymMemberships.jsx
- * @description Membership expiry tracking, renewals, upgrades, downgrades & freeze management.
+ * @description Membership expiry tracking, renewals & status management backed by MongoDB.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
-import { Card, CardTitle } from '@/components/ui/card';
+import api from '@/services/api';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Award, Clock, AlertTriangle, ShieldCheck, RefreshCw, Flame,
-  Search, CheckCircle2, Snowflake, ArrowUpRight
+  Award, Clock, AlertTriangle, ShieldCheck, RefreshCw,
+  Search, CheckCircle2, Snowflake, ArrowUpRight, Loader2
 } from 'lucide-react';
 
-import { INITIAL_GYM_MEMBERS } from '@/data/gymData';
+import RecordPaymentModal from '@/components/gym/RecordPaymentModal';
 
 export default function GymMemberships() {
   const { lang } = useLanguage();
 
-  const [members, setMembers] = useState(INITIAL_GYM_MEMBERS);
+  const [members, setMembers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [filterTab, setFilterTab] = useState('All');
+  const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
+  const [selectedMemberId, setSelectedMemberId] = useState('');
+
+  const fetchMembers = async () => {
+    try {
+      const res = await api.gym.members.list();
+      if (res.data) setMembers(res.data);
+    } catch (err) {
+      console.warn('Failed to load memberships:', err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMembers();
+  }, []);
 
   const expiringSoon = members.filter(m => m.status === 'Expiring Soon');
   const expired = members.filter(m => m.status === 'Expired');
@@ -30,23 +49,8 @@ export default function GymMemberships() {
     filterTab === 'Active' ? active : members;
 
   const handleRenew = (mId) => {
-    setMembers(members.map(m => {
-      if (m.id === mId) {
-        return { ...m, status: 'Active', remainingDays: 30, endDate: '2026-09-05' };
-      }
-      return m;
-    }));
-    alert('Membership renewed for 30 days!');
-  };
-
-  const handleFreeze = (mId) => {
-    setMembers(members.map(m => {
-      if (m.id === mId) {
-        return { ...m, status: 'Frozen' };
-      }
-      return m;
-    }));
-    alert('Membership frozen successfully!');
+    setSelectedMemberId(mId);
+    setIsRenewModalOpen(true);
   };
 
   return (
@@ -55,40 +59,40 @@ export default function GymMemberships() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white flex items-center gap-2.5">
             <Award className="w-6 h-6 text-[#00df89]" />
-            <span>Membership Management & Renewals</span>
+            <span>{lang === 'bn' ? 'মেম্বারশিপ ও পাস নবায়ন' : 'Membership Pass Management & Renewals'}</span>
           </h1>
-          <p className="text-xs text-slate-500 font-normal">
-            Track member expiry dates, freeze accounts, upgrade plans & process quick renewals.
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
+            {lang === 'bn' ? 'মেয়াদোত্তীর্ণ পাস নবায়ন ও স্থিতি ট্র্যাকিং' : 'Track member expiry dates, active subscriptions & process pass renewals'}
           </p>
         </div>
       </div>
 
       {/* KPI METRICS ROW */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+        <Card className="p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Expiring in 7 Days</span>
+            <span className="text-xs font-medium text-slate-500">Expiring Soon</span>
             <AlertTriangle className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="mt-2 text-2xl font-extrabold text-amber-600 dark:text-amber-400">{expiringSoon.length} Members</div>
+          <div className="mt-2 text-2xl font-medium text-amber-600 dark:text-amber-400">{expiringSoon.length} Members</div>
         </Card>
 
-        <Card className="p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+        <Card className="p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Expired Memberships</span>
+            <span className="text-xs font-medium text-slate-500">Expired Passes</span>
             <Clock className="w-4 h-4 text-rose-500" />
           </div>
-          <div className="mt-2 text-2xl font-extrabold text-rose-600 dark:text-rose-400">{expired.length} Members</div>
+          <div className="mt-2 text-2xl font-medium text-rose-600 dark:text-rose-400">{expired.length} Members</div>
         </Card>
 
-        <Card className="p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+        <Card className="p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500">Active Valid Passes</span>
             <ShieldCheck className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="mt-2 text-2xl font-extrabold text-emerald-600 dark:text-[#00df89]">{active.length} Members</div>
+          <div className="mt-2 text-2xl font-medium text-[#00a86b] dark:text-[#00df89]">{active.length} Members</div>
         </Card>
       </div>
 
@@ -98,10 +102,10 @@ export default function GymMemberships() {
           <button
             key={tab}
             onClick={() => setFilterTab(tab)}
-            className={`px-4 py-1.5 text-xs font-bold rounded-full transition-colors ${
+            className={`px-4 py-1.5 text-xs font-medium rounded-full transition-colors ${
               filterTab === tab
-                ? 'bg-[#00df89] text-[#011812]'
-                : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300'
+                ? 'bg-slate-900 text-white dark:bg-zinc-800'
+                : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400'
             }`}
           >
             {tab}
@@ -110,43 +114,60 @@ export default function GymMemberships() {
       </div>
 
       {/* MEMBERSHIPS LIST */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {displayedMembers.map((m) => (
-          <Card key={m.id} className="p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <img src={m.photo} alt={m.fullName} className="w-12 h-12 rounded-full object-cover border" />
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">{m.fullName}</h3>
-                  <p className="text-xs text-slate-500">{m.phone} • Locker: {m.lockerNumber}</p>
-                  <Badge variant={m.status === 'Active' ? 'default' : m.status === 'Expiring Soon' ? 'warning' : 'destructive'} className="mt-1 text-[10px]">
-                    {m.status}
-                  </Badge>
+      {isLoading ? (
+        <div className="p-12 text-center text-slate-400">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-[#00df89]" />
+          Loading memberships...
+        </div>
+      ) : displayedMembers.length === 0 ? (
+        <div className="p-12 text-center space-y-3 rounded-2xl bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800">
+          <Award className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto" />
+          <h3 className="text-sm font-medium text-slate-800 dark:text-zinc-200">No Memberships in this tab</h3>
+          <p className="text-xs text-slate-500 dark:text-zinc-400">No passes matching the selected filter.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {displayedMembers.map((m) => (
+            <Card key={m._id} className="p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] space-y-4">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-medium text-sm">
+                    {m.fullName.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-sm text-slate-900 dark:text-white">{m.fullName}</h3>
+                    <p className="text-xs text-slate-500">{m.phone} • Locker: {m.lockerNumber || 'N/A'}</p>
+                    <Badge variant={m.status === 'Active' ? 'default' : 'warning'} className="mt-1 text-[10px]">
+                      {m.status}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <span className="text-xs font-medium text-[#00a86b] dark:text-[#00df89] block">{m.membershipPackage}</span>
+                  <span className="text-[11px] text-slate-400">Expires: {m.endDate}</span>
                 </div>
               </div>
 
-              <div className="text-right">
-                <span className="text-xs font-extrabold text-emerald-600 dark:text-[#00df89] block">{m.membershipPackage}</span>
-                <span className="text-[11px] text-slate-400 font-mono">Expires: {m.endDate}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-zinc-800 text-xs">
-              <span className="text-slate-500">Remaining Days: <strong className="text-slate-900 dark:text-white">{m.remainingDays}d</strong></span>
-              
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => handleFreeze(m.id)} className="h-8 text-xs dark:bg-zinc-900 gap-1">
-                  <Snowflake className="w-3.5 h-3.5 text-blue-400" /> Freeze
-                </Button>
-
-                <Button size="sm" onClick={() => handleRenew(m.id)} className="h-8 text-xs bg-[#00df89] text-[#011812] hover:bg-[#00c97b] font-bold gap-1">
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-zinc-800 text-xs">
+                <span className="text-slate-500">Plan: <strong className="text-slate-900 dark:text-white">{m.membershipPackage}</strong></span>
+                
+                <Button size="sm" onClick={() => handleRenew(m._id)} className="h-8 text-xs bg-[#00df89] text-[#011812] hover:bg-[#00c97b] font-medium gap-1">
                   <RefreshCw className="w-3.5 h-3.5" /> Renew Pass
                 </Button>
               </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* RENEW PAYMENT MODAL */}
+      <RecordPaymentModal
+        isOpen={isRenewModalOpen}
+        onClose={() => setIsRenewModalOpen(false)}
+        onRecordPayment={fetchMembers}
+        defaultMemberId={selectedMemberId}
+      />
 
     </div>
   );

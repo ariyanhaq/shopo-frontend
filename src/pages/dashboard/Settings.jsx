@@ -1,60 +1,167 @@
 /**
  * @file Settings.jsx
- * @description Clean, modern Workspace Settings page with refined typography & shadcn UI components.
+ * @description Modern Workspace Settings page allowing full customization of Shop Name, Business Type, Location, and Theme.
  */
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useShop } from '@/context/ShopContext';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { SHOP_TYPES } from '@/data/shopTypesData';
+import api from '@/services/api';
+import toast from 'react-hot-toast';
+import { Card, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Sun, Moon, Check, Store, Save } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import {
+  Sun, Moon, Check, Store, Save, Loader2,
+  Phone, MapPin, Building2, Layers, Search, Globe, Languages,
+  ShoppingBag, PenTool, Shirt, Tv, Pill, Utensils, Coffee, Cake,
+  Cookie, Smartphone, Hammer, Armchair, BookOpen, Gift, Flower2,
+  Footprints, Gem, Dumbbell, Scissors, ScissorsLineDashed, Dog,
+  Gamepad2, Trophy, Laptop, Sprout, Car, Boxes
+} from 'lucide-react';
+
+const ICON_MAP = {
+  ShoppingBag, PenTool, Shirt, Tv, Pill, Utensils, Coffee, Cake,
+  Cookie, Smartphone, Hammer, Armchair, BookOpen, Gift, Flower2,
+  Footprints, Gem, Dumbbell, Scissors, ScissorsLineDashed, Dog,
+  Gamepad2, Trophy, Store, Laptop, Sprout, Car, Boxes
+};
 
 export default function Settings() {
-  const { activeShop, theme, setTheme } = useShop();
-  const [savedAlert, setSavedAlert] = useState(false);
+  const navigate = useNavigate();
+  const { lang, setLang } = useLanguage();
+  const { activeShop, theme, setTheme, selectShopType } = useShop();
+  const { mongoShop, setSessionShop, syncBackendProfile } = useAuth();
+  const [isSaving, setIsSaving] = useState(false);
+  const [typeSearch, setTypeSearch] = useState('');
 
   const [shopForm, setShopForm] = useState({
-    shopName: activeShop ? activeShop.name : 'My Shop',
-    tagline: activeShop ? activeShop.tagline : 'Retail & Services',
+    name: mongoShop?.name || activeShop?.name || 'My Shop',
+    business_type: mongoShop?.business_type || activeShop?.id || 'stationery',
+    phone: mongoShop?.phone || '',
+    address_line1: mongoShop?.address?.line1 || '',
+    city: mongoShop?.address?.city || 'Dhaka',
     currency: 'BDT (৳)',
-    language: 'English'
+    language: 'English',
   });
 
-  const handleSave = (e) => {
+  useEffect(() => {
+    if (mongoShop) {
+      setShopForm(prev => ({
+        ...prev,
+        name: mongoShop.name || prev.name,
+        business_type: mongoShop.business_type || prev.business_type,
+        phone: mongoShop.phone !== undefined ? mongoShop.phone : prev.phone,
+        address_line1: mongoShop.address?.line1 !== undefined ? mongoShop.address.line1 : prev.address_line1,
+        city: mongoShop.address?.city || prev.city,
+      }));
+    }
+  }, [mongoShop]);
+
+  const filteredTypes = useMemo(() => {
+    const q = typeSearch.toLowerCase().trim();
+    return SHOP_TYPES.filter(st => {
+      const sName = lang === 'bn' && st.nameBn ? st.nameBn : st.name;
+      return !q || sName.toLowerCase().includes(q) || st.id.includes(q) || st.category.includes(q);
+    });
+  }, [typeSearch, lang]);
+
+  const selectedTypeObj = useMemo(() => {
+    return SHOP_TYPES.find(st => st.id === shopForm.business_type) || SHOP_TYPES[0];
+  }, [shopForm.business_type]);
+
+  const SelectedIcon = ICON_MAP[selectedTypeObj?.iconName] || Store;
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    setSavedAlert(true);
-    setTimeout(() => setSavedAlert(false), 2000);
+    if (!shopForm.name.trim()) {
+      toast.error(lang === 'bn' ? 'দোকানের নাম আবশ্যক।' : 'Shop name is required.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const res = await api.shops.update({
+        name: shopForm.name.trim(),
+        business_type: shopForm.business_type,
+        phone: shopForm.phone.trim(),
+        address: {
+          line1: shopForm.address_line1.trim(),
+          city: shopForm.city.trim() || 'Dhaka',
+          country: 'Bangladesh',
+        },
+      });
+
+      const updatedShop = res.data || {
+        ...mongoShop,
+        name: shopForm.name.trim(),
+        business_type: shopForm.business_type,
+        phone: shopForm.phone.trim(),
+        address: {
+          line1: shopForm.address_line1.trim(),
+          city: shopForm.city.trim() || 'Dhaka',
+          country: 'Bangladesh',
+        },
+      };
+
+      // 1. Synchronously update session in AuthContext & ShopContext
+      setSessionShop(updatedShop);
+      selectShopType(shopForm.business_type);
+      localStorage.setItem('shopo_business_type', shopForm.business_type);
+
+      // 2. Sync backend profile
+      await syncBackendProfile();
+
+      const typeLabel = lang === 'bn' && selectedTypeObj?.nameBn ? selectedTypeObj.nameBn : selectedTypeObj?.name;
+      toast.success(
+        lang === 'bn'
+          ? `দোকানের তথ্য ও ক্যাটাগরি (${typeLabel}) সফলভাবে আপডেট হয়েছে!`
+          : `Shop details & business type (${typeLabel}) saved successfully!`,
+        { duration: 4000 }
+      );
+
+      // 3. If changed to gym or changed from gym, transition to tailored dashboard
+      if (shopForm.business_type === 'gym') {
+        navigate('/gym/dashboard', { replace: true });
+      } else if (mongoShop?.business_type === 'gym' && shopForm.business_type !== 'gym') {
+        navigate('/dashboard', { replace: true });
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to update shop settings in database.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-4xl space-y-6 font-sans pb-12">
       
       {/* Header Title */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-          Workspace Settings
+          {lang === 'bn' ? 'ওয়ার্কস্পেস সেটিংস' : 'Workspace Settings'}
         </h1>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-normal mt-0.5">
-          Manage your appearance, theme preferences, and shop details.
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
+          {lang === 'bn'
+            ? 'দোকানের নাম, ব্যবসার ধরন (ক্যাটাগরি), লোকেশন এবং থিম পরিবর্তন করুন।'
+            : 'Customize your shop profile, business type category, location, and theme appearance in MongoDB.'}
         </p>
       </div>
 
-      {savedAlert && (
-        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs sm:text-sm font-semibold flex items-center gap-2">
-          <Check className="w-4 h-4" />
-          <span>Settings saved successfully!</span>
-        </div>
-      )}
-
       {/* THEME PREFERENCES CARD */}
-      <Card className="p-6 space-y-5">
+      <Card className="p-6 space-y-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
         <div>
           <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
             <Sun className="w-4.5 h-4.5 text-amber-500" />
-            <span>Appearance & Theme Mode</span>
+            <span>{lang === 'bn' ? 'অ্যাপিয়ারেন্স ও থিম মোড' : 'Appearance & Theme Mode'}</span>
           </CardTitle>
           <CardDescription className="mt-1">
-            Choose your preferred color theme for Shopo interface across all devices.
+            {lang === 'bn'
+              ? 'আপনার ইন্টারফেসের জন্য পছন্দের কালার থিম নির্বাচন করুন।'
+              : 'Choose your preferred color theme for the Shopo interface.'}
           </CardDescription>
         </div>
 
@@ -67,7 +174,7 @@ export default function Settings() {
             className={`p-4 rounded-xl border cursor-pointer transition-all duration-150 flex items-center justify-between ${
               theme === 'light'
                 ? 'border-[#00df89] bg-emerald-50/30 dark:bg-emerald-950/20 shadow-xs'
-                : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900'
+                : 'border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-white dark:bg-[#09090b]'
             }`}
           >
             <div className="flex items-center gap-3">
@@ -75,8 +182,8 @@ export default function Settings() {
                 <Sun className="w-4.5 h-4.5" />
               </div>
               <div>
-                <div className="font-semibold text-sm text-slate-900 dark:text-white">Light Mode</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 font-normal">Clean, crisp light background</div>
+                <div className="font-medium text-sm text-slate-900 dark:text-white">Light Mode</div>
+                <div className="text-xs text-slate-500 dark:text-zinc-400 font-normal">Clean, crisp light background</div>
               </div>
             </div>
 
@@ -92,17 +199,17 @@ export default function Settings() {
             onClick={() => setTheme('dark')}
             className={`p-4 rounded-xl border cursor-pointer transition-all duration-150 flex items-center justify-between ${
               theme === 'dark'
-                ? 'border-[#00df89] bg-slate-900 text-white shadow-xs'
-                : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900'
+                ? 'border-[#00df89] bg-zinc-900 text-white shadow-xs'
+                : 'border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-white dark:bg-[#09090b]'
             }`}
           >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-slate-800 text-slate-200 flex items-center justify-center font-medium">
+              <div className="w-9 h-9 rounded-lg bg-zinc-800 text-zinc-200 flex items-center justify-center font-medium">
                 <Moon className="w-4.5 h-4.5" />
               </div>
               <div>
-                <div className="font-semibold text-sm text-slate-900 dark:text-white">Dark Mode</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 font-normal">Deep slate, high-contrast surface</div>
+                <div className="font-medium text-sm text-slate-900 dark:text-white">Dark Mode</div>
+                <div className="text-xs text-slate-500 dark:text-zinc-400 font-normal">Deep slate, high-contrast surface</div>
               </div>
             </div>
 
@@ -116,53 +223,258 @@ export default function Settings() {
         </div>
       </Card>
 
-      {/* SHOP DETAILS FORM */}
+      {/* LANGUAGE PREFERENCES CARD */}
+      <Card className="p-6 space-y-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+        <div>
+          <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+            <Globe className="w-4.5 h-4.5 text-[#00df89]" />
+            <span>{lang === 'bn' ? 'ভাষা ও অনুবাদ সেটিংস' : 'Language & Localization'}</span>
+          </CardTitle>
+          <CardDescription className="mt-1">
+            {lang === 'bn'
+              ? 'অ্যাপ্লিকেশনের ভাষা পরিবর্তন করুন। নির্বাচিত ভাষা ডেটাবেজে সংরক্ষিত থাকবে।'
+              : 'Choose your default workspace language. This setting is saved directly to your database profile.'}
+          </CardDescription>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* English Option */}
+          <div
+            onClick={() => setLang('en')}
+            className={`p-4 rounded-xl border cursor-pointer transition-all duration-150 flex items-center justify-between ${
+              lang === 'en'
+                ? 'border-[#00df89] bg-emerald-50/30 dark:bg-emerald-950/20 shadow-xs'
+                : 'border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-white dark:bg-[#09090b]'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center font-bold text-xs">
+                EN
+              </div>
+              <div>
+                <div className="font-medium text-sm text-slate-900 dark:text-white">English (Default)</div>
+                <div className="text-xs text-slate-500 dark:text-zinc-400 font-normal">Standard international layout</div>
+              </div>
+            </div>
+
+            {lang === 'en' && (
+              <div className="w-5 h-5 rounded-full bg-[#00df89] text-[#011812] flex items-center justify-center font-bold">
+                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+            )}
+          </div>
+
+          {/* Bangla Option */}
+          <div
+            onClick={() => setLang('bn')}
+            className={`p-4 rounded-xl border cursor-pointer transition-all duration-150 flex items-center justify-between ${
+              lang === 'bn'
+                ? 'border-[#00df89] bg-emerald-50/30 dark:bg-emerald-950/20 shadow-xs'
+                : 'border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-white dark:bg-[#09090b]'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-bold text-xs">
+                বাং
+              </div>
+              <div>
+                <div className="font-medium text-sm text-slate-900 dark:text-white">বাংলা (Bangla)</div>
+                <div className="text-xs text-slate-500 dark:text-zinc-400 font-normal">সম্পূর্ণ বাংলা ইন্টারফেস ও মেমো</div>
+              </div>
+            </div>
+
+            {lang === 'bn' && (
+              <div className="w-5 h-5 rounded-full bg-[#00df89] text-[#011812] flex items-center justify-center font-bold">
+                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {/* SHOP DETAILS & BUSINESS TYPE FORM */}
       <form onSubmit={handleSave}>
-        <Card className="p-6 space-y-5">
+        <Card className="p-6 space-y-6 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          
           <div>
             <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
               <Store className="w-4.5 h-4.5 text-[#00a86b] dark:text-[#00df89]" />
-              <span>Shop Profile Information</span>
+              <span>{lang === 'bn' ? 'দোকান ও ব্যবসার প্রোফাইল' : 'Shop Profile & Business Type'}</span>
             </CardTitle>
             <CardDescription className="mt-1">
-              Update shop display details and operational currency.
+              {lang === 'bn'
+                ? 'ব্যবসার ধরন পরিবর্তন করলে স্বয়ংক্রিয়ভাবে সেই ধরণের উপযোগী ড্যাশবোর্ড ও ফিচার লোড হবে।'
+                : 'Changing the business type will automatically adapt your dashboard, POS, and feature suite.'}
             </CardDescription>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Shop Name
-              </label>
-              <Input
+          {/* Current Active Type Badge */}
+          <div className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200/80 dark:border-zinc-800/80">
+            <div className="w-10 h-10 rounded-xl bg-[#00df89] text-[#011812] flex items-center justify-center font-bold shrink-0">
+              <SelectedIcon className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">
+                  {lang === 'bn' ? 'বর্তমান ধরন' : 'Active Type'}
+                </span>
+                <Badge variant="secondary" className="text-[10px] capitalize">
+                  {selectedTypeObj?.category || 'Retail'}
+                </Badge>
+              </div>
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                {lang === 'bn' && selectedTypeObj?.nameBn ? selectedTypeObj.nameBn : selectedTypeObj?.name}
+              </h4>
+            </div>
+          </div>
+
+          {/* Business Type Selector Grid */}
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-slate-700 dark:text-zinc-300">
+              {lang === 'bn' ? 'ব্যবসার ধরন পরিবর্তন করুন (ক্লিক করে নির্বাচন করুন)' : 'Select New Business Type'}
+            </label>
+
+            {/* Quick search inside types */}
+            <div className="relative mb-2">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
                 type="text"
-                value={shopForm.shopName}
-                onChange={(e) => setShopForm({ ...shopForm, shopName: e.target.value })}
+                placeholder={lang === 'bn' ? 'ধরণ খুঁজুন (যেমন: মুদি, জিম, রেস্তোরাঁ, ফার্মেসি...)' : 'Search type (e.g. Grocery, Gym, Cafe, Pharmacy...)'}
+                value={typeSearch}
+                onChange={(e) => setTypeSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 rounded-lg text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#00df89]"
               />
             </div>
 
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-56 overflow-y-auto p-1 border border-slate-200 dark:border-zinc-800 rounded-xl bg-slate-50/50 dark:bg-[#09090b]/50">
+              {filteredTypes.map((st) => {
+                const isSelected = shopForm.business_type === st.id;
+                const IconComponent = ICON_MAP[st.iconName] || Store;
+                const stName = lang === 'bn' && st.nameBn ? st.nameBn : st.name;
+
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setShopForm(prev => ({ ...prev, business_type: st.id }))}
+                    className={`p-2.5 rounded-lg border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-[#00df89] bg-emerald-500/10 dark:bg-emerald-950/30 text-slate-900 dark:text-white font-medium shadow-xs'
+                        : 'border-slate-200/80 dark:border-zinc-800/80 hover:border-slate-300 dark:hover:border-zinc-700 bg-white dark:bg-[#121215] text-slate-700 dark:text-zinc-300'
+                    }`}
+                  >
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? 'bg-[#00df89] text-[#011812]' : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400'}`}>
+                      <IconComponent className="w-3.5 h-3.5 stroke-[2]" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs truncate font-medium">{stName}</div>
+                    </div>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-[#00df89] shrink-0 stroke-[3]" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Form Inputs Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Shop Tagline / Industry
+              <label className="block text-xs font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'দোকানের নাম *' : 'Business / Shop Name *'}
+              </label>
+              <div className="relative">
+                <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  type="text"
+                  required
+                  value={shopForm.name}
+                  onChange={(e) => setShopForm({ ...shopForm, name: e.target.value })}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'মোবাইল নম্বর' : 'Phone Number'}
+              </label>
+              <div className="relative">
+                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  type="tel"
+                  placeholder="01700000000"
+                  value={shopForm.phone}
+                  onChange={(e) => setShopForm({ ...shopForm, phone: e.target.value })}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'শহর / জেলা' : 'City / District'}
+              </label>
+              <div className="relative">
+                <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  type="text"
+                  placeholder="Dhaka, Bogura, Chittagong..."
+                  value={shopForm.city}
+                  onChange={(e) => setShopForm({ ...shopForm, city: e.target.value })}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'রাস্তা / এরিয়া / ঠিকানা' : 'Address / Area / Street'}
+              </label>
+              <div className="relative">
+                <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  type="text"
+                  placeholder="e.g. House #12, Road #4, Dhanmondi"
+                  value={shopForm.address_line1}
+                  onChange={(e) => setShopForm({ ...shopForm, address_line1: e.target.value })}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="block text-xs font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'মুদ্রা (Currency)' : 'Currency'}
               </label>
               <Input
                 type="text"
-                value={shopForm.tagline}
-                onChange={(e) => setShopForm({ ...shopForm, tagline: e.target.value })}
+                disabled
+                value={shopForm.currency}
               />
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end">
+          <div className="pt-4 flex justify-end border-t border-slate-100 dark:border-zinc-800">
             <Button
               type="submit"
+              disabled={isSaving}
               variant="default"
-              className="px-5 bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold"
+              className="px-6 bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-sm cursor-pointer shadow-sm"
             >
-              <Save className="w-4 h-4" />
-              <span>Save Changes</span>
+              {isSaving ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{lang === 'bn' ? 'সেভ হচ্ছে...' : 'Saving Changes...'}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Save className="w-4 h-4" />
+                  <span>{lang === 'bn' ? 'সেটিংস আপডেট করুন' : 'Update Settings'}</span>
+                </div>
+              )}
             </Button>
           </div>
+
         </Card>
       </form>
 

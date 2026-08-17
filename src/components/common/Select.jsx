@@ -1,11 +1,16 @@
 /**
  * @file Select.jsx
- * @description Reusable Select dropdown component.
+ * @description Reusable Smooth Shadcn Select suite.
  */
-export default function Select({ children, ...props }) {
-  return (
-    <select className="w-full px-3 py-2 border rounded-md" {...props}>
-      {children}
-    </select>
-  );
-}
+export {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+  SelectGroup,
+  SelectLabel,
+  SelectSeparator
+} from '@/components/ui/select';
+
+export { default } from '@/components/ui/select';
