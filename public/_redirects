@@ -1,1 +1,5 @@
-/*    /index.html   200
+# Netlify API Reverse Proxy (avoids CORS and mixed-content issues)
+/api/*  http://pftboyjzu9xpthebqljyvgu1.129.121.121.8.sslip.io/api/:splat  200!
+
+# SPA React Router Fallback
+/*      /index.html                                                         200

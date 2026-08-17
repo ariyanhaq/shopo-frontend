@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Proxy /api requests directly to the Coolify VPS Backend
+[[redirects]]
+  from = "/api/*"
+  to = "http://pftboyjzu9xpthebqljyvgu1.129.121.121.8.sslip.io/api/:splat"
+  status = 200
+  force = true
+
+# Single Page Application (SPA) routing fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
