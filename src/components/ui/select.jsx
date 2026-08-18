@@ -229,6 +229,8 @@ export function SelectItem({
   value,
   children,
   disabled = false,
+  onDelete,
+  deleteTitle = 'Delete option',
   className,
   ...props
 }) {
@@ -250,7 +252,7 @@ export function SelectItem({
         }
       }}
       className={cn(
-        "relative flex w-full items-center justify-between px-2.5 py-2 rounded-xl text-left font-medium transition-all duration-100 cursor-pointer select-none",
+        "group relative flex w-full items-center justify-between px-2.5 py-2 rounded-xl text-left font-medium transition-all duration-100 cursor-pointer select-none",
         isSelected
           ? "bg-emerald-500/10 dark:bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] font-bold"
           : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800/80 hover:text-slate-900 dark:hover:text-white",
@@ -259,10 +261,26 @@ export function SelectItem({
       )}
       {...props}
     >
-      <span className="truncate">{children}</span>
-      {isSelected && (
-        <Check className="w-3.5 h-3.5 text-[#00a86b] dark:text-[#00df89] shrink-0 stroke-[2.5]" />
-      )}
+      <span className="truncate flex-1 pr-2">{children}</span>
+      <div className="flex items-center gap-1 shrink-0">
+        {onDelete && (
+          <button
+            type="button"
+            title={deleteTitle}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onDelete(value, itemText);
+            }}
+            className="opacity-0 group-hover:opacity-100 hover:opacity-100 p-1 rounded-md hover:bg-rose-500/15 text-slate-400 hover:text-rose-500 transition-all cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {isSelected && (
+          <Check className="w-3.5 h-3.5 text-[#00a86b] dark:text-[#00df89] shrink-0 stroke-[2.5]" />
+        )}
+      </div>
     </div>
   );
 }

@@ -270,6 +270,23 @@ export default function Purchases() {
     }
   };
 
+  // Handle Inline Supplier Deletion
+  const handleDeleteSupplier = async (suppId, suppName) => {
+    try {
+      await api.suppliers.delete(suppId);
+      setSuppliers((prev) => prev.filter((s) => s._id !== suppId));
+      if (purchaseForm.supplier_id === suppId) {
+        setPurchaseForm((prev) => ({ ...prev, supplier_id: '', supplier_name: 'General / Walk-in Supplier' }));
+      }
+      if (editForm.supplier_id === suppId) {
+        setEditForm((prev) => ({ ...prev, supplier_id: '', supplier_name: 'General / Walk-in Supplier' }));
+      }
+      toast.success(lang === 'bn' ? `সাপ্লায়ার '${suppName}' মুছে ফেলা হয়েছে!` : `Supplier '${suppName}' deleted!`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete supplier');
+    }
+  };
+
   // Open New Purchase Modal
   const handleOpenNewPurchase = () => {
     setPurchaseForm({
@@ -761,7 +778,12 @@ export default function Purchases() {
                     <SelectContent>
                       <SelectItem value="__walk_in__">General / Walk-in Supplier</SelectItem>
                       {suppliers.map((s) => (
-                        <SelectItem key={s._id} value={s._id}>
+                        <SelectItem
+                          key={s._id}
+                          value={s._id}
+                          onDelete={() => handleDeleteSupplier(s._id, s.name)}
+                          deleteTitle={lang === 'bn' ? 'সাপ্লায়ার মুছুন' : 'Delete supplier'}
+                        >
                           {s.name} {s.company_name ? `(${s.company_name})` : ''}
                         </SelectItem>
                       ))}
@@ -1041,7 +1063,12 @@ export default function Purchases() {
                   <SelectContent>
                     <SelectItem value="__walk_in__">General / Walk-in Supplier</SelectItem>
                     {suppliers.map((s) => (
-                      <SelectItem key={s._id} value={s._id}>
+                      <SelectItem
+                        key={s._id}
+                        value={s._id}
+                        onDelete={() => handleDeleteSupplier(s._id, s.name)}
+                        deleteTitle={lang === 'bn' ? 'সাপ্লায়ার মুছুন' : 'Delete supplier'}
+                      >
                         {s.name} {s.company_name ? `(${s.company_name})` : ''}
                       </SelectItem>
                     ))}

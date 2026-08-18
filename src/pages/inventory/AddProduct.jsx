@@ -126,6 +126,32 @@ export default function AddProduct() {
     }
   };
 
+  const handleDeleteCategory = async (catId, catName) => {
+    try {
+      await api.categories.delete(catId);
+      setCategories((prev) => prev.filter((c) => c._id !== catId));
+      if (form.category_id === catId) {
+        setForm((prev) => ({ ...prev, category_id: '__general__' }));
+      }
+      toast.success(lang === 'bn' ? `ক্যাটাগরি '${catName}' মুছে ফেলা হয়েছে!` : `Category '${catName}' deleted!`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete category');
+    }
+  };
+
+  const handleDeleteSupplier = async (suppId, suppName) => {
+    try {
+      await api.suppliers.delete(suppId);
+      setSuppliers((prev) => prev.filter((s) => s._id !== suppId));
+      if (form.supplier_id === suppId) {
+        setForm((prev) => ({ ...prev, supplier_id: '' }));
+      }
+      toast.success(lang === 'bn' ? `সাপ্লায়ার '${suppName}' মুছে ফেলা হয়েছে!` : `Supplier '${suppName}' deleted!`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete supplier');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -290,7 +316,14 @@ export default function AddProduct() {
                 <SelectContent>
                   <SelectItem value="__general__">General</SelectItem>
                   {categories.filter(c => c.name?.toLowerCase() !== 'general').map((c) => (
-                    <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>
+                    <SelectItem
+                      key={c._id}
+                      value={c._id}
+                      onDelete={() => handleDeleteCategory(c._id, c.name)}
+                      deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
+                    >
+                      {c.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -373,7 +406,12 @@ export default function AddProduct() {
                 <SelectContent>
                   <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'}</SelectItem>
                   {suppliers.map((s) => (
-                    <SelectItem key={s._id} value={s._id}>
+                    <SelectItem
+                      key={s._id}
+                      value={s._id}
+                      onDelete={() => handleDeleteSupplier(s._id, s.name)}
+                      deleteTitle={lang === 'bn' ? 'সাপ্লায়ার মুছুন' : 'Delete supplier'}
+                    >
                       {s.name} {s.company_name ? `(${s.company_name})` : ''}
                     </SelectItem>
                   ))}

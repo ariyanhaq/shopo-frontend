@@ -298,6 +298,40 @@ export default function Products() {
     }
   };
 
+  // Handle Inline Category Deletion
+  const handleDeleteCategory = async (catId, catName) => {
+    try {
+      await api.categories.delete(catId);
+      setCategories((prev) => prev.filter((c) => c._id !== catId));
+      if (newProduct.category_id === catId) {
+        setNewProduct((prev) => ({ ...prev, category_id: '__general__' }));
+      }
+      if (editForm.category_id === catId) {
+        setEditForm((prev) => ({ ...prev, category_id: '__general__' }));
+      }
+      toast.success(lang === 'bn' ? `ক্যাটাগরি '${catName}' মুছে ফেলা হয়েছে!` : `Category '${catName}' deleted!`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete category.');
+    }
+  };
+
+  // Handle Inline Supplier Deletion
+  const handleDeleteSupplier = async (suppId, suppName) => {
+    try {
+      await api.suppliers.delete(suppId);
+      setSuppliers((prev) => prev.filter((s) => s._id !== suppId));
+      if (newProduct.supplier_id === suppId) {
+        setNewProduct((prev) => ({ ...prev, supplier_id: '' }));
+      }
+      if (restockForm.supplier_id === suppId) {
+        setRestockForm((prev) => ({ ...prev, supplier_id: '' }));
+      }
+      toast.success(lang === 'bn' ? `সাপ্লায়ার '${suppName}' মুছে ফেলা হয়েছে!` : `Supplier '${suppName}' deleted!`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete supplier.');
+    }
+  };
+
   // Handle Add Product Submit
   const handleAddProduct = async (e) => {
     e.preventDefault();
@@ -1024,7 +1058,14 @@ export default function Products() {
                     <SelectContent>
                       <SelectItem value="__general__">General</SelectItem>
                       {categories.filter(c => c.name?.toLowerCase() !== 'general').map((c) => (
-                        <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>
+                        <SelectItem
+                          key={c._id}
+                          value={c._id}
+                          onDelete={() => handleDeleteCategory(c._id, c.name)}
+                          deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
+                        >
+                          {c.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1107,7 +1148,12 @@ export default function Products() {
                     <SelectContent>
                       <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'}</SelectItem>
                       {suppliers.map((s) => (
-                        <SelectItem key={s._id} value={s._id}>
+                        <SelectItem
+                          key={s._id}
+                          value={s._id}
+                          onDelete={() => handleDeleteSupplier(s._id, s.name)}
+                          deleteTitle={lang === 'bn' ? 'সাপ্লায়ার মুছুন' : 'Delete supplier'}
+                        >
                           {s.name} {s.company_name ? `(${s.company_name})` : ''}
                         </SelectItem>
                       ))}
@@ -1332,7 +1378,12 @@ export default function Products() {
                     <SelectContent>
                       <SelectItem value="__walk_in__">{lang === 'bn' ? 'সাধারণ সাপ্লায়ার' : 'General / Walk-in Supplier'}</SelectItem>
                       {suppliers.map((s) => (
-                        <SelectItem key={s._id} value={s._id}>
+                        <SelectItem
+                          key={s._id}
+                          value={s._id}
+                          onDelete={() => handleDeleteSupplier(s._id, s.name)}
+                          deleteTitle={lang === 'bn' ? 'সাপ্লায়ার মুছুন' : 'Delete supplier'}
+                        >
                           {s.name} {s.company_name ? `(${s.company_name})` : ''}
                         </SelectItem>
                       ))}
@@ -1589,7 +1640,14 @@ export default function Products() {
                     <SelectContent>
                       <SelectItem value="__general__">General</SelectItem>
                       {categories.filter(c => c.name?.toLowerCase() !== 'general').map((c) => (
-                        <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>
+                        <SelectItem
+                          key={c._id}
+                          value={c._id}
+                          onDelete={() => handleDeleteCategory(c._id, c.name)}
+                          deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
+                        >
+                          {c.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
