@@ -37,7 +37,9 @@ export default function Dashboard() {
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const isGym = (mongoShop?.business_type || activeShop?.id) === 'gym';
+  const currentBusinessType = (mongoShop?.business_type || activeShop?.id || '').toLowerCase();
+  const isGrocery = currentBusinessType === 'grocery';
+  const isGym = currentBusinessType === 'gym';
 
   const fetchMetrics = async (showRefreshSpinner = false) => {
     if (showRefreshSpinner) setIsRefreshing(true);
@@ -574,11 +576,11 @@ export default function Dashboard() {
       {/* ---------------------------------------------------- */}
       {activeShop && activeShop.widgets && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-slate-200/80 dark:border-zinc-800/80">
-          {activeShop.widgets.includes('expiring_products') && <ExpiringProductsWidget />}
-          {activeShop.widgets.includes('gym_members_queue') && <GymAttendanceWidget />}
-          {activeShop.widgets.includes('kitchen_live_queue') && <KitchenQueueWidget />}
-          {activeShop.widgets.includes('gold_rate_ticker') && <GoldRateWidget />}
-          {activeShop.widgets.includes('clothing_variants') && <ClothingVariantsWidget />}
+          {isGrocery && activeShop.widgets.includes('expiring_products') && <ExpiringProductsWidget />}
+          {isGym && activeShop.widgets.includes('gym_members_queue') && <GymAttendanceWidget />}
+          {currentBusinessType === 'restaurant' && activeShop.widgets.includes('kitchen_live_queue') && <KitchenQueueWidget />}
+          {currentBusinessType === 'jewelry' && activeShop.widgets.includes('gold_rate_ticker') && <GoldRateWidget />}
+          {currentBusinessType === 'clothing' && activeShop.widgets.includes('clothing_variants') && <ClothingVariantsWidget />}
         </div>
       )}
 
