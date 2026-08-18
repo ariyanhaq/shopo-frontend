@@ -38,8 +38,9 @@ export default function NewSale() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [discountType, setDiscountType] = useState('flat'); // 'flat' or 'percentage'
   const [discountValue, setDiscountValue] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('Cash'); // 'Cash', 'bKash', 'Nagad', 'Card'
+  const [paymentMethod, setPaymentMethod] = useState('Cash'); // 'Cash', 'bKash', 'Nagad', 'Card', 'Due'
   const [cashGiven, setCashGiven] = useState('');
+  const [duePaidAmount, setDuePaidAmount] = useState(''); // Amount paid when payment method is Due / Partial
 
   // Post-sale Receipt Modal
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
@@ -103,7 +104,16 @@ export default function NewSale() {
     setCustomerName(cust.name || '');
     setShowCustomerDropdown(false);
     setCustomerSuggestions([]);
-    toast.success(lang === 'bn' ? `'${cust.name}' গ্রাহক সিলেক্ট করা হয়েছে` : `Selected: ${cust.name}`);
+    const previousDueAmount = cust.total_due ?? cust.totalDue ?? 0;
+    if (previousDueAmount > 0) {
+      toast.success(
+        lang === 'bn'
+          ? `'${cust.name}' সিলেক্ট করা হয়েছে (পূর্বের বকেয়া: ৳${previousDueAmount.toLocaleString()})`
+          : `Selected: ${cust.name} (Previous Due: ৳${previousDueAmount.toLocaleString()})`
+      );
+    } else {
+      toast.success(lang === 'bn' ? `'${cust.name}' সিলেক্ট করা হয়েছে` : `Selected: ${cust.name}`);
+    }
   };
 
   const handleClearCustomer = () => {
@@ -205,7 +215,7 @@ export default function NewSale() {
           return item;
         })
         .filter(Boolean)
-      );
+    );
   };
 
   // Remove Item
@@ -228,9 +238,60 @@ export default function NewSale() {
 
   const totalPayable = Math.max(0, subtotal - discountAmount);
 
-  const cashGivenNum = parseFloat(cashGiven) || 0;
-  const changeToReturn = Math.max(0, cashGivenNum - totalPayable);
-  const remainingDue = Math.max(0, totalPayable - cashGivenNum);
+  // Customer Previous Due Calculation
+  const previousCustomerDue = useMemo(() => {
+    if (!matchedCustomer) return 0;
+    return Number(matchedCustomer.total_due ?? matchedCustomer.totalDue ?? 0);
+  }, [matchedCustomer]);
+
+  // Dynamic Payment & Due Breakdown Calculations
+  const { paidNow, currentBillDue, changeToReturn, totalOutstandingDue } = useMemo(() => {
+    let paid = 0;
+    let change = 0;
+    let billDue = 0;
+
+    if (paymentMethod === 'Due') {
+      const enteredPaid = parseFloat(duePaidAmount);
+      if (isNaN(enteredPaid) || enteredPaid <= 0) {
+        paid = 0;
+      } else {
+        paid = Math.min(enteredPaid, totalPayable);
+      }
+      billDue = Math.max(0, totalPayable - paid);
+      change = 0;
+    } else if (paymentMethod === 'Cash') {
+      const cashGivenNum = parseFloat(cashGiven) || 0;
+      if (cashGivenNum > 0) {
+        if (cashGivenNum >= totalPayable) {
+          paid = totalPayable;
+          change = cashGivenNum - totalPayable;
+          billDue = 0;
+        } else {
+          paid = cashGivenNum;
+          change = 0;
+          billDue = totalPayable - cashGivenNum;
+        }
+      } else {
+        paid = totalPayable;
+        change = 0;
+        billDue = 0;
+      }
+    } else {
+      // bKash, Nagad, Card
+      paid = totalPayable;
+      change = 0;
+      billDue = 0;
+    }
+
+    const totalDue = previousCustomerDue + billDue;
+
+    return {
+      paidNow: paid,
+      currentBillDue: billDue,
+      changeToReturn: change,
+      totalOutstandingDue: totalDue,
+    };
+  }, [paymentMethod, duePaidAmount, cashGiven, totalPayable, previousCustomerDue]);
 
   // Complete Sale and Save to MongoDB
   const handleCompleteSale = async () => {
@@ -239,11 +300,24 @@ export default function NewSale() {
       return;
     }
 
+    // If there is any due amount, encourage or require customer identity
+    if ((paymentMethod === 'Due' || currentBillDue > 0) && !customerName.trim() && !customerPhone.trim() && !matchedCustomer) {
+      toast.error(
+        lang === 'bn'
+          ? 'বকেয়া হিসাব রাখার জন্য কাস্টমারের ফোন বা নাম প্রদান করুন।'
+          : 'Please provide customer phone or name to record this due balance.'
+      );
+      return;
+    }
+
     setIsProcessingSale(true);
     let generatedInvoice = `INV-${Date.now().toString().slice(-6)}`;
+    let serverPreviousDue = previousCustomerDue;
+    let serverTotalDue = totalOutstandingDue;
 
     try {
       const payload = {
+        customer_id: matchedCustomer?._id || undefined,
         items: cart.map((item) => ({
           product_id: item.id,
           quantity: item.qty,
@@ -251,8 +325,8 @@ export default function NewSale() {
         discount_type: discountType,
         discount_value: parseFloat(discountValue) || 0,
         discount: discountAmount,
-        paid_amount: totalPayable,
-        tendered_amount: paymentMethod === 'Cash' ? (cashGivenNum || totalPayable) : totalPayable,
+        paid_amount: paidNow,
+        tendered_amount: paymentMethod === 'Cash' ? (parseFloat(cashGiven) || paidNow) : paidNow,
         change_amount: paymentMethod === 'Cash' ? changeToReturn : 0,
         customer_name: customerName.trim() || undefined,
         customer_phone: customerPhone.trim() || undefined,
@@ -264,7 +338,18 @@ export default function NewSale() {
       if (res.data?.invoice_number) {
         generatedInvoice = res.data.invoice_number;
       }
-      toast.success(lang === 'bn' ? `বিক্রি সম্পন্ন! ইনভয়েস: ${generatedInvoice}` : `Sale completed! Invoice: ${generatedInvoice}`);
+      if (res.data?.previous_due !== undefined) {
+        serverPreviousDue = res.data.previous_due;
+      }
+      if (res.data?.total_customer_due !== undefined) {
+        serverTotalDue = res.data.total_customer_due;
+      }
+
+      toast.success(
+        lang === 'bn'
+          ? `বিক্রি সম্পন্ন! ইনভয়েস: ${generatedInvoice}`
+          : `Sale completed! Invoice: ${generatedInvoice}`
+      );
       fetchCatalog(); // Refresh live stock counts
     } catch (err) {
       toast.error(err.message || 'Failed to save sale in database.');
@@ -277,16 +362,20 @@ export default function NewSale() {
     const orderData = {
       id: generatedInvoice,
       date: new Date().toLocaleString(),
-      customer: customerName.trim() || (lang === 'bn' ? 'সাধারণ কাস্টমার' : 'Walk-in Customer'),
-      phone: customerPhone.trim() || 'N/A',
+      customer: customerName.trim() || (matchedCustomer?.name || (lang === 'bn' ? 'সাধারণ কাস্টমার' : 'Walk-in Customer')),
+      phone: customerPhone.trim() || (matchedCustomer?.phone || 'N/A'),
       items: [...cart],
       subtotal,
       discountType,
       discountValue: parseFloat(discountValue) || 0,
       discount: discountAmount,
       total: totalPayable,
+      paidAmount: paidNow,
+      currentBillDue: currentBillDue,
+      previousDue: serverPreviousDue,
+      totalDue: serverTotalDue,
       method: paymentMethod,
-      cashReceived: paymentMethod === 'Cash' ? (cashGivenNum || totalPayable) : totalPayable,
+      cashReceived: paymentMethod === 'Cash' ? (parseFloat(cashGiven) || paidNow) : paidNow,
       changeToReturn: paymentMethod === 'Cash' ? changeToReturn : 0,
     };
 
@@ -300,6 +389,8 @@ export default function NewSale() {
     setCustomerPhone('');
     setDiscountValue('');
     setCashGiven('');
+    setDuePaidAmount('');
+    setMatchedCustomer(null);
     setIsSuccessModalOpen(false);
     setCompletedOrder(null);
   };
@@ -589,34 +680,39 @@ export default function NewSale() {
                         </button>
                       </div>
 
-                      {customerSuggestions.map((cust) => (
-                        <div
-                          key={cust._id}
-                          onClick={() => handleSelectCustomer(cust)}
-                          className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/80 cursor-pointer transition-all flex items-center justify-between gap-2 text-xs group"
-                        >
-                          <div className="min-w-0">
-                            <div className="font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
-                              <span>{cust.name}</span>
-                              <Badge className="bg-emerald-500/15 text-[#00a86b] dark:text-[#00df89] text-[9px] font-bold px-1 py-0 border-0">
-                                Loyal
-                              </Badge>
+                      {customerSuggestions.map((cust) => {
+                        const custDue = cust.total_due ?? cust.totalDue ?? 0;
+                        return (
+                          <div
+                            key={cust._id}
+                            onClick={() => handleSelectCustomer(cust)}
+                            className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800/80 cursor-pointer transition-all flex items-center justify-between gap-2 text-xs group"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                                <span>{cust.name}</span>
+                                {custDue > 0 && (
+                                  <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] font-bold px-1 py-0 border-0">
+                                    Due: ৳{custDue.toLocaleString()}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-slate-500 font-mono">
+                                {cust.phone}
+                              </div>
                             </div>
-                            <div className="text-[11px] text-slate-500 font-mono">
-                              {cust.phone}
-                            </div>
-                          </div>
 
-                          <div className="text-right shrink-0">
-                            <div className="text-[11px] font-bold text-[#00a86b] dark:text-[#00df89]">
-                              ৳ {(cust.totalSpent || cust.total_spent || 0).toLocaleString()}
-                            </div>
-                            <div className="text-[10px] text-slate-400">
-                              {cust.totalOrders || cust.total_orders || 1} orders
+                            <div className="text-right shrink-0">
+                              <div className="text-[11px] font-bold text-[#00a86b] dark:text-[#00df89]">
+                                ৳ {(cust.totalSpent || cust.total_spent || 0).toLocaleString()}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                {cust.totalOrders || cust.total_orders || 1} orders
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -629,6 +725,24 @@ export default function NewSale() {
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-1 focus:ring-[#00df89]"
                 />
               </div>
+
+              {/* CUSTOMER PREVIOUS DUE ALERT BANNER */}
+              {previousCustomerDue > 0 ? (
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs animate-in fade-in">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-400">
+                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>{lang === 'bn' ? 'পূর্বের বকেয়া (Previous Due):' : 'Previous Due Balance:'}</span>
+                  </div>
+                  <div className="font-bold text-sm text-amber-700 dark:text-amber-400 font-mono">
+                    ৳ {previousCustomerDue.toLocaleString()}
+                  </div>
+                </div>
+              ) : matchedCustomer ? (
+                <div className="p-1.5 rounded-lg bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] text-[11px] font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{lang === 'bn' ? 'কোন পূর্ববর্তী বকেয়া নেই' : 'No previous dues on record'}</span>
+                </div>
+              ) : null}
             </div>
 
             {/* DISCOUNT CONFIGURATION (FLAT / PERCENTAGE) */}
@@ -682,26 +796,138 @@ export default function NewSale() {
               </div>
             </div>
 
-            {/* PAYMENT METHOD PICKER */}
+            {/* PAYMENT METHOD PICKER (CASH, BKASH, NAGAD, CARD, DUE) */}
             <div className="space-y-1.5 text-xs">
-              <label className="text-slate-500 block font-medium">Payment Method</label>
-              <div className="grid grid-cols-4 gap-1.5">
-                {['Cash', 'bKash', 'Nagad', 'Card'].map((pm) => (
+              <div className="flex items-center justify-between">
+                <label className="text-slate-500 block font-medium">
+                  {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
+                </label>
+                {paymentMethod === 'Due' && (
+                  <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
+                    {lang === 'bn' ? 'বকেয়া বিক্রি' : 'Due / Credit Sale'}
+                  </Badge>
+                )}
+              </div>
+              <div className="grid grid-cols-5 gap-1.5">
+                {[
+                  { key: 'Cash', label: 'Cash' },
+                  { key: 'bKash', label: 'bKash' },
+                  { key: 'Nagad', label: 'Nagad' },
+                  { key: 'Card', label: 'Card' },
+                  { key: 'Due', label: lang === 'bn' ? 'বাকি (Due)' : 'Due' },
+                ].map(({ key, label }) => (
                   <button
-                    key={pm}
+                    key={key}
                     type="button"
-                    onClick={() => setPaymentMethod(pm)}
-                    className={`py-2 rounded-xl font-semibold border text-center transition-all cursor-pointer ${
-                      paymentMethod === pm
-                        ? 'border-[#00df89] bg-[#00df89]/10 text-slate-900 dark:text-white'
-                        : 'border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400'
+                    onClick={() => setPaymentMethod(key)}
+                    className={`py-2 rounded-xl font-semibold border text-center transition-all cursor-pointer text-xs ${
+                      paymentMethod === key
+                        ? key === 'Due'
+                          ? 'border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold shadow-xs'
+                          : 'border-[#00df89] bg-[#00df89]/10 text-slate-900 dark:text-white'
+                        : 'border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-300'
                     }`}
                   >
-                    {pm}
+                    {label}
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* DUE PAYMENT SETTLEMENT DRAWER */}
+            {paymentMethod === 'Due' && (
+              <div className="p-3.5 rounded-xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/30 space-y-2.5 text-xs animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                    <Coins className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{lang === 'bn' ? 'নগদ জমা ও বকেয়া হিসাব' : 'Due Payment & Settlement'}</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Total: ৳{totalPayable.toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      placeholder="Paid Now (৳ e.g. 0 for full due)"
+                      value={duePaidAmount}
+                      onChange={(e) => setDuePaidAmount(e.target.value)}
+                      className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-[#121215] border border-amber-500/40 text-xs font-semibold outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDuePaidAmount('0')}
+                      className="text-[11px] h-8 px-2 border-amber-500/30 text-amber-700 dark:text-amber-400"
+                    >
+                      Full Due (৳0)
+                    </Button>
+                  </div>
+
+                  {/* Quick partial chips */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setDuePaidAmount('0')}
+                      className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 hover:border-amber-500"
+                    >
+                      ৳0 (Full Due)
+                    </button>
+                    {totalPayable > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setDuePaidAmount(String(Math.round(totalPayable / 2)))}
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 hover:border-amber-500"
+                        >
+                          50% (৳{Math.round(totalPayable / 2)})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDuePaidAmount(String(totalPayable))}
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 hover:border-[#00df89]"
+                        >
+                          Full Paid (৳{totalPayable})
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Due Real-Time Ledger Summary Box */}
+                <div className="pt-2 border-t border-amber-500/20 space-y-1 text-xs">
+                  <div className="flex justify-between text-slate-600 dark:text-zinc-400">
+                    <span>{lang === 'bn' ? 'বর্তমান বিল:' : 'Current Bill:'}</span>
+                    <span className="font-semibold">৳ {totalPayable.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-[#00a86b] dark:text-[#00df89]">
+                    <span>{lang === 'bn' ? 'নগদ জমা (Paid Now):' : 'Amount Paid Now:'}</span>
+                    <span className="font-semibold">৳ {paidNow.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-amber-600 dark:text-amber-400 font-bold">
+                    <span>{lang === 'bn' ? 'এই বিলের বকেয়া (Bill Due):' : 'This Bill Due:'}</span>
+                    <span>৳ {currentBillDue.toLocaleString()}</span>
+                  </div>
+                  {previousCustomerDue > 0 && (
+                    <div className="flex justify-between text-slate-600 dark:text-zinc-400">
+                      <span>{lang === 'bn' ? 'পূর্বের বকেয়া (Previous Due):' : 'Previous Due:'}</span>
+                      <span className="font-semibold text-amber-600">৳ {previousCustomerDue.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1.5 border-t border-amber-500/30">
+                    <span className="text-amber-700 dark:text-amber-400">
+                      {lang === 'bn' ? 'সর্বমোট বকেয়া (Total Due):' : 'Total Outstanding Due:'}
+                    </span>
+                    <span className="text-amber-600 dark:text-amber-400 font-mono text-base">
+                      ৳ {totalOutstandingDue.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* CASH GIVEN & CHANGE CALCULATOR (IF CASH SELECTED) */}
             {paymentMethod === 'Cash' && (
@@ -746,10 +972,10 @@ export default function NewSale() {
                   ))}
                 </div>
 
-                {/* Live Change Box */}
-                {cashGivenNum > 0 && (
+                {/* Live Change or Partial Due Box */}
+                {parseFloat(cashGiven) > 0 && (
                   <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 flex items-center justify-between text-xs">
-                    {cashGivenNum >= totalPayable ? (
+                    {parseFloat(cashGiven) >= totalPayable ? (
                       <>
                         <span className="font-medium text-emerald-600 dark:text-[#00df89]">Change to Return:</span>
                         <span className="font-bold text-sm text-emerald-600 dark:text-[#00df89]">
@@ -758,9 +984,9 @@ export default function NewSale() {
                       </>
                     ) : (
                       <>
-                        <span className="font-medium text-amber-600">Remaining Due:</span>
+                        <span className="font-medium text-amber-600">Remaining Due on Bill:</span>
                         <span className="font-bold text-sm text-amber-600">
-                          ৳ {remainingDue.toLocaleString()}
+                          ৳ {currentBillDue.toLocaleString()}
                         </span>
                       </>
                     )}
@@ -787,16 +1013,60 @@ export default function NewSale() {
                 <span>Total Payable:</span>
                 <span className="text-xl text-[#00a86b] dark:text-[#00df89]">৳ {totalPayable.toLocaleString()}</span>
               </div>
+
+              {/* Extra dues breakdown in summary if applicable */}
+              {(paymentMethod === 'Due' || currentBillDue > 0 || previousCustomerDue > 0) && (
+                <div className="pt-2 mt-1 border-t border-dashed border-slate-200 dark:border-zinc-800 space-y-1 text-[11px]">
+                  <div className="flex justify-between text-[#00a86b] dark:text-[#00df89] font-medium">
+                    <span>{lang === 'bn' ? 'জমা পরিশোধ:' : 'Paid Now:'}</span>
+                    <span>৳ {paidNow.toLocaleString()}</span>
+                  </div>
+                  {currentBillDue > 0 && (
+                    <div className="flex justify-between text-amber-600 font-medium">
+                      <span>{lang === 'bn' ? 'এই বিলের বকেয়া:' : 'This Bill Due:'}</span>
+                      <span>৳ {currentBillDue.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {previousCustomerDue > 0 && (
+                    <div className="flex justify-between text-slate-500">
+                      <span>{lang === 'bn' ? 'পূর্বের বকেয়া:' : 'Customer Previous Due:'}</span>
+                      <span className="font-semibold text-amber-600">৳ {previousCustomerDue.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-amber-600 dark:text-amber-400 pt-1 border-t border-slate-100 dark:border-zinc-800">
+                    <span>{lang === 'bn' ? 'সর্বমোট বকেয়া ব্যালেন্স:' : 'Total Customer Due:'}</span>
+                    <span>৳ {totalOutstandingDue.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* CHECKOUT BUTTON */}
             <Button
               onClick={handleCompleteSale}
               disabled={cart.length === 0 || isProcessingSale}
-              className="w-full bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-sm h-11 gap-2 shadow-xs cursor-pointer"
+              className={`w-full font-bold text-sm h-11 gap-2 shadow-xs cursor-pointer ${
+                paymentMethod === 'Due'
+                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950'
+                  : 'bg-[#00df89] hover:bg-[#00c97b] text-[#011812]'
+              }`}
             >
-              {isProcessingSale ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />}
-              <span>{isProcessingSale ? 'Processing...' : 'Complete & Generate Cash Memo'}</span>
+              {isProcessingSale ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+              )}
+              <span>
+                {isProcessingSale
+                  ? 'Processing...'
+                  : paymentMethod === 'Due'
+                  ? lang === 'bn'
+                    ? 'বকেয়া বিল সম্পন্ন করুন ও মেমো তৈরি করুন'
+                    : 'Complete Due Sale & Generate Memo'
+                  : lang === 'bn'
+                  ? 'বিল সম্পন্ন করুন ও ক্যাশ মেমো তৈরি করুন'
+                  : 'Complete & Generate Cash Memo'}
+              </span>
             </Button>
 
           </Card>
@@ -824,10 +1094,18 @@ export default function NewSale() {
 
             {/* Header */}
             <div className="text-center space-y-1 pt-1">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center mx-auto">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto ${
+                completedOrder.currentBillDue > 0 || completedOrder.method.toLowerCase() === 'due'
+                  ? 'bg-amber-500/10 text-amber-500'
+                  : 'bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89]'
+              }`}>
                 <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
               </div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Sale Completed Successfully!</h2>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                {completedOrder.currentBillDue > 0
+                  ? (lang === 'bn' ? 'বকেয়া বিক্রয় সম্পন্ন হয়েছে!' : 'Due Sale Completed Successfully!')
+                  : (lang === 'bn' ? 'বিক্রি সফলভাবে সম্পন্ন হয়েছে!' : 'Sale Completed Successfully!')}
+              </h2>
               <p className="text-xs text-slate-400 font-mono">Invoice: {completedOrder.id}</p>
             </div>
 
@@ -850,8 +1128,11 @@ export default function NewSale() {
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Payment:</span>
-                  <span className="font-semibold capitalize">{completedOrder.method}</span>
+                  <span className="text-slate-500">Payment Method:</span>
+                  <span className="font-semibold capitalize">
+                    {completedOrder.method}
+                    {completedOrder.currentBillDue > 0 && ` (Due: ৳${completedOrder.currentBillDue.toLocaleString()})`}
+                  </span>
                 </div>
               </div>
 
@@ -880,11 +1161,38 @@ export default function NewSale() {
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-800">
-                  <span>Total Paid:</span>
+                  <span>Total Bill Amount:</span>
                   <span className="text-[#00a86b] dark:text-[#00df89]">৳ {completedOrder.total.toLocaleString()}</span>
                 </div>
 
-                {completedOrder.method.toLowerCase() === 'cash' && (
+                <div className="flex justify-between text-slate-700 dark:text-zinc-300 pt-1">
+                  <span>Amount Paid Now:</span>
+                  <span className="font-bold text-[#00a86b] dark:text-[#00df89]">৳ {(completedOrder.paidAmount ?? completedOrder.total).toLocaleString()}</span>
+                </div>
+
+                {/* Due Breakdown in Receipt */}
+                {(completedOrder.currentBillDue > 0 || completedOrder.previousDue > 0) && (
+                  <div className="pt-1.5 mt-1 border-t border-dashed border-slate-200 dark:border-zinc-700 space-y-1 text-[11px]">
+                    {completedOrder.currentBillDue > 0 && (
+                      <div className="flex justify-between text-amber-600 font-bold">
+                        <span>This Bill Due (এই বিক্রির বকেয়া):</span>
+                        <span>৳ {completedOrder.currentBillDue.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {completedOrder.previousDue > 0 && (
+                      <div className="flex justify-between text-slate-500">
+                        <span>Previous Customer Due (পূর্বের বকেয়া):</span>
+                        <span className="font-semibold text-amber-600">৳ {completedOrder.previousDue.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-xs text-amber-600 dark:text-amber-400 pt-1 border-t border-slate-200 dark:border-zinc-800">
+                      <span>Total Customer Due (সর্বমোট বকেয়া):</span>
+                      <span className="font-mono text-sm">৳ {(completedOrder.totalDue ?? (completedOrder.previousDue + completedOrder.currentBillDue)).toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+
+                {completedOrder.method.toLowerCase() === 'cash' && completedOrder.currentBillDue === 0 && (
                   <>
                     <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
                       <span>Cash Received:</span>

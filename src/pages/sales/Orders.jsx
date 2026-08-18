@@ -306,75 +306,92 @@ export default function Orders() {
                   <th className="p-3.5">Items</th>
                   <th className="p-3.5">Discount</th>
                   <th className="p-3.5">Date & Time</th>
-                  <th className="p-3.5">Payment Method</th>
+                  <th className="p-3.5">Payment / Due Status</th>
                   <th className="p-3.5">Net Total (৳)</th>
                   <th className="p-3.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredOrders.map((order) => (
-                  <tr key={order._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
-                    <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{order.invoice_number}</span>
-                    </td>
-                    <td className="p-3.5 text-slate-800 dark:text-zinc-200 font-medium">
-                      {order.customer_id?.name || 'Walk-in Customer'}
-                    </td>
-                    <td className="p-3.5 text-slate-600 dark:text-zinc-300">
-                      {order.items?.map(it => `${it.name} (${it.quantity})`).join(', ') || '1 item'}
-                    </td>
-                    <td className="p-3.5 text-rose-500 font-medium">
-                      {order.discount > 0 ? (
-                        <span>- ৳ {order.discount.toLocaleString()} {order.discount_type === 'percentage' ? `(${order.discount_value}%)` : ''}</span>
-                      ) : (
-                        <span className="text-slate-400">None</span>
-                      )}
-                    </td>
-                    <td className="p-3.5 text-slate-500">
-                      {new Date(order.created_at).toLocaleString()}
-                    </td>
-                    <td className="p-3.5">
-                      <Badge variant="default" className="text-[10px] uppercase font-normal">
-                        {order.payment_method || 'Cash'}
-                      </Badge>
-                    </td>
-                    <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89]">
-                      ৳ {(order.total || 0).toLocaleString()}
-                    </td>
-                    <td className="p-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedOrder(order)}
-                          className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-[#00df89]"
-                          title="View Receipt Memo"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenEdit(order)}
-                          className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500"
-                          title="Edit Sale Details"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteSale(order._id, order.invoice_number)}
-                          className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                          title="Delete Sale & Restore Stock"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filteredOrders.map((order) => {
+                  const isDue = (order.due_amount || 0) > 0;
+                  return (
+                    <tr key={order._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
+                      <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                        <FileText className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{order.invoice_number}</span>
+                      </td>
+                      <td className="p-3.5 text-slate-800 dark:text-zinc-200 font-medium">
+                        <div>{order.customer_id?.name || 'Walk-in Customer'}</div>
+                        {order.customer_id?.phone && (
+                          <div className="text-[10px] text-slate-400 font-mono">{order.customer_id.phone}</div>
+                        )}
+                      </td>
+                      <td className="p-3.5 text-slate-600 dark:text-zinc-300">
+                        {order.items?.map(it => `${it.name} (${it.quantity})`).join(', ') || '1 item'}
+                      </td>
+                      <td className="p-3.5 text-rose-500 font-medium">
+                        {order.discount > 0 ? (
+                          <span>- ৳ {order.discount.toLocaleString()} {order.discount_type === 'percentage' ? `(${order.discount_value}%)` : ''}</span>
+                        ) : (
+                          <span className="text-slate-400">None</span>
+                        )}
+                      </td>
+                      <td className="p-3.5 text-slate-500">
+                        {new Date(order.created_at).toLocaleString()}
+                      </td>
+                      <td className="p-3.5">
+                        <div className="flex flex-col items-start gap-1">
+                          <Badge variant="default" className="text-[10px] uppercase font-normal">
+                            {order.payment_method || 'Cash'}
+                          </Badge>
+                          {isDue ? (
+                            <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-bold px-1.5 py-0">
+                              Due: ৳{order.due_amount.toLocaleString()}
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] text-[9px] font-medium px-1.5 py-0 border-0">
+                              Paid in Full
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89]">
+                        ৳ {(order.total || 0).toLocaleString()}
+                      </td>
+                      <td className="p-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedOrder(order)}
+                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-[#00df89]"
+                            title="View Receipt Memo"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenEdit(order)}
+                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500"
+                            title="Edit Sale Details"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteSale(order._id, order.invoice_number)}
+                            className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                            title="Delete Sale & Restore Stock"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -570,12 +587,37 @@ export default function Orders() {
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-800">
-                  <span>Total Payable:</span>
+                  <span>Total Bill Amount:</span>
                   <span className="text-[#00a86b] dark:text-[#00df89]">৳ {(selectedOrder.total || 0).toLocaleString()}</span>
                 </div>
 
+                <div className="flex justify-between text-slate-700 dark:text-zinc-300 pt-1">
+                  <span>Amount Paid:</span>
+                  <span className="font-semibold text-[#00a86b] dark:text-[#00df89]">
+                    ৳ {(selectedOrder.paid_amount !== undefined ? selectedOrder.paid_amount : selectedOrder.total).toLocaleString()}
+                  </span>
+                </div>
+
+                {/* Due Breakdown in Detailed Memo */}
+                {(selectedOrder.due_amount > 0 || (selectedOrder.customer_id?.total_due || 0) > 0) && (
+                  <div className="pt-1.5 mt-1 border-t border-dashed border-slate-200 dark:border-zinc-700 space-y-0.5 text-[11px]">
+                    {selectedOrder.due_amount > 0 && (
+                      <div className="flex justify-between text-amber-600 font-bold">
+                        <span>This Bill Due (এই মেমোর বকেয়া):</span>
+                        <span>৳ {selectedOrder.due_amount.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {(selectedOrder.customer_id?.total_due || 0) > 0 && (
+                      <div className="flex justify-between text-slate-500 font-medium">
+                        <span>Customer Total Outstanding Due:</span>
+                        <span className="text-amber-600 font-semibold">৳ {selectedOrder.customer_id.total_due.toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Tendered & Change Breakdown */}
-                {selectedOrder.payment_method?.toLowerCase() === 'cash' && (selectedOrder.tendered_amount || 0) > 0 && (
+                {selectedOrder.payment_method?.toLowerCase() === 'cash' && (selectedOrder.tendered_amount || 0) > 0 && (selectedOrder.due_amount || 0) === 0 && (
                   <>
                     <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
                       <span>Cash Given by Customer:</span>

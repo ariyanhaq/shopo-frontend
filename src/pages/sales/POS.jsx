@@ -34,7 +34,9 @@ export default function POS() {
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [discountType, setDiscountType] = useState('flat'); // 'flat' or 'percentage'
   const [discountValue, setDiscountValue] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Cash'); // 'Cash', 'bKash', 'Nagad', 'Card', 'Due'
   const [cashGiven, setCashGiven] = useState('');
+  const [duePaidAmount, setDuePaidAmount] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [receipt, setReceipt] = useState(null);
@@ -89,7 +91,16 @@ export default function POS() {
     setCustomerName(cust.name || '');
     setShowCustomerDropdown(false);
     setCustomerSuggestions([]);
-    toast.success(lang === 'bn' ? `'${cust.name}' সিলেক্ট করা হয়েছে` : `Selected: ${cust.name}`);
+    const previousDueAmount = cust.total_due ?? cust.totalDue ?? 0;
+    if (previousDueAmount > 0) {
+      toast.success(
+        lang === 'bn'
+          ? `'${cust.name}' সিলেক্ট করা হয়েছে (পূর্বের বকেয়া: ৳${previousDueAmount.toLocaleString()})`
+          : `Selected: ${cust.name} (Previous Due: ৳${previousDueAmount.toLocaleString()})`
+      );
+    } else {
+      toast.success(lang === 'bn' ? `'${cust.name}' সিলেক্ট করা হয়েছে` : `Selected: ${cust.name}`);
+    }
   };
 
   const handleClearCustomer = () => {
@@ -169,12 +180,78 @@ export default function POS() {
   }, [subtotal, discountType, discountValue]);
 
   const totalPayable = Math.max(0, subtotal - discountAmount);
-  const cashGivenNum = parseFloat(cashGiven) || 0;
-  const changeToReturn = Math.max(0, cashGivenNum - totalPayable);
+
+  // Customer Previous Due Calculation
+  const previousCustomerDue = useMemo(() => {
+    if (!matchedCustomer) return 0;
+    return Number(matchedCustomer.total_due ?? matchedCustomer.totalDue ?? 0);
+  }, [matchedCustomer]);
+
+  // Dynamic Payment & Due Breakdown Calculations
+  const { paidNow, currentBillDue, changeToReturn, totalOutstandingDue } = useMemo(() => {
+    let paid = 0;
+    let change = 0;
+    let billDue = 0;
+
+    if (paymentMethod === 'Due') {
+      const enteredPaid = parseFloat(duePaidAmount);
+      if (isNaN(enteredPaid) || enteredPaid <= 0) {
+        paid = 0;
+      } else {
+        paid = Math.min(enteredPaid, totalPayable);
+      }
+      billDue = Math.max(0, totalPayable - paid);
+      change = 0;
+    } else if (paymentMethod === 'Cash') {
+      const cashGivenNum = parseFloat(cashGiven) || 0;
+      if (cashGivenNum > 0) {
+        if (cashGivenNum >= totalPayable) {
+          paid = totalPayable;
+          change = cashGivenNum - totalPayable;
+          billDue = 0;
+        } else {
+          paid = cashGivenNum;
+          change = 0;
+          billDue = totalPayable - cashGivenNum;
+        }
+      } else {
+        paid = totalPayable;
+        change = 0;
+        billDue = 0;
+      }
+    } else {
+      // bKash, Nagad, Card
+      paid = totalPayable;
+      change = 0;
+      billDue = 0;
+    }
+
+    const totalDue = previousCustomerDue + billDue;
+
+    return {
+      paidNow: paid,
+      currentBillDue: billDue,
+      changeToReturn: change,
+      totalOutstandingDue: totalDue,
+    };
+  }, [paymentMethod, duePaidAmount, cashGiven, totalPayable, previousCustomerDue]);
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
+
+    if ((paymentMethod === 'Due' || currentBillDue > 0) && !customerName.trim() && !customerPhone.trim() && !matchedCustomer) {
+      toast.error(
+        lang === 'bn'
+          ? 'বকেয়া হিসাব রাখার জন্য কাস্টমারের ফোন বা নাম প্রদান করুন।'
+          : 'Please provide customer phone or name to record this due balance.'
+      );
+      return;
+    }
+
     setIsCheckingOut(true);
+    let serverPreviousDue = previousCustomerDue;
+    let serverTotalDue = totalOutstandingDue;
+
     try {
       const res = await api.sales.create({
         customer_id: matchedCustomer?._id || undefined,
@@ -184,31 +261,44 @@ export default function POS() {
         discount_type: discountType,
         discount_value: parseFloat(discountValue) || 0,
         discount: discountAmount,
-        paid_amount: totalPayable,
-        tendered_amount: cashGivenNum || totalPayable,
-        change_amount: changeToReturn,
-        payment_method: 'cash',
-        note: 'POS Terminal Cash Checkout',
+        paid_amount: paidNow,
+        tendered_amount: paymentMethod === 'Cash' ? (parseFloat(cashGiven) || paidNow) : paidNow,
+        change_amount: paymentMethod === 'Cash' ? changeToReturn : 0,
+        payment_method: paymentMethod.toLowerCase(),
+        note: 'POS Terminal Checkout',
       });
+
+      if (res.data?.previous_due !== undefined) {
+        serverPreviousDue = res.data.previous_due;
+      }
+      if (res.data?.total_customer_due !== undefined) {
+        serverTotalDue = res.data.total_customer_due;
+      }
 
       const inv = res.data?.invoice_number || `INV-${Date.now().toString().slice(-6)}`;
       setReceipt({
         invoice: inv,
         customerName: customerName || (matchedCustomer?.name ? matchedCustomer.name : 'Walk-in Customer'),
-        customerPhone: customerPhone || '',
+        customerPhone: customerPhone || (matchedCustomer?.phone || ''),
         items: [...cart],
         subtotal,
         discountType,
         discountValue: parseFloat(discountValue) || 0,
         discount: discountAmount,
         total: totalPayable,
-        cashReceived: cashGivenNum || totalPayable,
+        paidAmount: paidNow,
+        currentBillDue: currentBillDue,
+        previousDue: serverPreviousDue,
+        totalDue: serverTotalDue,
+        paymentMethod,
+        cashReceived: paymentMethod === 'Cash' ? (parseFloat(cashGiven) || paidNow) : paidNow,
         changeToReturn,
         date: new Date().toLocaleString(),
       });
       setCart([]);
       setDiscountValue('');
       setCashGiven('');
+      setDuePaidAmount('');
       setCustomerPhone('');
       setCustomerName('');
       setMatchedCustomer(null);
@@ -413,31 +503,39 @@ export default function POS() {
                         </button>
                       </div>
 
-                      {customerSuggestions.map((cust) => (
-                        <div
-                          key={cust._id}
-                          onClick={() => handleSelectCustomer(cust)}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800/80 cursor-pointer transition-all flex items-center justify-between gap-1.5 text-xs"
-                        >
-                          <div className="min-w-0">
-                            <div className="font-bold text-slate-900 dark:text-white truncate text-[11px]">
-                              {cust.name}
+                      {customerSuggestions.map((cust) => {
+                        const custDue = cust.total_due ?? cust.totalDue ?? 0;
+                        return (
+                          <div
+                            key={cust._id}
+                            onClick={() => handleSelectCustomer(cust)}
+                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800/80 cursor-pointer transition-all flex items-center justify-between gap-1.5 text-xs"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 dark:text-white truncate text-[11px] flex items-center gap-1">
+                                <span>{cust.name}</span>
+                                {custDue > 0 && (
+                                  <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[8px] font-bold px-1 py-0 border-0">
+                                    Due: ৳{custDue.toLocaleString()}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-500 font-mono">
+                                {cust.phone}
+                              </div>
                             </div>
-                            <div className="text-[10px] text-slate-500 font-mono">
-                              {cust.phone}
-                            </div>
-                          </div>
 
-                          <div className="text-right shrink-0">
-                            <div className="text-[10px] font-bold text-[#00a86b] dark:text-[#00df89]">
-                              ৳ {(cust.totalSpent || cust.total_spent || 0).toLocaleString()}
-                            </div>
-                            <div className="text-[9px] text-slate-400">
-                              {cust.totalOrders || cust.total_orders || 1} orders
+                            <div className="text-right shrink-0">
+                              <div className="text-[10px] font-bold text-[#00a86b] dark:text-[#00df89]">
+                                ৳ {(cust.totalSpent || cust.total_spent || 0).toLocaleString()}
+                              </div>
+                              <div className="text-[9px] text-slate-400">
+                                {cust.totalOrders || cust.total_orders || 1} orders
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -450,6 +548,14 @@ export default function POS() {
                   className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-1 focus:ring-[#00df89]"
                 />
               </div>
+
+              {/* POS PREVIOUS DUE ALERT */}
+              {previousCustomerDue > 0 && (
+                <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-[11px] font-bold text-amber-700 dark:text-amber-400">
+                  <span>Previous Due Balance:</span>
+                  <span className="font-mono text-xs">৳ {previousCustomerDue.toLocaleString()}</span>
+                </div>
+              )}
             </div>
 
             {/* DISCOUNT INPUT (FLAT / PERCENT) */}
@@ -484,38 +590,105 @@ export default function POS() {
               />
             </div>
 
-            {/* CASH TENDERED & CHANGE */}
-            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1">
-                  <Coins className="w-3 h-3 text-[#00df89]" /> Cash Received:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCashGiven(String(totalPayable))}
-                  className="text-[10px] text-[#00a86b] dark:text-[#00df89] font-semibold"
-                >
-                  Exact (৳{totalPayable})
-                </button>
+            {/* PAYMENT METHOD TABS */}
+            <div className="space-y-1 text-xs">
+              <span className="font-semibold text-slate-700 dark:text-zinc-300 text-[11px]">Payment Method:</span>
+              <div className="grid grid-cols-5 gap-1 text-[11px]">
+                {['Cash', 'bKash', 'Nagad', 'Card', 'Due'].map((pm) => (
+                  <button
+                    key={pm}
+                    type="button"
+                    onClick={() => setPaymentMethod(pm)}
+                    className={`py-1.5 rounded-lg font-semibold border text-center transition-all cursor-pointer ${
+                      paymentMethod === pm
+                        ? pm === 'Due'
+                          ? 'border-amber-500 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold'
+                          : 'border-[#00df89] bg-[#00df89]/10 text-slate-900 dark:text-white'
+                        : 'border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400'
+                    }`}
+                  >
+                    {pm}
+                  </button>
+                ))}
               </div>
-              <input
-                type="number"
-                placeholder="Cash handed by customer (৳)"
-                value={cashGiven}
-                onChange={(e) => setCashGiven(e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs font-semibold outline-none focus:ring-1 focus:ring-[#00df89]"
-              />
-              {cashGivenNum > 0 && (
-                <div className="flex justify-between font-bold text-xs pt-1 border-t border-slate-200 dark:border-zinc-800">
-                  <span className={cashGivenNum >= totalPayable ? 'text-emerald-600 dark:text-[#00df89]' : 'text-amber-500'}>
-                    {cashGivenNum >= totalPayable ? 'Change to Return:' : 'Due:'}
-                  </span>
-                  <span className={cashGivenNum >= totalPayable ? 'text-emerald-600 dark:text-[#00df89]' : 'text-amber-500'}>
-                    ৳ {cashGivenNum >= totalPayable ? changeToReturn.toLocaleString() : (totalPayable - cashGivenNum).toLocaleString()}
-                  </span>
-                </div>
-              )}
             </div>
+
+            {/* DUE PAYMENT SETTLEMENT IN POS */}
+            {paymentMethod === 'Due' && (
+              <div className="p-2.5 rounded-xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/30 space-y-1.5 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                    <Coins className="w-3 h-3 text-amber-500" /> Paid Now (৳):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDuePaidAmount('0')}
+                    className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold"
+                  >
+                    Full Due (৳0)
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  placeholder="0 (Full Due / সম্পূর্ণ বাকি)"
+                  value={duePaidAmount}
+                  onChange={(e) => setDuePaidAmount(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-amber-500/40 text-xs font-semibold outline-none focus:ring-1 focus:ring-amber-500"
+                />
+
+                <div className="pt-1.5 border-t border-amber-500/20 space-y-0.5 text-[11px]">
+                  <div className="flex justify-between text-amber-700 dark:text-amber-400 font-bold">
+                    <span>This Bill Due:</span>
+                    <span>৳ {currentBillDue.toLocaleString()}</span>
+                  </div>
+                  {previousCustomerDue > 0 && (
+                    <div className="flex justify-between text-slate-500">
+                      <span>Previous Customer Due:</span>
+                      <span className="text-amber-600 font-semibold">৳ {previousCustomerDue.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-slate-900 dark:text-white pt-1 border-t border-amber-500/30">
+                    <span className="text-amber-600">Total Net Due:</span>
+                    <span className="text-amber-600 font-mono text-xs">৳ {totalOutstandingDue.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CASH TENDERED & CHANGE */}
+            {paymentMethod === 'Cash' && (
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1">
+                    <Coins className="w-3 h-3 text-[#00df89]" /> Cash Received:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCashGiven(String(totalPayable))}
+                    className="text-[10px] text-[#00a86b] dark:text-[#00df89] font-semibold"
+                  >
+                    Exact (৳{totalPayable})
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  placeholder="Cash handed by customer (৳)"
+                  value={cashGiven}
+                  onChange={(e) => setCashGiven(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs font-semibold outline-none focus:ring-1 focus:ring-[#00df89]"
+                />
+                {parseFloat(cashGiven) > 0 && (
+                  <div className="flex justify-between font-bold text-xs pt-1 border-t border-slate-200 dark:border-zinc-800">
+                    <span className={parseFloat(cashGiven) >= totalPayable ? 'text-emerald-600 dark:text-[#00df89]' : 'text-amber-500'}>
+                      {parseFloat(cashGiven) >= totalPayable ? 'Change to Return:' : 'Remaining Due:'}
+                    </span>
+                    <span className={parseFloat(cashGiven) >= totalPayable ? 'text-emerald-600 dark:text-[#00df89]' : 'text-amber-500'}>
+                      ৳ {parseFloat(cashGiven) >= totalPayable ? changeToReturn.toLocaleString() : currentBillDue.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* TOTAL & CHECKOUT */}
             <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 space-y-2">
@@ -527,10 +700,22 @@ export default function POS() {
               <Button
                 onClick={handleCheckout}
                 disabled={cart.length === 0 || isCheckingOut}
-                className="w-full bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold h-11 text-xs gap-1.5 cursor-pointer shadow-xs"
+                className={`w-full font-bold h-11 text-xs gap-1.5 cursor-pointer shadow-xs ${
+                  paymentMethod === 'Due'
+                    ? 'bg-amber-500 hover:bg-amber-600 text-slate-950'
+                    : 'bg-[#00df89] hover:bg-[#00c97b] text-[#011812]'
+                }`}
               >
-                {isCheckingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                <span>Cash Checkout (৳{totalPayable.toLocaleString()})</span>
+                {isCheckingOut ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                <span>
+                  {paymentMethod === 'Due'
+                    ? `Complete Due Checkout (৳${totalPayable.toLocaleString()})`
+                    : `Complete Checkout (৳${totalPayable.toLocaleString()})`}
+                </span>
               </Button>
             </div>
           </Card>
@@ -560,6 +745,7 @@ export default function POS() {
               <h3 className="font-bold text-sm text-slate-900 dark:text-white">{mongoShop?.name || 'Shopo Store'}</h3>
               <p className="text-[10px] text-slate-400 font-mono">{receipt.invoice}</p>
               <p className="text-[10px] text-slate-400">{receipt.date}</p>
+              <p className="text-[10px] text-slate-500 font-semibold">{receipt.customerName} {receipt.customerPhone ? `(${receipt.customerPhone})` : ''}</p>
             </div>
 
             <div className="space-y-1.5 py-2 border-b border-dashed border-slate-200 dark:border-zinc-700">
@@ -583,17 +769,47 @@ export default function POS() {
                 </div>
               )}
               <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-700">
-                <span>Net Paid:</span>
+                <span>Total Bill:</span>
                 <span className="text-[#00a86b] dark:text-[#00df89]">৳ {receipt.total.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-slate-600 dark:text-zinc-400">
-                <span>Cash Received:</span>
-                <span>৳ {receipt.cashReceived.toLocaleString()}</span>
+              <div className="flex justify-between text-slate-700 dark:text-zinc-300">
+                <span>Paid Now:</span>
+                <span className="font-bold">৳ {(receipt.paidAmount ?? receipt.total).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-emerald-600 dark:text-[#00df89] font-bold">
-                <span>Change Returned:</span>
-                <span>৳ {receipt.changeToReturn.toLocaleString()}</span>
-              </div>
+
+              {(receipt.currentBillDue > 0 || receipt.previousDue > 0) && (
+                <div className="pt-1.5 mt-1 border-t border-dashed border-slate-200 dark:border-zinc-700 space-y-0.5 text-[11px]">
+                  {receipt.currentBillDue > 0 && (
+                    <div className="flex justify-between text-amber-600 font-bold">
+                      <span>This Bill Due:</span>
+                      <span>৳ {receipt.currentBillDue.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {receipt.previousDue > 0 && (
+                    <div className="flex justify-between text-slate-500">
+                      <span>Previous Due:</span>
+                      <span className="font-semibold text-amber-600">৳ {receipt.previousDue.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-xs text-amber-600 dark:text-amber-400 pt-1 border-t border-slate-200 dark:border-zinc-700">
+                    <span>Total Customer Due:</span>
+                    <span>৳ {(receipt.totalDue ?? (receipt.previousDue + receipt.currentBillDue)).toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+
+              {receipt.paymentMethod?.toLowerCase() === 'cash' && receipt.currentBillDue === 0 && (
+                <>
+                  <div className="flex justify-between text-slate-600 dark:text-zinc-400">
+                    <span>Cash Received:</span>
+                    <span>৳ {receipt.cashReceived.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-600 dark:text-[#00df89] font-bold">
+                    <span>Change Returned:</span>
+                    <span>৳ {receipt.changeToReturn.toLocaleString()}</span>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
