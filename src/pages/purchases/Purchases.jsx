@@ -1789,8 +1789,93 @@ export default function Purchases() {
                 />
               </div>
 
-              {/* Price Row: Cost Price & Selling Price */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Category (Full Width with spacious inline adding) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCatInline(!showAddCatInline)}
+                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    {showAddCatInline ? (
+                      <span>{lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing'}</span>
+                    ) : (
+                      <>
+                        <Plus className="w-3 h-3" />
+                        <span>{lang === 'bn' ? '+ নতুন ক্যাটাগরি' : '+ New Category'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {showAddCatInline ? (
+                  <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-500/5 border border-emerald-500/20 w-full">
+                    <input
+                      type="text"
+                      placeholder={lang === 'bn' ? 'ক্যাটাগরির নাম লিখুন...' : 'Enter new category name...'}
+                      value={newCatName}
+                      onChange={(e) => setNewCatName(e.target.value)}
+                      className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs text-slate-900 dark:text-white focus:ring-1 focus:ring-[#00df89]"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isCreatingCat || !newCatName.trim()}
+                      onClick={handleCreateCategory}
+                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 shrink-0 cursor-pointer"
+                    >
+                      {isCreatingCat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (lang === 'bn' ? 'সেভ করুন' : 'Save')}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCatInline(false)}
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 shrink-0 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <Select
+                    value={quickProductModal.category_id || '__none__'}
+                    onValueChange={(val) => {
+                      if (val === '__add_new_cat__') {
+                        setShowAddCatInline(true);
+                      } else {
+                        setQuickProductModal((prev) => ({ ...prev, category_id: val === '__none__' ? '' : val }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                      <SelectValue placeholder="General / None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        value="__add_new_cat__"
+                        className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
+                      >
+                        + {lang === 'bn' ? 'নতুন ক্যাটাগরি তৈরি করুন...' : 'Add New Category...'}
+                      </SelectItem>
+                      <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ (General / None)' : 'General / None'}</SelectItem>
+                      {categories.filter(c => c.name?.toLowerCase() !== 'general').map((c) => (
+                        <SelectItem
+                          key={c._id}
+                          value={c._id}
+                          onDelete={() => promptDeleteCategory(c._id, c.name)}
+                          deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
+                        >
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {/* Pricing & Unit Row (3 columns) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
                     {lang === 'bn' ? 'ক্রয়মূল্য (৳)' : 'Cost Price (৳)'}
@@ -1820,10 +1905,7 @@ export default function Purchases() {
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
                   />
                 </div>
-              </div>
 
-              {/* Unit & Category Row */}
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
                     {lang === 'bn' ? 'একক (Unit)' : 'Unit'}
@@ -1845,90 +1927,6 @@ export default function Purchases() {
                       <SelectItem value="pair">{lang === 'bn' ? 'জোড়া (pair)' : 'Pair'}</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-bold text-slate-700 dark:text-zinc-300">
-                      {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddCatInline(!showAddCatInline)}
-                      className="text-[10px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
-                    >
-                      {showAddCatInline ? (
-                        <span>{lang === 'bn' ? 'তালিকা' : 'List'}</span>
-                      ) : (
-                        <>
-                          <Plus className="w-2.5 h-2.5" />
-                          <span>{lang === 'bn' ? '+ নতুন' : '+ New'}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {showAddCatInline ? (
-                    <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-                      <input
-                        type="text"
-                        placeholder={lang === 'bn' ? 'ক্যাটাগরির নাম...' : 'Category name...'}
-                        value={newCatName}
-                        onChange={(e) => setNewCatName(e.target.value)}
-                        className="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={isCreatingCat || !newCatName.trim()}
-                        onClick={handleCreateCategory}
-                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-[11px] h-7 px-2.5 cursor-pointer"
-                      >
-                        {isCreatingCat ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={() => setShowAddCatInline(false)}
-                        className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <Select
-                      value={quickProductModal.category_id || '__none__'}
-                      onValueChange={(val) => {
-                        if (val === '__add_new_cat__') {
-                          setShowAddCatInline(true);
-                        } else {
-                          setQuickProductModal((prev) => ({ ...prev, category_id: val === '__none__' ? '' : val }));
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
-                        <SelectValue placeholder="General / None" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem
-                          value="__add_new_cat__"
-                          className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
-                        >
-                          + {lang === 'bn' ? 'নতুন ক্যাটাগরি তৈরি করুন...' : 'Add New Category...'}
-                        </SelectItem>
-                        <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ (General / None)' : 'General / None'}</SelectItem>
-                        {categories.filter(c => c.name?.toLowerCase() !== 'general').map((c) => (
-                          <SelectItem
-                            key={c._id}
-                            value={c._id}
-                            onDelete={() => promptDeleteCategory(c._id, c.name)}
-                            deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
-                          >
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
                 </div>
               </div>
 
