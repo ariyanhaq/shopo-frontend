@@ -696,15 +696,15 @@ export default function Products() {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             
             {/* Category Filter Dropdown */}
-            <div className="w-44">
+            <div className="w-56 sm:w-64 min-w-[200px]">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b]">
+                <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full">
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="min-w-[220px]">
                   <SelectItem value="all">All Categories</SelectItem>
                   {uniqueCategories.map((cat, idx) => (
                     <SelectItem key={idx} value={cat}>{cat}</SelectItem>
@@ -714,12 +714,12 @@ export default function Products() {
             </div>
 
             {/* Sort Order Dropdown */}
-            <div className="w-44">
+            <div className="w-48 sm:w-52 min-w-[180px]">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b]">
+                <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full">
                   <SelectValue placeholder="Sort By" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="min-w-[200px]">
                   <SelectItem value="category_asc">Category (A → Z)</SelectItem>
                   <SelectItem value="category_desc">Category (Z → A)</SelectItem>
                   <SelectItem value="name_asc">Product Name (A → Z)</SelectItem>
@@ -733,12 +733,12 @@ export default function Products() {
             </div>
 
             {/* Stock Status Filter */}
-            <div className="w-40">
+            <div className="w-44 sm:w-48 min-w-[160px]">
               <Select value={stockStatusFilter} onValueChange={setStockStatusFilter}>
-                <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b]">
+                <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full">
                   <SelectValue placeholder="Stock Status" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="min-w-[180px]">
                   <SelectItem value="all">All Stock Status</SelectItem>
                   <SelectItem value="in_stock">In Stock</SelectItem>
                   <SelectItem value="low_stock">Low Stock</SelectItem>
