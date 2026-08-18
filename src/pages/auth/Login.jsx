@@ -21,9 +21,12 @@ export default function Login() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const navigateAfterAuth = (profile) => {
-    const hasShop = Boolean(profile?.shop?._id || profile?.user?.shop_id);
-    const defaultDashboard = profile?.shop?.business_type === 'gym' ? '/gym/dashboard' : '/dashboard';
-    const target = hasShop ? (location.state?.from?.pathname?.startsWith('/onboarding') ? defaultDashboard : (location.state?.from?.pathname || defaultDashboard)) : '/onboarding/business-data';
+    const hasStore = Boolean(profile?.shop?._id || profile?.user?.shop_id || localStorage.getItem('shopo_has_shop') === 'true');
+    const isGym = profile?.shop?.business_type === 'gym' || localStorage.getItem('shopo_business_type') === 'gym';
+    const defaultDashboard = isGym ? '/gym/dashboard' : '/dashboard';
+    const target = hasStore
+      ? (location.state?.from?.pathname?.startsWith('/onboarding') ? defaultDashboard : (location.state?.from?.pathname || defaultDashboard))
+      : '/onboarding/business-data';
     navigate(target, { replace: true });
   };
 

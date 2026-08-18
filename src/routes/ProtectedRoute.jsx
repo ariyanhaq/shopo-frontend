@@ -10,10 +10,12 @@ import { useAuth } from '@/context/AuthContext';
 import { Store } from 'lucide-react';
 
 export default function ProtectedRoute() {
-  const { currentUser, mongoUser, mongoShop, hasShop, loading } = useAuth();
+  const { currentUser, mongoUser, mongoShop, hasShop, loading, isProfileLoading, isProfileChecked } = useAuth();
   const location = useLocation();
 
-  if (loading) {
+  const isVerifying = loading || isProfileLoading || (currentUser && currentUser.emailVerified && !isProfileChecked);
+
+  if (isVerifying) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#FAFBFD] dark:bg-[#0B0F17] text-slate-800 dark:text-slate-100">
         <div className="flex flex-col items-center gap-4">
@@ -28,7 +30,7 @@ export default function ProtectedRoute() {
               Shopo<span className="text-[#00df89]">.</span>
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Verifying session...
+              Checking store data & profile...
             </p>
           </div>
         </div>

@@ -6,15 +6,17 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 
 export default function PublicRoute() {
-  const { currentUser, mongoUser, mongoShop, loading } = useAuth();
+  const { currentUser, mongoUser, mongoShop, hasShop, loading, isProfileLoading, isProfileChecked } = useAuth();
 
-  if (loading) {
+  const isVerifying = loading || isProfileLoading || (currentUser && currentUser.emailVerified && !isProfileChecked);
+
+  if (isVerifying) {
     return null;
   }
 
   if (currentUser && currentUser.emailVerified) {
-    const hasShop = Boolean(mongoUser?.shop_id || mongoShop?._id);
-    const target = hasShop
+    const hasStore = Boolean(mongoUser?.shop_id || mongoShop?._id || hasShop);
+    const target = hasStore
       ? (mongoShop?.business_type === 'gym' ? '/gym/dashboard' : '/dashboard')
       : '/onboarding/business-data';
     return <Navigate to={target} replace />;

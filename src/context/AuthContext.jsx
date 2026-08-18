@@ -108,6 +108,8 @@ export function AuthProvider({ children }) {
   const [mongoUser, setMongoUser] = useState(null);
   const [mongoShop, setMongoShop] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [isProfileChecked, setIsProfileChecked] = useState(false);
   const [authError, setAuthError] = useState(null);
 
   const setSessionShop = (shop, user = null) => {
@@ -124,6 +126,7 @@ export function AuthProvider({ children }) {
   };
 
   const syncBackendProfile = async () => {
+    setIsProfileLoading(true);
     try {
       const res = await api.auth.getMe();
       if (res.data) {
@@ -136,10 +139,14 @@ export function AuthProvider({ children }) {
           }
         }
       }
+      setIsProfileChecked(true);
       return res.data;
     } catch (err) {
       console.warn('Backend profile sync skipped or unauthenticated:', err.message);
+      setIsProfileChecked(true);
       return null;
+    } finally {
+      setIsProfileLoading(false);
     }
   };
 
@@ -147,6 +154,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!auth) {
       setLoading(false);
+      setIsProfileChecked(true);
       return;
     }
 
@@ -157,6 +165,7 @@ export function AuthProvider({ children }) {
       } else {
         setMongoUser(null);
         setMongoShop(null);
+        setIsProfileChecked(true);
         if (!user) {
           localStorage.removeItem('shopo_has_shop');
           localStorage.removeItem('shopo_business_type');
@@ -368,6 +377,8 @@ export function AuthProvider({ children }) {
     isAuthenticated: Boolean(currentUser),
     isEmailVerified: Boolean(currentUser?.emailVerified),
     loading,
+    isProfileLoading,
+    isProfileChecked,
     authError,
     clearAuthError,
     isFirebaseConfigured,
