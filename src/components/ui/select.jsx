@@ -114,7 +114,14 @@ export function Select({
         disabled,
       }}
     >
-      <div ref={containerRef} className={cn("relative inline-block text-left", className)}>
+      <div
+        ref={containerRef}
+        className={cn(
+          "relative inline-block text-left w-full",
+          isOpen ? "z-[99999]" : "z-auto",
+          className
+        )}
+      >
         {children}
       </div>
     </SelectContext.Provider>
@@ -212,7 +219,7 @@ export function SelectContent({
           exit={{ opacity: 0, scale: 0.96, y: -4 }}
           transition={{ duration: 0.12, ease: 'easeOut' }}
           className={cn(
-            "absolute z-50 w-full min-w-full min-w-[190px] mt-1.5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200/90 dark:border-zinc-800 shadow-2xl p-1.5 text-slate-900 dark:text-zinc-100 text-xs overflow-y-auto backdrop-blur-md focus:outline-none",
+            "absolute z-[99999] w-full min-w-full min-w-[200px] mt-1.5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200/90 dark:border-zinc-800 shadow-2xl p-1.5 text-slate-900 dark:text-zinc-100 text-xs overflow-y-auto backdrop-blur-md focus:outline-none",
             maxHeight,
             alignClasses[align],
             className

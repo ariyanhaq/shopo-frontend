@@ -847,11 +847,11 @@ export default function Purchases() {
                   </button>
                 </div>
 
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                <div className="space-y-2.5 overflow-visible">
                   {purchaseForm.items.map((item, idx) => (
                     <div
                       key={idx}
-                      className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 grid grid-cols-12 gap-2 items-center"
+                      className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 grid grid-cols-12 gap-2 items-center relative overflow-visible"
                     >
                       {/* Product Selector */}
                       <div className="col-span-12 sm:col-span-5">
@@ -1131,11 +1131,11 @@ export default function Purchases() {
                   </button>
                 </div>
 
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                <div className="space-y-2.5 overflow-visible">
                   {editForm.items.map((item, idx) => (
                     <div
                       key={idx}
-                      className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 grid grid-cols-12 gap-2 items-center"
+                      className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 grid grid-cols-12 gap-2 items-center relative overflow-visible"
                     >
                       {/* Product Selector */}
                       <div className="col-span-12 sm:col-span-5">
