@@ -39,15 +39,19 @@ export default function AppRoutes() {
         <Route path="/contact" element={<Contact />} />
       </Route>
 
-      {/* Auth Pages */}
+      {/* Auth Guest Pages (Only Login & Register redirect when logged in) */}
       <Route element={<PublicRoute />}>
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
         </Route>
+      </Route>
+
+      {/* Accessible Auth & Password Recovery Pages */}
+      <Route element={<AuthLayout />}>
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
       </Route>
 
       {/* Universal Firebase Action Handlers */}

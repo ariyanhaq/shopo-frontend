@@ -2,7 +2,7 @@
  * @file ForgotPassword.jsx
  * @description Forgot Password page integrated with Firebase sendPasswordResetEmail.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth, getAuthErrorMessage } from '@/context/AuthContext';
 import { Store, Mail, ArrowRight, ArrowLeft, CheckCircle2, ShieldCheck, Globe, AlertCircle, Loader2 } from 'lucide-react';
