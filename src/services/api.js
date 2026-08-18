@@ -129,6 +129,11 @@ export const api = {
       request(`/customers/${id}`, {
         method: 'DELETE',
       }),
+    collectDue: (id, data) =>
+      request(`/customers/${id}/collect-due`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 
   // Sales & POS Checkout
@@ -143,6 +148,11 @@ export const api = {
       return request(`/sales${qs ? `?${qs}` : ''}`);
     },
     getById: (id) => request(`/sales/${id}`),
+    collectDue: (id, data) =>
+      request(`/sales/${id}/collect-due`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     update: (id, data) =>
       request(`/sales/${id}`, {
         method: 'PATCH',

@@ -53,6 +53,17 @@ export default function Customers() {
   const [customerHistory, setCustomerHistory] = useState(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
+  // Collect Customer Due State
+  const [isCollectCustomerDueOpen, setIsCollectCustomerDueOpen] = useState(false);
+  const [collectingCustomer, setCollectingCustomer] = useState(null);
+  const [isSubmittingCustomerDue, setIsSubmittingCustomerDue] = useState(false);
+  const [customerDueForm, setCustomerDueForm] = useState({
+    amount: '',
+    payment_method: 'cash',
+    note: '',
+  });
+  const [customerVoucher, setCustomerVoucher] = useState(null);
+
   // Edit Sale / Invoice from Customer History State
   const [isEditSaleModalOpen, setIsEditSaleModalOpen] = useState(false);
   const [editingSale, setEditingSale] = useState(null);
@@ -238,6 +249,70 @@ export default function Customers() {
       toast.error(err.message || 'Failed to delete customer.');
     } finally {
       setIsDeletingCustomer(false);
+    }
+  };
+
+  // Open Collect Customer Due Modal
+  const handleOpenCollectCustomerDue = (cust, e) => {
+    if (e) e.stopPropagation();
+    setCollectingCustomer(cust);
+    setCustomerDueForm({
+      amount: String(cust.total_due || 0),
+      payment_method: 'cash',
+      note: '',
+    });
+    setIsCollectCustomerDueOpen(true);
+  };
+
+  // Submit Collect Customer Due
+  const handleSubmitCustomerDue = async (e) => {
+    e.preventDefault();
+    if (!collectingCustomer) return;
+
+    const amountNum = parseFloat(customerDueForm.amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast.error(lang === 'bn' ? 'সঠিক জমার পরিমাণ লিখুন (০ এর বেশি)।' : 'Please enter a valid payment amount greater than 0.');
+      return;
+    }
+
+    setIsSubmittingCustomerDue(true);
+    try {
+      const custId = collectingCustomer._id || collectingCustomer.id;
+      const res = await api.customers.collectDue(custId, {
+        amount: amountNum,
+        payment_method: customerDueForm.payment_method,
+        note: customerDueForm.note,
+      });
+
+      toast.success(
+        lang === 'bn'
+          ? `৳${amountNum.toLocaleString()} বকেয়া সফলভাবে গ্রহণ করা হয়েছে!`
+          : `Collected ৳${amountNum.toLocaleString()} due payment successfully!`
+      );
+
+      setIsCollectCustomerDueOpen(false);
+
+      // Open Money Receipt Voucher
+      setCustomerVoucher({
+        customer_name: collectingCustomer.name || 'Customer',
+        customer_phone: collectingCustomer.phone || '',
+        collected_amount: amountNum,
+        payment_method: customerDueForm.payment_method,
+        remaining_customer_due: res.data?.remaining_customer_due ?? Math.max(0, (collectingCustomer.total_due || 0) - amountNum),
+        settled_sales: res.data?.settled_sales || [],
+        date: new Date().toLocaleString(),
+        note: customerDueForm.note,
+      });
+
+      setCollectingCustomer(null);
+      fetchCustomers();
+      if (selectedCustomerId) {
+        handleOpenCustomerHistory({ _id: selectedCustomerId });
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to collect customer due payment.');
+    } finally {
+      setIsSubmittingCustomerDue(false);
     }
   };
 
@@ -514,6 +589,17 @@ export default function Customers() {
 
                       <td className="p-3.5 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {(c.total_due || 0) > 0 && (
+                            <Button
+                              size="sm"
+                              onClick={(e) => handleOpenCollectCustomerDue(c, e)}
+                              className="h-7 text-xs px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1 shadow-2xs cursor-pointer mr-1"
+                              title="Collect Due Payment"
+                            >
+                              <Coins className="w-3.5 h-3.5" />
+                              <span>{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Collect Due'}</span>
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -622,11 +708,23 @@ export default function Customers() {
                         ৳ {(customerHistory.customer?.total_spent || 0).toLocaleString()}
                       </div>
                     </div>
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-center">
-                      <span className="text-[10px] text-slate-500 uppercase font-semibold">Pending Due</span>
-                      <div className="text-lg font-bold text-amber-500 mt-0.5">
-                        ৳ {(customerHistory.customer?.total_due || 0).toLocaleString()}
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-center relative flex flex-col justify-between">
+                      <div>
+                        <span className="text-[10px] text-slate-500 uppercase font-semibold">Pending Due</span>
+                        <div className="text-lg font-bold text-amber-500 mt-0.5">
+                          ৳ {(customerHistory.customer?.total_due || 0).toLocaleString()}
+                        </div>
                       </div>
+                      {(customerHistory.customer?.total_due || 0) > 0 && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleOpenCollectCustomerDue(customerHistory.customer)}
+                          className="mt-1 h-6 text-[10px] bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1 cursor-pointer"
+                        >
+                          <Coins className="w-3 h-3" />
+                          <span>{lang === 'bn' ? 'বকেয়া জমা নিন' : 'Collect Due'}</span>
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -670,6 +768,20 @@ export default function Customers() {
                             <span className="text-[11px] text-slate-500 mr-1">
                               {new Date(sale.created_at).toLocaleString()}
                             </span>
+                            {(sale.due_amount || 0) > 0 && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleOpenCollectCustomerDue({
+                                  ...customerHistory.customer,
+                                  total_due: sale.due_amount,
+                                })}
+                                className="h-6 text-xs px-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1 cursor-pointer mr-0.5"
+                                title="Collect this bill due"
+                              >
+                                <Coins className="w-3 h-3" />
+                                <span>Pay Due</span>
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1018,6 +1130,244 @@ export default function Customers() {
                 </Button>
               </div>
             </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* COLLECT CUSTOMER DUE PAYMENT MODAL                   */}
+      {/* ---------------------------------------------------- */}
+      {isCollectCustomerDueOpen && collectingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center text-amber-500">
+                  <Coins className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    {lang === 'bn' ? 'কাস্টমারের বকেয়া আদায়' : 'Collect Customer Due Payment'}
+                  </h2>
+                  <p className="text-xs text-slate-400">{collectingCustomer.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsCollectCustomerDueOpen(false);
+                  setCollectingCustomer(null);
+                }}
+                className="text-slate-400 p-1 cursor-pointer hover:text-slate-700 dark:hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-700 dark:text-zinc-300">
+                <span>Customer Phone:</span>
+                <span className="font-mono font-bold text-slate-900 dark:text-white">
+                  {collectingCustomer.phone || 'No phone'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-zinc-800">
+                <span className="text-slate-500 font-medium">Total Unpaid Customer Due:</span>
+                <span className="font-mono text-base font-bold text-amber-500">
+                  ৳ {(collectingCustomer.total_due || 0).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitCustomerDue} className="space-y-3.5 text-xs">
+              {/* Payment Amount Input & Quick Chips */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'জমার পরিমাণ (৳)' : 'Payment Amount to Collect (৳)'}
+                  </label>
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setCustomerDueForm({ ...customerDueForm, amount: String(collectingCustomer.total_due || 0) })}
+                      className="px-2 py-0.5 rounded-md font-bold bg-amber-500/15 text-amber-600 border border-amber-500/30 hover:bg-amber-500/25 transition-colors cursor-pointer"
+                    >
+                      Full Due (৳{(collectingCustomer.total_due || 0).toLocaleString()})
+                    </button>
+                    {(collectingCustomer.total_due || 0) > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomerDueForm({ ...customerDueForm, amount: String(Math.round((collectingCustomer.total_due || 0) / 2)) })}
+                        className="px-2 py-0.5 rounded-md font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-200 transition-colors cursor-pointer"
+                      >
+                        50% (৳{Math.round((collectingCustomer.total_due || 0) / 2).toLocaleString()})
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  placeholder={`e.g. ${collectingCustomer.total_due || 0}`}
+                  value={customerDueForm.amount}
+                  onChange={(e) => setCustomerDueForm({ ...customerDueForm, amount: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#09090b] border border-amber-500/40 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              {/* Payment Method Selector */}
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
+                </label>
+                <Select
+                  value={customerDueForm.payment_method}
+                  onValueChange={(val) => setCustomerDueForm({ ...customerDueForm, payment_method: val })}
+                >
+                  <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                    <SelectValue placeholder="Payment Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash (নগদ)</SelectItem>
+                    <SelectItem value="bkash">bKash (বিকাশ)</SelectItem>
+                    <SelectItem value="nagad">Nagad (নগদ)</SelectItem>
+                    <SelectItem value="rocket">Rocket (রকেট)</SelectItem>
+                    <SelectItem value="card">Card (কার্ড)</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Note / Remarks */}
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'মন্তব্য (ঐচ্ছিক)' : 'Note / Remarks (Optional)'}
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Cleared pending dues"
+                  value={customerDueForm.note}
+                  onChange={(e) => setCustomerDueForm({ ...customerDueForm, note: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                />
+              </div>
+
+              {/* Real-Time Balance Preview */}
+              {parseFloat(customerDueForm.amount) > 0 && (
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  <span>Remaining Customer Due:</span>
+                  <span className="font-mono text-sm font-bold">
+                    ৳ {Math.max(0, (collectingCustomer.total_due || 0) - (parseFloat(customerDueForm.amount) || 0)).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setIsCollectCustomerDueOpen(false);
+                    setCollectingCustomer(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmittingCustomerDue}
+                  size="sm"
+                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1.5 shadow-sm"
+                >
+                  {isSubmittingCustomerDue ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  <span>{lang === 'bn' ? 'টাকা গ্রহণ নিশ্চিত করুন' : 'Confirm Payment'}</span>
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* CUSTOMER MONEY RECEIPT / DUE VOUCHER MODAL           */}
+      {/* ---------------------------------------------------- */}
+      {customerVoucher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center text-[#00a86b] dark:text-[#00df89]">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">Customer Money Receipt / বকেয়া জমার রশিদ</h2>
+                  <p className="text-xs text-slate-400 font-mono">{customerVoucher.date}</p>
+                </div>
+              </div>
+              <button onClick={() => setCustomerVoucher(null)} className="text-slate-400 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-3 text-xs">
+              <div className="text-center pb-2 border-b border-slate-200 dark:border-zinc-800">
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">{mongoShop?.name || 'Shopo Store'}</h3>
+                <p className="text-[11px] text-slate-400">{customerVoucher.date}</p>
+                <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-[#00df89] border-emerald-500/30 text-[10px] font-bold mt-1">
+                  Customer Due Settled
+                </Badge>
+              </div>
+
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Customer:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">{customerVoucher.customer_name}</span>
+                </div>
+                {customerVoucher.customer_phone && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Phone:</span>
+                    <span className="font-mono text-slate-700 dark:text-zinc-300">{customerVoucher.customer_phone}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Payment Method:</span>
+                  <span className="font-semibold uppercase">{customerVoucher.payment_method}</span>
+                </div>
+                {customerVoucher.note && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Remarks:</span>
+                    <span className="text-slate-700 dark:text-zinc-300">{customerVoucher.note}</span>
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1 text-xs">
+                  <div className="flex justify-between items-center text-sm font-bold text-slate-900 dark:text-white pt-1">
+                    <span>Amount Collected:</span>
+                    <span className="text-[#00a86b] dark:text-[#00df89] text-base">
+                      ৳ {customerVoucher.collected_amount.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
+                    <span>Remaining Customer Due:</span>
+                    <span className={`font-semibold ${customerVoucher.remaining_customer_due > 0 ? 'text-amber-500 font-bold' : 'text-emerald-600'}`}>
+                      ৳ {customerVoucher.remaining_customer_due.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800">
+              <Button variant="outline" size="sm" onClick={() => setCustomerVoucher(null)}>
+                Close
+              </Button>
+              <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
+                <Printer className="w-3.5 h-3.5" /> Print Receipt
+              </Button>
+            </div>
           </Card>
         </div>
       )}
