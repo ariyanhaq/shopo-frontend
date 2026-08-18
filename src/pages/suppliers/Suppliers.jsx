@@ -13,6 +13,14 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem
+} from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import toast from 'react-hot-toast';
 
@@ -22,6 +30,7 @@ export default function Suppliers() {
   const [suppliers, setSuppliers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [dueFilter, setDueFilter] = useState('all');
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -74,19 +83,26 @@ export default function Suppliers() {
   // Filter Suppliers
   const filteredSuppliers = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return suppliers;
     return suppliers.filter((s) => {
+      // Search query
       const name = (s.name || '').toLowerCase();
       const company = (s.company_name || '').toLowerCase();
       const phone = (s.phone || '').toLowerCase();
       const email = (s.email || '').toLowerCase();
-      return name.includes(q) || company.includes(q) || phone.includes(q) || email.includes(q);
+      const matchesSearch = !q || name.includes(q) || company.includes(q) || phone.includes(q) || email.includes(q);
+
+      // Due Filter
+      if (!matchesSearch) return false;
+      if (dueFilter === 'due') return (s.total_due || 0) > 0;
+      if (dueFilter === 'paid') return (s.total_due || 0) <= 0;
+      return true;
     });
-  }, [suppliers, searchQuery]);
+  }, [suppliers, searchQuery, dueFilter]);
 
   // Metrics
   const totalSuppliersCount = suppliers.length;
   const totalPurchasesAmount = suppliers.reduce((acc, s) => acc + (s.total_purchases || 0), 0);
+  const totalPaidAmount = suppliers.reduce((acc, s) => acc + (s.total_paid || 0), 0);
   const totalDueAmount = suppliers.reduce((acc, s) => acc + (s.total_due || 0), 0);
 
   // Open Create/Edit Modal
@@ -176,103 +192,152 @@ export default function Suppliers() {
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header */}
+    <div className="space-y-6 font-sans pb-12">
+      
+      {/* ---------------------------------------------------- */}
+      {/* TOP HEADER & ACTION ROW                              */}
+      {/* ---------------------------------------------------- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <Building2 className="w-7 h-7 text-[#00df89]" />
-            <span>{lang === 'bn' ? 'সাপ্লায়ার তালিকা' : 'Suppliers Directory'}</span>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
+            <Building2 className="w-6 h-6 text-[#00df89]" />
+            <span>{lang === 'bn' ? 'সাপ্লায়ার ও সরবরাহকারী ডিরেক্টরি' : 'Suppliers & Vendor Directory'}</span>
           </h1>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
             {lang === 'bn'
-              ? 'আপনার ব্যবসার সরবরাহকারী ও পণ্য ক্রয়ের লেনদেন হিসাব পরিচালনা করুন'
-              : 'Manage vendor contacts, purchases history, and outstanding supplier balances'}
+              ? 'আপনার ব্যবসার সরবরাহকারী তালিকা, ক্রয়ের হিসাব ও বাকি ব্যালেন্স পরিচালনা করুন'
+              : 'Manage vendor contacts, procurement volumes, purchase histories, and track pending dues'}
           </p>
         </div>
 
-        <Button
-          onClick={() => handleOpenModal()}
-          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs shadow-md shadow-[#00df89]/20 flex items-center gap-2 h-10 px-4 rounded-xl cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{lang === 'bn' ? '+ নতুন সাপ্লায়ার যোগ করুন' : '+ Add Supplier'}</span>
-        </Button>
+        <div className="flex items-center gap-2.5">
+          <Button
+            onClick={() => handleOpenModal()}
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>{lang === 'bn' ? 'নতুন সাপ্লায়ার যোগ করুন' : 'Add Supplier'}</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 flex items-center justify-between shadow-xs">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              {lang === 'bn' ? 'মোট সাপ্লায়ার' : 'Total Suppliers'}
-            </p>
-            <p className="text-2xl font-black text-slate-900 dark:text-white">{totalSuppliersCount}</p>
+      {/* ---------------------------------------------------- */}
+      {/* SUMMARY STAT CARDS (4 Columns)                       */}
+      {/* ---------------------------------------------------- */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
+              {lang === 'bn' ? 'মোট সাপ্লায়ার সংখ্যা' : 'Total Suppliers'}
+            </span>
+            <Building2 className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center">
-            <Building2 className="w-5 h-5" />
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <Skeleton className="h-8 w-20 my-0.5" /> : totalSuppliersCount}
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            {lang === 'bn' ? 'নিবন্ধিত ভেন্ডর প্রোফাইল' : 'Registered vendors in DB'}
           </div>
         </Card>
 
-        <Card className="p-4 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 flex items-center justify-between shadow-xs">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
               {lang === 'bn' ? 'মোট ক্রয়ের পরিমাণ' : 'Total Purchases'}
-            </p>
-            <p className="text-2xl font-black text-slate-900 dark:text-white">৳{totalPurchasesAmount.toLocaleString()}</p>
+            </span>
+            <ShoppingBag className="w-4 h-4 text-blue-500" />
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center">
-            <ShoppingBag className="w-5 h-5" />
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${totalPurchasesAmount.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-blue-500 mt-1">
+            {lang === 'bn' ? 'সর্বমোট প্রোকিউরমেন্ট ব্যয়' : 'Lifetime procurement volume'}
           </div>
         </Card>
 
-        <Card className="p-4 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 flex items-center justify-between shadow-xs">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              {lang === 'bn' ? 'সাপ্লায়ার বাকি (Due)' : 'Outstanding Due'}
-            </p>
-            <p className={`text-2xl font-black ${totalDueAmount > 0 ? 'text-amber-500' : 'text-slate-900 dark:text-white'}`}>
-              ৳{totalDueAmount.toLocaleString()}
-            </p>
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
+              {lang === 'bn' ? 'পরিশোধিত অর্থ' : 'Paid to Suppliers'}
+            </span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
-            <DollarSign className="w-5 h-5" />
+          <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] mt-2">
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${totalPaidAmount.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-[#00a86b] dark:text-[#00df89] mt-1">
+            {lang === 'bn' ? 'সাপ্লায়ার পরিশোধ সম্পন্ন' : 'Settled balances'}
+          </div>
+        </Card>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
+              {lang === 'bn' ? 'বকেয়া / পাওনা বাকি' : 'Outstanding Due'}
+            </span>
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-amber-500 mt-2">
+            {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${totalDueAmount.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-amber-500 mt-1">
+            {lang === 'bn' ? 'সাপ্লায়ারের পাওনা বকেয়া' : 'Payables pending'}
           </div>
         </Card>
       </div>
 
-      {/* Search Bar */}
-      <Card className="p-3.5 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder={lang === 'bn' ? 'নাম, কোম্পানি, ফোন বা ইমেইল দিয়ে খুঁজুন...' : 'Search by name, company, phone, email...'}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 rounded-xl text-xs text-slate-900 dark:text-zinc-100 outline-none focus:ring-2 focus:ring-[#00df89]/30"
-          />
+      {/* ---------------------------------------------------- */}
+      {/* SEARCH & FILTER BAR                                  */}
+      {/* ---------------------------------------------------- */}
+      <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="w-full sm:w-80 relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder={lang === 'bn' ? 'নাম, কোম্পানি, ফোন বা ইমেইল দিয়ে খুঁজুন...' : 'Search by name, company, phone, email...'}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#00df89]"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="w-48 sm:w-56">
+              <Select value={dueFilter} onValueChange={setDueFilter}>
+                <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full">
+                  <SelectValue placeholder="All Suppliers" />
+                </SelectTrigger>
+                <SelectContent className="min-w-[200px]">
+                  <SelectItem value="all">{lang === 'bn' ? 'সকল সাপ্লায়ার' : 'All Suppliers'}</SelectItem>
+                  <SelectItem value="due">{lang === 'bn' ? 'বাকি আছে (With Due)' : 'With Outstanding Due'}</SelectItem>
+                  <SelectItem value="paid">{lang === 'bn' ? 'কোনো বাকি নেই (Zero Due)' : 'Zero Due / Paid'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
       </Card>
 
-      {/* Suppliers Table */}
-      <Card className="bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+      {/* ---------------------------------------------------- */}
+      {/* SUPPLIERS DATA TABLE                                 */}
+      {/* ---------------------------------------------------- */}
+      <Card className="p-0 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
         {isLoading ? (
-          <div className="py-16 text-center space-y-3">
-            <Loader2 className="w-8 h-8 animate-spin text-[#00df89] mx-auto" />
-            <p className="text-xs text-slate-400 font-medium">
-              {lang === 'bn' ? 'সাপ্লায়ার তথ্য লোড হচ্ছে...' : 'Loading suppliers...'}
-            </p>
+          <div className="p-5 space-y-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
           </div>
         ) : filteredSuppliers.length === 0 ? (
-          <div className="py-16 text-center space-y-3">
+          <div className="p-12 text-center space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-zinc-800/80 text-slate-400 flex items-center justify-center mx-auto">
               <Building2 className="w-7 h-7" />
             </div>
-            <p className="text-sm font-bold text-slate-700 dark:text-zinc-300">
-              {lang === 'bn' ? 'কোনো সাপ্লায়ার পাওয়া যায়নি' : 'No suppliers found'}
-            </p>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">
+              {lang === 'bn' ? 'কোনো সাপ্লায়ার পাওয়া যায়নি' : 'No Suppliers Found'}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-sm mx-auto">
               {lang === 'bn'
                 ? 'পণ্য ক্রয়ের সময় বা সরাসরি "+ নতুন সাপ্লায়ার" বাটনে ক্লিক করে সাপ্লায়ার যোগ করুন।'
                 : 'Add a new supplier to track purchases, invoice history, and balance due.'}
@@ -290,10 +355,10 @@ export default function Suppliers() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300">
-              <thead className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+            <table className="w-full text-xs text-left text-slate-600 dark:text-zinc-300">
+              <thead className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider select-none">
                 <tr>
-                  <th className="py-3.5 px-4">{lang === 'bn' ? 'সাপ্লায়ার ও কোম্পানি' : 'Supplier & Company'}</th>
+                  <th className="py-3.5 px-4">{lang === 'bn' ? 'সাপ্লায়ার ও প্রতিষ্ঠান' : 'Supplier & Company'}</th>
                   <th className="py-3.5 px-4">{lang === 'bn' ? 'যোগাযোগ' : 'Contact Info'}</th>
                   <th className="py-3.5 px-4">{lang === 'bn' ? 'ঠিকানা' : 'Address'}</th>
                   <th className="py-3.5 px-4">{lang === 'bn' ? 'মোট ক্রয়' : 'Total Purchases'}</th>
@@ -306,7 +371,7 @@ export default function Suppliers() {
                   <tr key={s._id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-800/40 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 font-bold flex items-center justify-center text-sm shrink-0 uppercase">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-[#00df89] font-bold flex items-center justify-center text-sm shrink-0 uppercase border border-emerald-500/20">
                           {s.name ? s.name.charAt(0) : 'S'}
                         </div>
                         <div>
@@ -322,7 +387,7 @@ export default function Suppliers() {
                       <div className="space-y-1 text-[11px]">
                         {s.phone ? (
                           <div className="flex items-center gap-1.5 text-slate-700 dark:text-zinc-300 font-mono">
-                            <Phone className="w-3.5 h-3.5 text-slate-400" />
+                            <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <span>{s.phone}</span>
                           </div>
                         ) : (
@@ -330,7 +395,7 @@ export default function Suppliers() {
                         )}
                         {s.email && (
                           <div className="flex items-center gap-1.5 text-slate-400">
-                            <Mail className="w-3.5 h-3.5" />
+                            <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <span>{s.email}</span>
                           </div>
                         )}
@@ -348,7 +413,7 @@ export default function Suppliers() {
                       )}
                     </td>
 
-                    <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
+                    <td className="py-3.5 px-4 font-bold font-mono text-slate-900 dark:text-white">
                       ৳{(s.total_purchases || 0).toLocaleString()}
                     </td>
 
@@ -368,26 +433,32 @@ export default function Suppliers() {
 
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Purchase History */}
                         <button
+                          type="button"
                           onClick={() => handleOpenHistory(s)}
                           title={lang === 'bn' ? 'ক্রয় ইনভয়েস ইতিহাস' : 'Purchase Invoices History'}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 flex items-center justify-center transition-colors cursor-pointer"
                         >
-                          <Receipt className="w-4 h-4" />
+                          <Receipt className="w-3.5 h-3.5" />
                         </button>
+                        {/* Edit Supplier */}
                         <button
+                          type="button"
                           onClick={() => handleOpenModal(s)}
                           title={lang === 'bn' ? 'সম্পাদনা করুন' : 'Edit'}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors cursor-pointer"
                         >
-                          <Edit2 className="w-4 h-4" />
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
+                        {/* Delete Supplier */}
                         <button
+                          type="button"
                           onClick={() => setDeleteDialog({ isOpen: true, supplier: s, isDeleting: false })}
                           title={lang === 'bn' ? 'মুছে ফেলুন' : 'Delete'}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>

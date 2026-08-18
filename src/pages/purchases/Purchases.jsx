@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectTrigger,
@@ -440,137 +441,155 @@ export default function Purchases() {
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header */}
+    <div className="space-y-6 font-sans pb-12">
+      
+      {/* ---------------------------------------------------- */}
+      {/* TOP HEADER & ACTION ROW                              */}
+      {/* ---------------------------------------------------- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <ShoppingBag className="w-7 h-7 text-[#00df89]" />
-            <span>{lang === 'bn' ? 'পণ্য ক্রয় ও স্টক ইন' : 'Purchases & Stock In'}</span>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
+            <ShoppingBag className="w-6 h-6 text-[#00df89]" />
+            <span>{lang === 'bn' ? 'পণ্য ক্রয় ও স্টক ইন খতিয়ান' : 'Purchases & Stock-In Ledger'}</span>
           </h1>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
             {lang === 'bn'
-              ? 'সাপ্লায়ার থেকে পণ্য ক্রয়, ইনভয়েস রেকর্ড, সম্পাদনা, মুছে ফেলা ও প্রিন্ট রসিদ'
+              ? 'সাপ্লায়ার থেকে পণ্য ক্রয়, ইনভয়েস রেকর্ড, সম্পাদনা, স্টক সমন্বয় ও প্রিন্ট রসিদ'
               : 'Record supplier stock-in transactions, inventory purchases, edit, delete & print receipts'}
           </p>
         </div>
 
-        <Button
-          onClick={handleOpenNewPurchase}
-          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs shadow-md shadow-[#00df89]/20 flex items-center gap-2 h-10 px-4 rounded-xl cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{lang === 'bn' ? '+ নতুন পণ্য ক্রয় / স্টক ইন' : '+ New Purchase / Stock In'}</span>
-        </Button>
+        <div className="flex items-center gap-2.5">
+          <Button
+            onClick={handleOpenNewPurchase}
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>{lang === 'bn' ? 'নতুন স্টক ক্রয় করুন' : 'New Purchase / Stock In'}</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <Card className="p-4 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 flex items-center justify-between shadow-xs">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+      {/* ---------------------------------------------------- */}
+      {/* SUMMARY STAT CARDS (4 Columns)                       */}
+      {/* ---------------------------------------------------- */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
               {lang === 'bn' ? 'মোট ক্রয় ইনভয়েস' : 'Total Invoices'}
-            </p>
-            <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.total_purchases || purchases.length}</p>
+            </span>
+            <Receipt className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center">
-            <Receipt className="w-5 h-5" />
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <Skeleton className="h-8 w-20 my-0.5" /> : (stats.total_purchases || purchases.length)}
           </div>
-        </Card>
-
-        <Card className="p-4 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 flex items-center justify-between shadow-xs">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              {lang === 'bn' ? 'মোট ব্যয় (Spend)' : 'Total Spend'}
-            </p>
-            <p className="text-2xl font-black text-slate-900 dark:text-white">
-              ৳{(stats.total_amount || 0).toLocaleString()}
-            </p>
-          </div>
-          <div className="w-11 h-11 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center">
-            <ShoppingBag className="w-5 h-5" />
+          <div className="text-xs text-slate-500 mt-1">
+            {lang === 'bn' ? 'ডাটাবেজে সংরক্ষিত রেকর্ড' : 'Recorded procurement batches'}
           </div>
         </Card>
 
-        <Card className="p-4 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 flex items-center justify-between shadow-xs">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
+              {lang === 'bn' ? 'মোট ব্যয় (Spend)' : 'Total Procurement'}
+            </span>
+            <ShoppingBag className="w-4 h-4 text-blue-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${(stats.total_amount || 0).toLocaleString()}`}
+          </div>
+          <div className="text-xs text-blue-500 mt-1">
+            {lang === 'bn' ? 'মোট স্টক ইন বিল' : 'Gross invoice volume'}
+          </div>
+        </Card>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
               {lang === 'bn' ? 'পরিশোধিত অর্থ' : 'Paid Amount'}
-            </p>
-            <p className="text-2xl font-black text-emerald-600 dark:text-[#00df89]">
-              ৳{(stats.total_paid || 0).toLocaleString()}
-            </p>
+            </span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center">
-            <CheckCircle2 className="w-5 h-5" />
+          <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] mt-2">
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${(stats.total_paid || 0).toLocaleString()}`}
+          </div>
+          <div className="text-xs text-[#00a86b] dark:text-[#00df89] mt-1">
+            {lang === 'bn' ? 'নগদ ও অনলাইন পরিশোধ' : 'Cash & settled payments'}
           </div>
         </Card>
 
-        <Card className="p-4 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 flex items-center justify-between shadow-xs">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              {lang === 'bn' ? 'বকেয়া / পাওনা বাকি' : 'Total Due'}
-            </p>
-            <p className="text-2xl font-black text-amber-500">
-              ৳{(stats.total_due || 0).toLocaleString()}
-            </p>
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
+              {lang === 'bn' ? 'বকেয়া / পাওনা বাকি' : 'Outstanding Due'}
+            </span>
+            <AlertCircle className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="w-11 h-11 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
-            <AlertCircle className="w-5 h-5" />
+          <div className="text-2xl sm:text-3xl font-bold text-amber-500 mt-2">
+            {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${(stats.total_due || 0).toLocaleString()}`}
+          </div>
+          <div className="text-xs text-amber-500 mt-1">
+            {lang === 'bn' ? 'সাপ্লায়ারের পাওনা বকেয়া' : 'Payables pending'}
           </div>
         </Card>
       </div>
 
-      {/* Filter & Search Bar */}
-      <Card className="p-4 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-xs">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative w-full sm:w-80">
+      {/* ---------------------------------------------------- */}
+      {/* FILTER & SEARCH BAR                                  */}
+      {/* ---------------------------------------------------- */}
+      <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="w-full sm:w-80 relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder={lang === 'bn' ? 'ইনভয়েস নং, সাপ্লায়ার বা পণ্যের নাম খুঁজুন...' : 'Search invoice, supplier, item...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[#00df89]"
             />
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-44 bg-slate-50 dark:bg-[#09090b]">
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{lang === 'bn' ? 'সব স্ট্যাটাস' : 'All Statuses'}</SelectItem>
-                <SelectItem value="paid">{lang === 'bn' ? 'পরিশোধিত (Paid)' : 'Paid'}</SelectItem>
-                <SelectItem value="partial">{lang === 'bn' ? 'আংশিক বাকি (Partial)' : 'Partial'}</SelectItem>
-                <SelectItem value="due">{lang === 'bn' ? 'বাকি (Due)' : 'Due'}</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="w-48 sm:w-56">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent className="min-w-[200px]">
+                  <SelectItem value="all">{lang === 'bn' ? 'সব স্ট্যাটাস' : 'All Statuses'}</SelectItem>
+                  <SelectItem value="paid">{lang === 'bn' ? 'পরিশোধিত (Paid)' : 'Paid'}</SelectItem>
+                  <SelectItem value="partial">{lang === 'bn' ? 'আংশিক বাকি (Partial)' : 'Partial'}</SelectItem>
+                  <SelectItem value="due">{lang === 'bn' ? 'বাকি (Due)' : 'Due'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       </Card>
 
-      {/* Purchases Table */}
-      <Card className="bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 overflow-hidden shadow-xs">
+      {/* ---------------------------------------------------- */}
+      {/* PURCHASES DATA TABLE                                 */}
+      {/* ---------------------------------------------------- */}
+      <Card className="p-0 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
         {isLoading ? (
-          <div className="py-16 text-center space-y-3">
-            <Loader2 className="w-8 h-8 animate-spin text-[#00df89] mx-auto" />
-            <p className="text-xs text-slate-400 font-medium">
-              {lang === 'bn' ? 'ক্রয় তথ্য লোড হচ্ছে...' : 'Loading purchases...'}
-            </p>
+          <div className="p-5 space-y-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
           </div>
         ) : filteredPurchases.length === 0 ? (
-          <div className="py-16 text-center space-y-3">
+          <div className="p-12 text-center space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-zinc-800/80 text-slate-400 flex items-center justify-center mx-auto">
               <ShoppingBag className="w-7 h-7" />
             </div>
-            <p className="text-sm font-bold text-slate-700 dark:text-zinc-300">
-              {lang === 'bn' ? 'কোনো ক্রয় রেকর্ড পাওয়া যায়নি' : 'No purchase records found'}
-            </p>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">
+              {lang === 'bn' ? 'কোনো ক্রয় রেকর্ড পাওয়া যায়নি' : 'No Purchase Records Found'}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-sm mx-auto">
               {lang === 'bn'
-                ? 'সাপ্লায়ার থেকে নতুন স্টক আনতে বা ক্রয় রেকর্ড করতে "+ নতুন পণ্য ক্রয়" বাটনে চাপুন।'
+                ? 'সাপ্লায়ার থেকে নতুন স্টক আনতে বা ক্রয় রেকর্ড করতে "+ নতুন স্টক ক্রয় করুন" বাটনে চাপুন।'
                 : 'Click "+ New Purchase / Stock In" to add fresh inventory from a supplier.'}
             </p>
             <div className="pt-2">
@@ -587,7 +606,7 @@ export default function Purchases() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300">
-              <thead className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <thead className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider select-none">
                 <tr>
                   <th className="py-3.5 px-4">{lang === 'bn' ? 'ইনভয়েস ও তারিখ' : 'Invoice & Date'}</th>
                   <th className="py-3.5 px-4">{lang === 'bn' ? 'সাপ্লায়ার' : 'Supplier'}</th>
