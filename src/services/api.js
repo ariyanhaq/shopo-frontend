@@ -107,6 +107,45 @@ export const api = {
       }),
   },
 
+  // Suppliers
+  suppliers: {
+    list: (params = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return request(`/suppliers${qs ? `?${qs}` : ''}`);
+    },
+    getById: (id) => request(`/suppliers/${id}`),
+    getPurchases: (id) => request(`/suppliers/${id}/purchases`),
+    create: (data) =>
+      request('/suppliers', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id, data) =>
+      request(`/suppliers/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id) =>
+      request(`/suppliers/${id}`, {
+        method: 'DELETE',
+      }),
+  },
+
+  // Purchases & Stock In
+  purchases: {
+    list: (params = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return request(`/purchases${qs ? `?${qs}` : ''}`);
+    },
+    getById: (id) => request(`/purchases/${id}`),
+    getStats: () => request('/purchases/stats'),
+    create: (data) =>
+      request('/purchases', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+
   // Customers
   customers: {
     list: (params = {}) => {

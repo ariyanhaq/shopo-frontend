@@ -9,6 +9,8 @@ export * from './dashboard';
 export * from './inventory';
 export * from './sales';
 export * from './customers';
+export * from './suppliers';
+export * from './purchases';
 export * from './employees';
 export * from './reports';
 export * from './gym';

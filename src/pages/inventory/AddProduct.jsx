@@ -1,6 +1,6 @@
 /**
  * @file AddProduct.jsx
- * @description Dedicated Add Product page for inventory management saving directly to MongoDB with inline Category creation.
+ * @description Dedicated Add Product page for inventory management saving directly to MongoDB with inline Category & Supplier creation.
  */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -20,7 +20,7 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import ProductImageUploader from '@/components/common/ProductImageUploader';
-import { Package, ArrowLeft, CheckCircle2, Loader2, Sparkles, Barcode, FolderPlus, Plus } from 'lucide-react';
+import { Package, ArrowLeft, CheckCircle2, Loader2, Sparkles, Barcode, FolderPlus, Plus, Building2 } from 'lucide-react';
 
 export default function AddProduct() {
   const navigate = useNavigate();
@@ -33,6 +33,7 @@ export default function AddProduct() {
   const categoryPlaceholder = getCategoryPlaceholder(shopBusinessType, lang);
 
   const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Inline Category Creator
@@ -40,10 +41,16 @@ export default function AddProduct() {
   const [newCatName, setNewCatName] = useState('');
   const [isCreatingCat, setIsCreatingCat] = useState(false);
 
+  // Inline Supplier Creator
+  const [showAddSuppInline, setShowAddSuppInline] = useState(false);
+  const [newSuppData, setNewSuppData] = useState({ name: '', phone: '', company_name: '', address: '' });
+  const [isCreatingSupp, setIsCreatingSupp] = useState(false);
+
   const [form, setForm] = useState({
     name: '',
     image_url: '',
     category_id: '__general__',
+    supplier_id: '',
     sku: '',
     barcode: '',
     cost_price: '',
@@ -54,15 +61,19 @@ export default function AddProduct() {
   });
 
   useEffect(() => {
-    const loadCats = async () => {
+    const loadData = async () => {
       try {
-        const res = await api.categories.list();
-        if (res.data) setCategories(Array.isArray(res.data) ? res.data : []);
+        const [catRes, suppRes] = await Promise.all([
+          api.categories.list().catch(() => ({ data: [] })),
+          api.suppliers.list().catch(() => ({ data: [] })),
+        ]);
+        if (catRes.data) setCategories(Array.isArray(catRes.data) ? catRes.data : []);
+        if (suppRes.data) setSuppliers(Array.isArray(suppRes.data) ? suppRes.data : []);
       } catch (err) {
-        console.warn('Could not load categories:', err.message);
+        console.warn('Could not load categories/suppliers:', err.message);
       }
     };
-    loadCats();
+    loadData();
   }, []);
 
   const generateSku = () => {
@@ -93,6 +104,28 @@ export default function AddProduct() {
     }
   };
 
+  const handleCreateSupplier = async (e) => {
+    e?.preventDefault();
+    if (!newSuppData.name.trim()) return;
+
+    setIsCreatingSupp(true);
+    try {
+      const res = await api.suppliers.create(newSuppData);
+      const created = res.data;
+      if (created?._id) {
+        setSuppliers((prev) => [created, ...prev]);
+        setForm((prev) => ({ ...prev, supplier_id: created._id }));
+        toast.success(lang === 'bn' ? `সাপ্লায়ার '${created.name}' তৈরি সম্পন্ন!` : `Supplier '${created.name}' created!`);
+      }
+      setNewSuppData({ name: '', phone: '', company_name: '', address: '' });
+      setShowAddSuppInline(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create supplier');
+    } finally {
+      setIsCreatingSupp(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -101,20 +134,50 @@ export default function AddProduct() {
         ? form.category_id
         : (categories.find((c) => c.name?.toLowerCase() === 'general')?._id || undefined);
 
+      const initialStock = parseInt(form.stock_quantity, 10) || 0;
+      const costPrice = parseFloat(form.cost_price) || 0;
+      const sellPrice = parseFloat(form.selling_price) || 0;
+
       const payload = {
         name: form.name.trim(),
         image_url: form.image_url || undefined,
         images: form.image_url ? [form.image_url] : [],
         category_id: finalCatId,
+        supplier_id: form.supplier_id || undefined,
         sku: form.sku.trim() || undefined,
         barcode: form.barcode.trim() || undefined,
-        cost_price: parseFloat(form.cost_price) || 0,
-        selling_price: parseFloat(form.selling_price) || 0,
-        stock_quantity: parseInt(form.stock_quantity, 10) || 0,
+        cost_price: costPrice,
+        selling_price: sellPrice,
+        stock_quantity: initialStock,
         low_stock_threshold: parseInt(form.low_stock_threshold, 10) || 5,
         unit: form.unit || 'pcs',
       };
-      await api.products.create(payload);
+
+      const createdRes = await api.products.create(payload);
+
+      // If initial stock > 0, log purchase ledger transaction
+      if (initialStock > 0 && createdRes?.data?._id) {
+        try {
+          await api.purchases.create({
+            supplier_id: form.supplier_id || null,
+            items: [
+              {
+                product_id: createdRes.data._id,
+                product_name: createdRes.data.name,
+                quantity: initialStock,
+                unit_cost: costPrice,
+                selling_price: sellPrice,
+              },
+            ],
+            paid_amount: initialStock * costPrice,
+            payment_method: 'cash',
+            notes: 'Initial stock recorded on product creation',
+          });
+        } catch (pErr) {
+          console.warn('Initial stock purchase logging skipped:', pErr);
+        }
+      }
+
       toast.success(lang === 'bn' ? 'পণ্য সফলভাবে ইনভেন্টরিতে সংরক্ষিত হয়েছে!' : 'Product added successfully to inventory!');
       navigate('/products');
     } catch (err) {
@@ -150,15 +213,17 @@ export default function AddProduct() {
           </CardTitle>
           <CardDescription className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
             {lang === 'bn'
-              ? 'আপনার দোকানের নতুন পণ্যের নাম, ছবি, ক্যাটাগরি, মূল্য ও স্টক সংখ্যা লিখুন।'
-              : 'Fill in details below to register a new item with photos in your inventory database.'}
+              ? 'আপনার দোকানের নতুন পণ্যের নাম, ছবি, ক্যাটাগরি, সাপ্লায়ার, মূল্য ও স্টক সংখ্যা লিখুন।'
+              : 'Fill in details below to register a new item with vendor info and photos in your inventory database.'}
           </CardDescription>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           
           <div className="space-y-1.5">
-            <label className="block font-medium text-slate-700 dark:text-zinc-300">Product Title / Name *</label>
+            <label className="block font-medium text-slate-700 dark:text-zinc-300">
+              {lang === 'bn' ? 'পণ্যের নাম *' : 'Product Title / Name *'}
+            </label>
             <input
               type="text"
               required
@@ -173,13 +238,15 @@ export default function AddProduct() {
           <ProductImageUploader
             value={form.image_url}
             onChange={(url) => setForm({ ...form, image_url: url })}
-            label="Product Photo (Hosted via ImgBB)"
+            label={lang === 'bn' ? 'পণ্যের ছবি (ImgBB হোস্টিং)' : 'Product Photo (Hosted via ImgBB)'}
           />
 
           {/* Category with Inline Category Creator */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="font-medium text-slate-700 dark:text-zinc-300">Category</label>
+              <label className="font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
+              </label>
               <button
                 type="button"
                 onClick={() => {
@@ -189,7 +256,7 @@ export default function AddProduct() {
                 className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <FolderPlus className="w-3.5 h-3.5" />
-                <span>{showAddCatInline ? 'Choose existing' : '+ Add New Category'}</span>
+                <span>{showAddCatInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন ক্যাটাগরি' : '+ Add New Category')}</span>
               </button>
             </div>
 
@@ -207,9 +274,9 @@ export default function AddProduct() {
                   size="sm"
                   disabled={isCreatingCat || !newCatName.trim()}
                   onClick={handleCreateCategory}
-                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-9 px-3.5"
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-9 px-3.5 cursor-pointer"
                 >
-                  {isCreatingCat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save & Select'}
+                  {isCreatingCat ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save & Select')}
                 </Button>
               </div>
             ) : (
@@ -230,12 +297,99 @@ export default function AddProduct() {
             )}
           </div>
 
+          {/* Supplier with Inline Supplier Creator */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'সাপ্লায়ার (সরবরাহকারী)' : 'Supplier (Vendor)'}
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddSuppInline(!showAddSuppInline);
+                  setNewSuppData({ name: '', phone: '', company_name: '', address: '' });
+                }}
+                className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>{showAddSuppInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন সাপ্লায়ার' : '+ Add New Supplier')}</span>
+              </button>
+            </div>
+
+            {showAddSuppInline ? (
+              <div className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder={lang === 'bn' ? 'সাপ্লায়ারের নাম *' : 'Supplier Name *'}
+                    value={newSuppData.name}
+                    onChange={(e) => setNewSuppData({ ...newSuppData, name: e.target.value })}
+                    className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder={lang === 'bn' ? 'ফোন নম্বর' : 'Phone Number'}
+                    value={newSuppData.phone}
+                    onChange={(e) => setNewSuppData({ ...newSuppData, phone: e.target.value })}
+                    className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder={lang === 'bn' ? 'প্রতিষ্ঠান / কোম্পানি' : 'Company Name'}
+                    value={newSuppData.company_name}
+                    onChange={(e) => setNewSuppData({ ...newSuppData, company_name: e.target.value })}
+                    className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder={lang === 'bn' ? 'ঠিকানা' : 'Address'}
+                    value={newSuppData.address}
+                    onChange={(e) => setNewSuppData({ ...newSuppData, address: e.target.value })}
+                    className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isCreatingSupp || !newSuppData.name.trim()}
+                    onClick={handleCreateSupplier}
+                    className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3.5 cursor-pointer"
+                  >
+                    {isCreatingSupp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (lang === 'bn' ? 'সেভ ও নির্বাচন' : 'Save & Select')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Select
+                value={form.supplier_id || '__none__'}
+                onValueChange={(val) => setForm({ ...form, supplier_id: val === '__none__' ? '' : val })}
+              >
+                <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                  <SelectValue placeholder={lang === 'bn' ? 'সাপ্লায়ার নির্বাচন করুন (ঐচ্ছিক)' : 'Select supplier (Optional)'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'}</SelectItem>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s._id} value={s._id}>
+                      {s.name} {s.company_name ? `(${s.company_name})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
-                <label className="font-medium text-slate-700 dark:text-zinc-300">SKU Code</label>
-                <button type="button" onClick={generateSku} className="text-[#00a86b] dark:text-[#00df89] text-[11px] font-medium flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Auto-generate
+                <label className="font-medium text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'SKU কোড' : 'SKU Code'}
+                </label>
+                <button type="button" onClick={generateSku} className="text-[#00a86b] dark:text-[#00df89] text-[11px] font-medium flex items-center gap-1 cursor-pointer">
+                  <Sparkles className="w-3 h-3" /> {lang === 'bn' ? 'স্বয়ংক্রিয় তৈরি' : 'Auto-generate'}
                 </button>
               </div>
               <input
@@ -248,7 +402,9 @@ export default function AddProduct() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="font-medium text-slate-700 dark:text-zinc-300">Barcode / EAN (Optional)</label>
+              <label className="font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'বারকোড / EAN (ঐচ্ছিক)' : 'Barcode / EAN (Optional)'}
+              </label>
               <input
                 type="text"
                 placeholder="Scan or enter barcode..."
@@ -261,7 +417,9 @@ export default function AddProduct() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="font-medium text-slate-700 dark:text-zinc-300">Cost Price (৳)</label>
+              <label className="font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'ক্রয়মূল্য (৳)' : 'Cost Price (৳)'}
+              </label>
               <input
                 type="number"
                 placeholder="0.00"
@@ -272,7 +430,9 @@ export default function AddProduct() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="font-medium text-slate-700 dark:text-zinc-300">Selling Price (৳) *</label>
+              <label className="font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'বিক্রয়মূল্য (৳) *' : 'Selling Price (৳) *'}
+              </label>
               <input
                 type="number"
                 required
@@ -286,7 +446,9 @@ export default function AddProduct() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <label className="font-medium text-slate-700 dark:text-zinc-300">Initial Stock</label>
+              <label className="font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'প্রাথমিক স্টক' : 'Initial Stock'}
+              </label>
               <input
                 type="number"
                 placeholder="0"
@@ -297,7 +459,9 @@ export default function AddProduct() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="font-medium text-slate-700 dark:text-zinc-300">Low Stock Alert Level</label>
+              <label className="font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'সতর্কতা লেভেল' : 'Low Stock Alert Level'}
+              </label>
               <input
                 type="number"
                 value={form.low_stock_threshold}
@@ -307,7 +471,9 @@ export default function AddProduct() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="font-medium text-slate-700 dark:text-zinc-300">Unit (e.g. Pcs, Kg, Box)</label>
+              <label className="font-medium text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? 'একক (যেমন: Pcs, Kg)' : 'Unit (e.g. Pcs, Kg, Box)'}
+              </label>
               <input
                 type="text"
                 value={form.unit}
@@ -318,16 +484,16 @@ export default function AddProduct() {
           </div>
 
           <div className="pt-4 flex justify-end gap-2 border-t border-slate-100 dark:border-zinc-800">
-            <Button type="button" variant="outline" size="sm" onClick={() => navigate('/products')}>
-              Cancel
+            <Button type="button" variant="outline" size="sm" onClick={() => navigate('/products')} className="cursor-pointer">
+              {lang === 'bn' ? 'বাতিল' : 'Cancel'}
             </Button>
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1.5 shadow-xs"
+              className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1.5 shadow-xs cursor-pointer"
             >
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              <span>{isSubmitting ? 'Saving to Database...' : 'Save Product'}</span>
+              <span>{isSubmitting ? (lang === 'bn' ? 'সংরক্ষণ করা হচ্ছে...' : 'Saving to Database...') : (lang === 'bn' ? 'পণ্য সংরক্ষণ করুন' : 'Save Product')}</span>
             </Button>
           </div>
 

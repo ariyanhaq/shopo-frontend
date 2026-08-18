@@ -27,7 +27,8 @@ import {
   Package, DollarSign, Plus, Search, Filter, AlertTriangle,
   Download, Edit2, Trash2, CheckCircle2, Clock, X, Barcode,
   Layers, ArrowUpRight, ShieldCheck, Tag, ChevronRight, Loader2,
-  Sparkles, FolderPlus, ArrowUpDown, ArrowUp, ArrowDown, ImageIcon
+  Sparkles, FolderPlus, ArrowUpDown, ArrowUp, ArrowDown, ImageIcon,
+  Building2, ShoppingBag, Boxes, HelpCircle
 } from 'lucide-react';
 
 export default function Products() {
@@ -44,18 +45,25 @@ export default function Products() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [stockStatusFilter, setStockStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('category_asc');
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  useEffect(() => {
-    if (location.state?.openAddModal || new URLSearchParams(location.search).get('action') === 'add') {
-      setIsAddModalOpen(true);
-    }
-  }, [location]);
+  // Modals
+  const [isActionChoiceModalOpen, setIsActionChoiceModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
+  const [isQuickEditPickerOpen, setIsQuickEditPickerOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (location.state?.openAddModal || new URLSearchParams(location.search).get('action') === 'add') {
+      setIsActionChoiceModalOpen(true);
+    }
+  }, [location]);
+
   const [productList, setProductList] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Inline Category Creator State
@@ -64,11 +72,17 @@ export default function Products() {
   const [newCatName, setNewCatName] = useState('');
   const [isCreatingCat, setIsCreatingCat] = useState(false);
 
+  // Inline Supplier Creator State
+  const [showAddSuppInline, setShowAddSuppInline] = useState(false);
+  const [newSuppData, setNewSuppData] = useState({ name: '', phone: '', company_name: '', address: '' });
+  const [isCreatingSupp, setIsCreatingSupp] = useState(false);
+
   // New Product Form State
   const [newProduct, setNewProduct] = useState({
     name: '',
     image_url: '',
     category_id: '__general__',
+    supplier_id: '',
     sku: '',
     barcode: '',
     stock: '',
@@ -78,12 +92,25 @@ export default function Products() {
     lowStockThreshold: 5,
   });
 
+  // Restock / Add Stock to Existing Product Form State
+  const [restockForm, setRestockForm] = useState({
+    product_id: '',
+    supplier_id: '',
+    quantity: 1,
+    unit_cost: 0,
+    selling_price: 0,
+    paid_amount: '',
+    payment_method: 'cash',
+    notes: '',
+  });
+
   // Edit Product Form State
   const [editForm, setEditForm] = useState({
     id: '',
     name: '',
     image_url: '',
     category_id: '',
+    supplier_id: '',
     sku: '',
     barcode: '',
     stock: '',
@@ -96,9 +123,10 @@ export default function Products() {
   const fetchDbProducts = async () => {
     setIsLoading(true);
     try {
-      const [prodRes, catRes] = await Promise.all([
+      const [prodRes, catRes, suppRes] = await Promise.all([
         api.products.list(),
         api.categories.list().catch(() => ({ data: [] })),
+        api.suppliers.list().catch(() => ({ data: [] })),
       ]);
       const rawList = Array.isArray(prodRes?.data)
         ? prodRes.data
@@ -109,6 +137,11 @@ export default function Products() {
       const fetchedCategories = Array.isArray(catRes?.data) ? catRes.data : [];
       if (catRes?.data) {
         setCategories(fetchedCategories);
+      }
+
+      const fetchedSuppliers = Array.isArray(suppRes?.data) ? suppRes.data : [];
+      if (suppRes?.data) {
+        setSuppliers(fetchedSuppliers);
       }
 
       const mapped = rawList.map((p) => {
@@ -127,6 +160,7 @@ export default function Products() {
           sku: p.sku || 'N/A',
           barcode: p.barcode || '',
           category_id: matchingCat ? matchingCat._id : (catId || '__general__'),
+          supplier_id: p.supplier_id?._id || p.supplier_id || '',
           category: catName,
           stock: p.stock_quantity ?? 0,
           unit: p.unit || 'Pcs',
@@ -240,6 +274,30 @@ export default function Products() {
     }
   };
 
+  // Handle Inline Supplier Creation
+  const handleCreateSupplier = async (forRestock = false) => {
+    if (!newSuppData.name.trim()) return;
+    setIsCreatingSupp(true);
+    try {
+      const res = await api.suppliers.create(newSuppData);
+      if (res?.data) {
+        setSuppliers((prev) => [res.data, ...prev]);
+        if (forRestock) {
+          setRestockForm((prev) => ({ ...prev, supplier_id: res.data._id }));
+        } else {
+          setNewProduct((prev) => ({ ...prev, supplier_id: res.data._id }));
+        }
+        setShowAddSuppInline(false);
+        setNewSuppData({ name: '', phone: '', company_name: '', address: '' });
+        toast.success(lang === 'bn' ? `সাপ্লায়ার '${res.data.name}' যুক্ত হয়েছে!` : `Supplier '${res.data.name}' created!`);
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to create supplier.');
+    } finally {
+      setIsCreatingSupp(false);
+    }
+  };
+
   // Handle Add Product Submit
   const handleAddProduct = async (e) => {
     e.preventDefault();
@@ -251,25 +309,54 @@ export default function Products() {
         ? newProduct.category_id
         : (categories.find((c) => c.name?.toLowerCase() === 'general')?._id || undefined);
 
-      await api.products.create({
+      const initialStock = parseInt(newProduct.stock, 10) || 0;
+      const costPrice = parseFloat(newProduct.buyPrice) || 0;
+      const sellPrice = parseFloat(newProduct.sellPrice) || 0;
+
+      const createdRes = await api.products.create({
         name: newProduct.name.trim(),
         image_url: newProduct.image_url || undefined,
         images: newProduct.image_url ? [newProduct.image_url] : [],
         category_id: finalCatId,
+        supplier_id: newProduct.supplier_id || undefined,
         sku: newProduct.sku ? newProduct.sku.trim() : undefined,
         barcode: newProduct.barcode ? newProduct.barcode.trim() : undefined,
-        cost_price: parseFloat(newProduct.buyPrice) || 0,
-        selling_price: parseFloat(newProduct.sellPrice) || 0,
-        stock_quantity: parseInt(newProduct.stock, 10) || 0,
+        cost_price: costPrice,
+        selling_price: sellPrice,
+        stock_quantity: initialStock,
         unit: newProduct.unit || 'Pcs',
         low_stock_threshold: parseInt(newProduct.lowStockThreshold, 10) || 5,
       });
+
+      // If initial stock > 0, also log a purchase transaction in the Purchase ledger
+      if (initialStock > 0 && createdRes?.data?._id) {
+        try {
+          await api.purchases.create({
+            supplier_id: newProduct.supplier_id || null,
+            items: [
+              {
+                product_id: createdRes.data._id,
+                product_name: createdRes.data.name,
+                quantity: initialStock,
+                unit_cost: costPrice,
+                selling_price: sellPrice,
+              },
+            ],
+            paid_amount: initialStock * costPrice,
+            payment_method: 'cash',
+            notes: 'Initial stock recorded on product creation',
+          });
+        } catch (pErr) {
+          console.warn('Initial stock purchase logging notice:', pErr);
+        }
+      }
 
       setIsAddModalOpen(false);
       setNewProduct({
         name: '',
         image_url: '',
         category_id: '__general__',
+        supplier_id: '',
         sku: '',
         barcode: '',
         stock: '',
@@ -282,6 +369,63 @@ export default function Products() {
       fetchDbProducts();
     } catch (err) {
       toast.error(err.message || 'Failed to save product in database.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle Restock / Purchase Submit for Existing Product
+  const handleRestockSubmit = async (e) => {
+    e.preventDefault();
+    if (!restockForm.product_id) {
+      toast.error(lang === 'bn' ? 'অনুগ্রহ করে পণ্য নির্বাচন করুন।' : 'Please select a product.');
+      return;
+    }
+    const qty = Number(restockForm.quantity) || 0;
+    if (qty <= 0) {
+      toast.error(lang === 'bn' ? 'পরিমাণ কমপক্ষে ১ হতে হবে।' : 'Quantity must be at least 1.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const selectedProd = productList.find((p) => p.id === restockForm.product_id);
+      const unitCost = Number(restockForm.unit_cost) || 0;
+      const totalCost = qty * unitCost;
+      const paid = restockForm.paid_amount !== '' ? Number(restockForm.paid_amount) : totalCost;
+
+      await api.purchases.create({
+        supplier_id: restockForm.supplier_id || null,
+        items: [
+          {
+            product_id: restockForm.product_id,
+            product_name: selectedProd?.name || 'Product',
+            quantity: qty,
+            unit_cost: unitCost,
+            selling_price: Number(restockForm.selling_price) || selectedProd?.sellPrice || 0,
+            total_cost: totalCost,
+          },
+        ],
+        paid_amount: paid,
+        payment_method: restockForm.payment_method || 'cash',
+        notes: restockForm.notes || '',
+      });
+
+      toast.success(lang === 'bn' ? 'পণ্য সফলভাবে রিস্টক ও ক্রয় রেকর্ড সম্পন্ন!' : 'Stock added & purchase recorded successfully!');
+      setIsRestockModalOpen(false);
+      setRestockForm({
+        product_id: '',
+        supplier_id: '',
+        quantity: 1,
+        unit_cost: 0,
+        selling_price: 0,
+        paid_amount: '',
+        payment_method: 'cash',
+        notes: '',
+      });
+      fetchDbProducts();
+    } catch (err) {
+      toast.error(err.message || 'Failed to record stock purchase.');
     } finally {
       setIsSubmitting(false);
     }
@@ -399,11 +543,11 @@ export default function Products() {
 
         <div className="flex items-center gap-2.5">
           <Button
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => setIsActionChoiceModalOpen(true)}
             className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>{lang === 'bn' ? 'নতুন পণ্য যোগ করুন' : 'Add Product'}</span>
+            <span>{lang === 'bn' ? 'নতুন পণ্য বা স্টক যোগ' : 'Add Product / Stock'}</span>
           </Button>
         </div>
       </div>
@@ -568,8 +712,8 @@ export default function Products() {
                 Clear Category Filter
               </Button>
             ) : (
-              <Button size="sm" onClick={() => setIsAddModalOpen(true)} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold">
-                <Plus className="w-3.5 h-3.5 mr-1" /> Add First Product
+              <Button size="sm" onClick={() => setIsActionChoiceModalOpen(true)} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold cursor-pointer">
+                <Plus className="w-3.5 h-3.5 mr-1" /> {lang === 'bn' ? 'প্রথম পণ্য যোগ করুন' : 'Add First Product'}
               </Button>
             )}
           </div>
@@ -679,21 +823,141 @@ export default function Products() {
       </Card>
 
       {/* ---------------------------------------------------- */}
-      {/* ADD PRODUCT MODAL                                    */}
+      {/* 1. ACTION CHOICE SELECTOR MODAL                      */}
+      {/* ---------------------------------------------------- */}
+      {isActionChoiceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-[#00df89] flex items-center justify-center">
+                  <Package className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    {lang === 'bn' ? 'পণ্য অ্যাকশন বেছে নিন' : 'Choose Product Action'}
+                  </h2>
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    {lang === 'bn' ? 'আপনি কি নতুন পণ্য তৈরি, স্টক যোগ বা বিদ্যমান পণ্য আপডেট করতে চান?' : 'What action would you like to take on inventory?'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsActionChoiceModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 pt-1">
+              {/* Option 1: Add New Product */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsActionChoiceModalOpen(false);
+                  setIsAddModalOpen(true);
+                }}
+                className="w-full p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 hover:border-[#00df89] dark:hover:border-[#00df89] hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 transition-all text-left flex items-start gap-3.5 cursor-pointer group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-[#00df89] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-[#00df89] transition-colors">
+                      {lang === 'bn' ? '১. সম্পূর্ণ নতুন পণ্য তৈরি করুন' : '1. Add Brand New Product'}
+                    </h3>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    {lang === 'bn'
+                      ? 'নতুন নাম, বারকোড, ক্যাটাগরি, সাপ্লায়ার ও প্রাথমিক স্টক দিয়ে ক্যাটালগে পণ্য যোগ করুন।'
+                      : 'Create a new product item with pricing, barcode, category, supplier, and initial stock.'}
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 2: Add Stock / Restock Existing Product */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsActionChoiceModalOpen(false);
+                  setIsRestockModalOpen(true);
+                }}
+                className="w-full p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 hover:border-[#00df89] dark:hover:border-[#00df89] hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 transition-all text-left flex items-start gap-3.5 cursor-pointer group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">
+                      {lang === 'bn' ? '২. বিদ্যমান পণ্যে স্টক যোগ / ক্রয় করুন' : '2. Add Stock / Restock Existing'}
+                    </h3>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    {lang === 'bn'
+                      ? 'সাপ্লায়ার থেকে বিদ্যমান পণ্যের নতুন স্টক ক্রয় রেকর্ড করুন (স্বয়ংক্রিয়ভাবে স্টক ও ক্রয় খতিয়ান আপডেট হবে)।'
+                      : 'Receive new batch from supplier, increase stock count, and log purchase in DB ledger.'}
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 3: Update Existing Product */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsActionChoiceModalOpen(false);
+                  setIsQuickEditPickerOpen(true);
+                }}
+                className="w-full p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 hover:border-[#00df89] dark:hover:border-[#00df89] hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 transition-all text-left flex items-start gap-3.5 cursor-pointer group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-amber-500 transition-colors">
+                      {lang === 'bn' ? '৩. বিদ্যমান পণ্যের বিবরণ আপডেট করুন' : '3. Quick Update Existing Product'}
+                    </h3>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                    {lang === 'bn'
+                      ? 'যেকোনো পণ্যের নাম, বিক্রয়মূল্য, ক্যাটাগরি, বারকোড বা সতর্কতা লেভেল সংশোধন করুন।'
+                      : 'Search and modify details, selling prices, barcode, or category of an existing item.'}
+                  </p>
+                </div>
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* 2. ADD BRAND NEW PRODUCT MODAL                       */}
       {/* ---------------------------------------------------- */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
           <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl my-8">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">Add New Product to Inventory</h2>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 p-1">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#00df89]" />
+                <span>{lang === 'bn' ? 'নতুন পণ্য যুক্ত করুন' : 'Add New Product to Inventory'}</span>
+              </h2>
+              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleAddProduct} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Product Name *</label>
+                <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'পণ্যের নাম *' : 'Product Name *'}
+                </label>
                 <input
                   type="text"
                   required
@@ -708,13 +972,15 @@ export default function Products() {
               <ProductImageUploader
                 value={newProduct.image_url}
                 onChange={(url) => setNewProduct({ ...newProduct, image_url: url })}
-                label="Product Photo (Hosted via ImgBB)"
+                label={lang === 'bn' ? 'পণ্যের ছবি (ImgBB হোস্টিং)' : 'Product Photo (Hosted via ImgBB)'}
               />
 
               {/* Category with Inline Creator */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block font-medium text-slate-700 dark:text-zinc-300">Category</label>
+                  <label className="block font-medium text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
+                  </label>
                   <button
                     type="button"
                     onClick={() => {
@@ -724,7 +990,7 @@ export default function Products() {
                     className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     <FolderPlus className="w-3 h-3" />
-                    <span>{showAddCatInline ? 'Choose existing' : '+ Add New Category'}</span>
+                    <span>{showAddCatInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন ক্যাটাগরি' : '+ Add New Category')}</span>
                   </button>
                 </div>
 
@@ -742,9 +1008,9 @@ export default function Products() {
                       size="sm"
                       disabled={isCreatingCat || !newCatName.trim()}
                       onClick={() => handleCreateCategory(false)}
-                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3"
+                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 cursor-pointer"
                     >
-                      {isCreatingCat ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save & Select'}
+                      {isCreatingCat ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
                     </Button>
                   </div>
                 ) : (
@@ -765,9 +1031,96 @@ export default function Products() {
                 )}
               </div>
 
+              {/* Supplier with Inline Creator */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-medium text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'সাপ্লায়ার (সরবরাহকারী)' : 'Supplier (Vendor)'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddSuppInline(!showAddSuppInline);
+                      setNewSuppData({ name: '', phone: '', company_name: '', address: '' });
+                    }}
+                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Building2 className="w-3 h-3" />
+                    <span>{showAddSuppInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন সাপ্লায়ার' : '+ Add New Supplier')}</span>
+                  </button>
+                </div>
+
+                {showAddSuppInline ? (
+                  <div className="p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder={lang === 'bn' ? 'সাপ্লায়ার নাম *' : 'Supplier Name *'}
+                        value={newSuppData.name}
+                        onChange={(e) => setNewSuppData({ ...newSuppData, name: e.target.value })}
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                      />
+                      <input
+                        type="text"
+                        placeholder={lang === 'bn' ? 'ফোন নম্বর' : 'Phone'}
+                        value={newSuppData.phone}
+                        onChange={(e) => setNewSuppData({ ...newSuppData, phone: e.target.value })}
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder={lang === 'bn' ? 'প্রতিষ্ঠান / কোম্পানি' : 'Company'}
+                        value={newSuppData.company_name}
+                        onChange={(e) => setNewSuppData({ ...newSuppData, company_name: e.target.value })}
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                      />
+                      <input
+                        type="text"
+                        placeholder={lang === 'bn' ? 'ঠিকানা' : 'Address'}
+                        value={newSuppData.address}
+                        onChange={(e) => setNewSuppData({ ...newSuppData, address: e.target.value })}
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isCreatingSupp || !newSuppData.name.trim()}
+                        onClick={() => handleCreateSupplier(false)}
+                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 cursor-pointer"
+                      >
+                        {isCreatingSupp ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ ও নির্বাচন' : 'Save & Select')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Select
+                    value={newProduct.supplier_id || '__none__'}
+                    onValueChange={(val) => setNewProduct({ ...newProduct, supplier_id: val === '__none__' ? '' : val })}
+                  >
+                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                      <SelectValue placeholder={lang === 'bn' ? 'সাপ্লায়ার নির্বাচন করুন (ঐচ্ছিক)' : 'Select supplier (Optional)'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'}</SelectItem>
+                      {suppliers.map((s) => (
+                        <SelectItem key={s._id} value={s._id}>
+                          {s.name} {s.company_name ? `(${s.company_name})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">SKU (Optional)</label>
+                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'SKU কোড (ঐচ্ছিক)' : 'SKU (Optional)'}
+                  </label>
                   <input
                     type="text"
                     placeholder="Auto-generated if empty"
@@ -777,7 +1130,9 @@ export default function Products() {
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Barcode (Optional)</label>
+                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'বারকোড (ঐচ্ছিক)' : 'Barcode (Optional)'}
+                  </label>
                   <input
                     type="text"
                     placeholder="Scan or enter barcode"
@@ -790,7 +1145,9 @@ export default function Products() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Cost Price (৳)</label>
+                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'ক্রয়মূল্য (৳)' : 'Cost Price (৳)'}
+                  </label>
                   <input
                     type="number"
                     value={newProduct.buyPrice}
@@ -799,7 +1156,9 @@ export default function Products() {
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Selling Price (৳) *</label>
+                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'বিক্রয়মূল্য (৳) *' : 'Selling Price (৳) *'}
+                  </label>
                   <input
                     type="number"
                     required
@@ -812,7 +1171,9 @@ export default function Products() {
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Stock Qty</label>
+                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'প্রাথমিক স্টক' : 'Initial Stock'}
+                  </label>
                   <input
                     type="number"
                     value={newProduct.stock}
@@ -821,7 +1182,9 @@ export default function Products() {
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Low Stock Min</label>
+                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'সতর্কতা লেভেল' : 'Low Stock Min'}
+                  </label>
                   <input
                     type="number"
                     value={newProduct.lowStockThreshold}
@@ -830,7 +1193,9 @@ export default function Products() {
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Unit</label>
+                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'একক (Unit)' : 'Unit'}
+                  </label>
                   <input
                     type="text"
                     value={newProduct.unit}
@@ -841,19 +1206,306 @@ export default function Products() {
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsAddModalOpen(false)}>
-                  Cancel
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsAddModalOpen(false)} className="cursor-pointer">
+                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting}
                   size="sm"
-                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold"
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold cursor-pointer"
                 >
-                  {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save Product'}
+                  {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (lang === 'bn' ? 'পণ্য সংরক্ষণ করুন' : 'Save Product')}
                 </Button>
               </div>
             </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* 3. RESTOCK / PURCHASE STOCK FOR EXISTING PRODUCT     */}
+      {/* ---------------------------------------------------- */}
+      {isRestockModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+          <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <ShoppingBag className="w-4 h-4 text-blue-500" />
+                <span>{lang === 'bn' ? 'বিদ্যমান পণ্যে স্টক যোগ ও ক্রয়' : 'Restock / Purchase Stock'}</span>
+              </h2>
+              <button onClick={() => setIsRestockModalOpen(false)} className="text-slate-400 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRestockSubmit} className="space-y-3.5 text-xs">
+              {/* Product Selector */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                  {lang === 'bn' ? 'পণ্য নির্বাচন করুন *' : 'Select Product *'}
+                </label>
+                <Select
+                  value={restockForm.product_id || '__none__'}
+                  onValueChange={(val) => {
+                    const found = productList.find(p => p.id === val);
+                    setRestockForm({
+                      ...restockForm,
+                      product_id: val === '__none__' ? '' : val,
+                      unit_cost: found ? found.buyPrice : 0,
+                      selling_price: found ? found.sellPrice : 0,
+                      supplier_id: found?.supplier_id || restockForm.supplier_id || '',
+                    });
+                  }}
+                >
+                  <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                    <SelectValue placeholder={lang === 'bn' ? 'পণ্য বেছে নিন...' : 'Choose product...'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{lang === 'bn' ? 'পণ্য বেছে নিন...' : 'Choose product...'}</SelectItem>
+                    {productList.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} (Stock: {p.stock} {p.unit}) — ৳{p.sellPrice}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Supplier with Inline Creator */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'সাপ্লায়ার (সরবরাহকারী)' : 'Supplier'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddSuppInline(!showAddSuppInline);
+                      setNewSuppData({ name: '', phone: '', company_name: '', address: '' });
+                    }}
+                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Building2 className="w-3 h-3" />
+                    <span>{showAddSuppInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন সাপ্লায়ার' : '+ Add New Supplier')}</span>
+                  </button>
+                </div>
+
+                {showAddSuppInline ? (
+                  <div className="p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder={lang === 'bn' ? 'সাপ্লায়ার নাম *' : 'Supplier Name *'}
+                        value={newSuppData.name}
+                        onChange={(e) => setNewSuppData({ ...newSuppData, name: e.target.value })}
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                      />
+                      <input
+                        type="text"
+                        placeholder={lang === 'bn' ? 'ফোন নম্বর' : 'Phone'}
+                        value={newSuppData.phone}
+                        onChange={(e) => setNewSuppData({ ...newSuppData, phone: e.target.value })}
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isCreatingSupp || !newSuppData.name.trim()}
+                        onClick={() => handleCreateSupplier(true)}
+                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 cursor-pointer"
+                      >
+                        {isCreatingSupp ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ ও নির্বাচন' : 'Save & Select')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Select
+                    value={restockForm.supplier_id || '__walk_in__'}
+                    onValueChange={(val) => setRestockForm({ ...restockForm, supplier_id: val === '__walk_in__' ? '' : val })}
+                  >
+                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                      <SelectValue placeholder="General / Walk-in Supplier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__walk_in__">{lang === 'bn' ? 'সাধারণ সাপ্লায়ার' : 'General / Walk-in Supplier'}</SelectItem>
+                      {suppliers.map((s) => (
+                        <SelectItem key={s._id} value={s._id}>
+                          {s.name} {s.company_name ? `(${s.company_name})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {/* Quantity, Unit Cost, Total */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    {lang === 'bn' ? 'নতুন স্টক পরিমাণ *' : 'Qty to Add *'}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={restockForm.quantity}
+                    onChange={(e) => setRestockForm({ ...restockForm, quantity: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    {lang === 'bn' ? 'প্রতি একক ক্রয়মূল্য (৳)' : 'Unit Cost (৳)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={restockForm.unit_cost}
+                    onChange={(e) => setRestockForm({ ...restockForm, unit_cost: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    {lang === 'bn' ? 'বিক্রয়মূল্য (৳)' : 'Sell Price (৳)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={restockForm.selling_price}
+                    onChange={(e) => setRestockForm({ ...restockForm, selling_price: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Total Calculation & Payment Method */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 space-y-2.5">
+                <div className="flex justify-between items-center text-xs font-bold">
+                  <span className="text-slate-500">{lang === 'bn' ? 'মোট ক্রয় বিল:' : 'Total Purchase Bill:'}</span>
+                  <span className="text-sm text-slate-900 dark:text-white font-mono">
+                    ৳{((Number(restockForm.quantity) || 0) * (Number(restockForm.unit_cost) || 0)).toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200 dark:border-zinc-800">
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                      {lang === 'bn' ? 'পরিশোধিত অর্থ (ঐচ্ছিক)' : 'Paid Amount (Optional)'}
+                    </label>
+                    <input
+                      type="number"
+                      placeholder={`৳${((Number(restockForm.quantity) || 0) * (Number(restockForm.unit_cost) || 0))}`}
+                      value={restockForm.paid_amount}
+                      onChange={(e) => setRestockForm({ ...restockForm, paid_amount: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                      {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
+                    </label>
+                    <Select
+                      value={restockForm.payment_method}
+                      onValueChange={(val) => setRestockForm({ ...restockForm, payment_method: val })}
+                    >
+                      <SelectTrigger className="w-full h-8 text-xs bg-white dark:bg-[#09090b]">
+                        <SelectValue placeholder="Cash" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cash">{lang === 'bn' ? 'নগদ (Cash)' : 'Cash'}</SelectItem>
+                        <SelectItem value="bkash">bKash</SelectItem>
+                        <SelectItem value="nagad">Nagad</SelectItem>
+                        <SelectItem value="rocket">Rocket</SelectItem>
+                        <SelectItem value="card">{lang === 'bn' ? 'কার্ড' : 'Card'}</SelectItem>
+                        <SelectItem value="due">{lang === 'bn' ? 'সম্পূর্ণ বাকি (Due)' : 'Full Due'}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-700 dark:text-zinc-300 mb-1">
+                  {lang === 'bn' ? 'নোট বা মন্তব্য' : 'Notes / Remarks'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={lang === 'bn' ? 'ঐচ্ছিক মন্তব্য...' : 'Optional purchase notes...'}
+                  value={restockForm.notes}
+                  onChange={(e) => setRestockForm({ ...restockForm, notes: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsRestockModalOpen(false)} className="cursor-pointer">
+                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting || !restockForm.product_id}
+                  size="sm"
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (lang === 'bn' ? 'স্টক ইন ও রেকর্ড সংরক্ষণ' : 'Add Stock & Save')}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* 4. QUICK UPDATE / EDIT PRODUCT PICKER MODAL          */}
+      {/* ---------------------------------------------------- */}
+      {isQuickEditPickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 shrink-0">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-amber-500" />
+                <span>{lang === 'bn' ? 'সম্পাদনা করতে পণ্য বেছে নিন' : 'Select Product to Edit'}</span>
+              </h2>
+              <button onClick={() => setIsQuickEditPickerOpen(false)} className="text-slate-400 p-1 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+              {productList.length === 0 ? (
+                <p className="py-8 text-center text-slate-400">
+                  {lang === 'bn' ? 'কোনো পণ্য নেই' : 'No products available.'}
+                </p>
+              ) : (
+                productList.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      setIsQuickEditPickerOpen(false);
+                      handleOpenEdit(p);
+                    }}
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 hover:border-amber-500 hover:bg-amber-500/5 transition-all text-left flex items-center justify-between cursor-pointer group"
+                  >
+                    <div>
+                      <p className="font-bold text-slate-900 dark:text-white group-hover:text-amber-500 transition-colors">
+                        {p.name}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        {p.category} &bull; Stock: {p.stock} {p.unit} &bull; ৳{p.sellPrice}
+                      </p>
+                    </div>
+                    <Edit2 className="w-4 h-4 text-slate-400 group-hover:text-amber-500 group-hover:scale-110 transition-all" />
+                  </button>
+                ))
+              )}
+            </div>
           </Card>
         </div>
       )}

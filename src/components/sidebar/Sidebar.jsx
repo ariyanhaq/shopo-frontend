@@ -40,6 +40,8 @@ export default function Sidebar({ collapsed }) {
         { label: sb.dashboard || 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
         { label: sb.sales || 'Sales', path: '/sales', icon: ShoppingCart, hasChevron: true },
         { label: sb.products || 'Products', path: '/products', icon: Package, hasChevron: true },
+        { label: lang === 'bn' ? 'পণ্য ক্রয় (Purchases)' : 'Purchases', path: '/purchases', icon: ShoppingBag, hasChevron: true },
+        { label: lang === 'bn' ? 'সাপ্লায়ার (Suppliers)' : 'Suppliers', path: '/suppliers', icon: Building2, hasChevron: true },
         { label: lang === 'bn' ? 'কাস্টমার ও গ্রাহক' : 'Customers', path: '/customers', icon: Users, hasChevron: true },
         { label: sb.pos || 'POS & Retail', path: '/pos', icon: Store },
         { label: sb.accounting || 'Accounting & Finance', path: '/accounting', icon: Wallet, hasChevron: true },

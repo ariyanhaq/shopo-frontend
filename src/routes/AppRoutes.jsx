@@ -17,6 +17,7 @@ import {
   Products, AddProduct, Categories, StockHistory,
   POS, Orders, NewSale, Transactions,
   Customers, CustomerDetails,
+  Suppliers, Purchases,
   Employees, Salary,
   SalesReport, ProfitLoss, Analytics,
   GymDashboard, GymMembers, GymMemberProfile, GymMemberships,
@@ -108,6 +109,10 @@ export default function AppRoutes() {
           <Route path="/inventory/add-product" element={<Products />} />
           <Route path="/inventory/categories" element={<Categories />} />
           <Route path="/inventory/stock-history" element={<StockHistory />} />
+
+          {/* Suppliers & Purchases */}
+          <Route path="/suppliers" element={<Suppliers />} />
+          <Route path="/purchases" element={<Purchases />} />
 
           <Route path="/accounting" element={<ProfitLoss />} />
 
