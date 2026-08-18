@@ -84,6 +84,25 @@ export const api = {
       }),
   },
 
+  // Brands
+  brands: {
+    list: () => request('/brands'),
+    create: (data) =>
+      request('/brands', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id, data) =>
+      request(`/brands/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id) =>
+      request(`/brands/${id}`, {
+        method: 'DELETE',
+      }),
+  },
+
   // Products & Inventory Catalog
   products: {
     list: (params = {}) => {

@@ -63,6 +63,7 @@ export default function Products() {
 
   const [productList, setProductList] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -71,6 +72,12 @@ export default function Products() {
   const [showEditCatInline, setShowEditCatInline] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [isCreatingCat, setIsCreatingCat] = useState(false);
+
+  // Inline Brand Creator State
+  const [showAddBrandInline, setShowAddBrandInline] = useState(false);
+  const [showEditBrandInline, setShowEditBrandInline] = useState(false);
+  const [newBrandName, setNewBrandName] = useState('');
+  const [isCreatingBrand, setIsCreatingBrand] = useState(false);
 
   // Inline Supplier Creator State
   const [showAddSuppInline, setShowAddSuppInline] = useState(false);
@@ -82,6 +89,7 @@ export default function Products() {
     name: '',
     image_url: '',
     category_id: '__general__',
+    brand_id: '',
     supplier_id: '',
     sku: '',
     barcode: '',
@@ -110,6 +118,7 @@ export default function Products() {
     name: '',
     image_url: '',
     category_id: '',
+    brand_id: '',
     supplier_id: '',
     sku: '',
     barcode: '',
@@ -123,10 +132,11 @@ export default function Products() {
   const fetchDbProducts = async () => {
     setIsLoading(true);
     try {
-      const [prodRes, catRes, suppRes] = await Promise.all([
+      const [prodRes, catRes, suppRes, brandRes] = await Promise.all([
         api.products.list(),
         api.categories.list().catch(() => ({ data: [] })),
         api.suppliers.list().catch(() => ({ data: [] })),
+        api.brands.list().catch(() => ({ data: [] })),
       ]);
       const rawList = Array.isArray(prodRes?.data)
         ? prodRes.data
@@ -144,6 +154,11 @@ export default function Products() {
         setSuppliers(fetchedSuppliers);
       }
 
+      const fetchedBrands = Array.isArray(brandRes?.data) ? brandRes.data : [];
+      if (brandRes?.data) {
+        setBrands(fetchedBrands);
+      }
+
       const mapped = rawList.map((p) => {
         const catObj = typeof p.category_id === 'object' ? p.category_id : null;
         const catId = catObj?._id || p.category_id || '';
@@ -152,6 +167,11 @@ export default function Products() {
           catObj?.name ||
           matchingCat?.name ||
           (typeof p.category_id === 'string' && p.category_id.length !== 24 ? p.category_id : 'General');
+
+        const brandObj = typeof p.brand_id === 'object' ? p.brand_id : null;
+        const brandId = brandObj?._id || p.brand_id || '';
+        const matchingBrand = fetchedBrands.find((b) => String(b._id) === String(brandId));
+        const brandName = brandObj?.name || matchingBrand?.name || p.brand || '';
 
         return {
           id: p._id,
@@ -162,6 +182,8 @@ export default function Products() {
           category_id: matchingCat ? matchingCat._id : (catId || '__general__'),
           supplier_id: p.supplier_id?._id || p.supplier_id || '',
           category: catName,
+          brand_id: matchingBrand ? matchingBrand._id : brandId,
+          brand: brandName,
           stock: p.stock_quantity ?? 0,
           unit: p.unit || 'Pcs',
           buyPrice: p.cost_price ?? 0,
@@ -274,6 +296,31 @@ export default function Products() {
     }
   };
 
+  // Handle Inline Brand Creation
+  const handleCreateBrand = async (forEdit = false) => {
+    if (!newBrandName.trim()) return;
+    setIsCreatingBrand(true);
+    try {
+      const res = await api.brands.create({ name: newBrandName.trim() });
+      if (res.data) {
+        setBrands((prev) => [...prev, res.data]);
+        if (forEdit) {
+          setEditForm((prev) => ({ ...prev, brand_id: res.data._id }));
+          setShowEditBrandInline(false);
+        } else {
+          setNewProduct((prev) => ({ ...prev, brand_id: res.data._id }));
+          setShowAddBrandInline(false);
+        }
+        toast.success(lang === 'bn' ? `ব্র্যান্ড '${res.data.name}' যুক্ত হয়েছে!` : `Brand '${res.data.name}' created!`);
+        setNewBrandName('');
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to create brand.');
+    } finally {
+      setIsCreatingBrand(false);
+    }
+  };
+
   // Handle Inline Supplier Creation
   const handleCreateSupplier = async (forRestock = false) => {
     if (!newSuppData.name.trim()) return;
@@ -298,10 +345,10 @@ export default function Products() {
     }
   };
 
-  // Confirm Delete Dialog State for Categories and Suppliers
+  // Confirm Delete Dialog State for Categories, Brands and Suppliers
   const [deleteOptionModal, setDeleteOptionModal] = useState({
     isOpen: false,
-    type: '', // 'category' | 'supplier'
+    type: '', // 'category' | 'brand' | 'supplier'
     id: null,
     name: '',
     isLoading: false,
@@ -313,6 +360,16 @@ export default function Products() {
       type: 'category',
       id: catId,
       name: catName,
+      isLoading: false,
+    });
+  };
+
+  const promptDeleteBrand = (brandId, brandName) => {
+    setDeleteOptionModal({
+      isOpen: true,
+      type: 'brand',
+      id: brandId,
+      name: brandName,
       isLoading: false,
     });
   };
@@ -341,6 +398,16 @@ export default function Products() {
           setEditForm((prev) => ({ ...prev, category_id: '__general__' }));
         }
         toast.success(lang === 'bn' ? `ক্যাটাগরি '${deleteOptionModal.name}' মুছে ফেলা হয়েছে!` : `Category '${deleteOptionModal.name}' deleted!`);
+      } else if (deleteOptionModal.type === 'brand') {
+        await api.brands.delete(deleteOptionModal.id);
+        setBrands((prev) => prev.filter((b) => b._id !== deleteOptionModal.id));
+        if (newProduct.brand_id === deleteOptionModal.id) {
+          setNewProduct((prev) => ({ ...prev, brand_id: '' }));
+        }
+        if (editForm.brand_id === deleteOptionModal.id) {
+          setEditForm((prev) => ({ ...prev, brand_id: '' }));
+        }
+        toast.success(lang === 'bn' ? `ব্র্যান্ড '${deleteOptionModal.name}' মুছে ফেলা হয়েছে!` : `Brand '${deleteOptionModal.name}' deleted!`);
       } else if (deleteOptionModal.type === 'supplier') {
         await api.suppliers.delete(deleteOptionModal.id);
         setSuppliers((prev) => prev.filter((s) => s._id !== deleteOptionModal.id));
@@ -370,6 +437,11 @@ export default function Products() {
         ? newProduct.category_id
         : (categories.find((c) => c.name?.toLowerCase() === 'general')?._id || undefined);
 
+      const finalBrandId = (newProduct.brand_id && newProduct.brand_id !== '__none__')
+        ? newProduct.brand_id
+        : undefined;
+      const selectedBrand = brands.find((b) => b._id === newProduct.brand_id);
+
       const initialStock = parseInt(newProduct.stock, 10) || 0;
       const costPrice = parseFloat(newProduct.buyPrice) || 0;
       const sellPrice = parseFloat(newProduct.sellPrice) || 0;
@@ -379,6 +451,8 @@ export default function Products() {
         image_url: newProduct.image_url || undefined,
         images: newProduct.image_url ? [newProduct.image_url] : [],
         category_id: finalCatId,
+        brand_id: finalBrandId,
+        brand: selectedBrand?.name || '',
         supplier_id: newProduct.supplier_id || undefined,
         sku: newProduct.sku ? newProduct.sku.trim() : undefined,
         barcode: newProduct.barcode ? newProduct.barcode.trim() : undefined,
@@ -417,6 +491,7 @@ export default function Products() {
         name: '',
         image_url: '',
         category_id: '__general__',
+        brand_id: '',
         supplier_id: '',
         sku: '',
         barcode: '',
@@ -506,11 +581,21 @@ export default function Products() {
       ? matchingCat._id
       : (catId && catId !== '__general__' && categories.some((c) => String(c._id) === String(catId)) ? catId : '__general__');
 
+    let brandId = product.brand_id;
+    if (brandId && typeof brandId === 'object') {
+      brandId = brandId._id;
+    }
+    const matchingBrand = brands.find(
+      (b) => String(b._id) === String(brandId) || b.name?.toLowerCase() === (product.brand || '').toLowerCase()
+    );
+    const resolvedBrandId = matchingBrand ? matchingBrand._id : (brandId || '');
+
     setEditForm({
       id: product.id,
       name: product.name,
       image_url: product.image_url || '',
       category_id: resolvedCatId,
+      brand_id: resolvedBrandId,
       sku: product.sku !== 'N/A' ? product.sku : '',
       barcode: product.barcode || '',
       stock: product.stock,
@@ -527,6 +612,11 @@ export default function Products() {
     e.preventDefault();
     if (!editForm.name || !editForm.sellPrice) return;
 
+    const finalBrandId = (editForm.brand_id && editForm.brand_id !== '__none__')
+      ? editForm.brand_id
+      : null;
+    const selectedBrand = brands.find((b) => b._id === editForm.brand_id);
+
     setIsSubmitting(true);
     try {
       await api.products.update(editForm.id, {
@@ -534,6 +624,8 @@ export default function Products() {
         image_url: editForm.image_url || '',
         images: editForm.image_url ? [editForm.image_url] : [],
         category_id: editForm.category_id || null,
+        brand_id: finalBrandId,
+        brand: selectedBrand?.name || '',
         sku: editForm.sku ? editForm.sku.trim() : undefined,
         barcode: editForm.barcode ? editForm.barcode.trim() : undefined,
         cost_price: parseFloat(editForm.buyPrice) || 0,
@@ -1077,12 +1169,24 @@ export default function Products() {
                 ) : (
                   <Select
                     value={newProduct.category_id || '__general__'}
-                    onValueChange={(val) => setNewProduct({ ...newProduct, category_id: val })}
+                    onValueChange={(val) => {
+                      if (val === '__add_new_cat__') {
+                        setShowAddCatInline(true);
+                      } else {
+                        setNewProduct({ ...newProduct, category_id: val });
+                      }
+                    }}
                   >
                     <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
                       <SelectValue placeholder="General" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem
+                        value="__add_new_cat__"
+                        className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
+                      >
+                        + {lang === 'bn' ? 'নতুন ক্যাটাগরি তৈরি করুন...' : 'Add New Category...'}
+                      </SelectItem>
                       <SelectItem value="__general__">General</SelectItem>
                       {categories.filter(c => c.name?.toLowerCase() !== 'general').map((c) => (
                         <SelectItem
@@ -1092,6 +1196,81 @@ export default function Products() {
                           deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
                         >
                           {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {/* Brand with Inline Creator */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-medium text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'ব্র্যান্ড' : 'Brand'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddBrandInline(!showAddBrandInline);
+                      setNewBrandName('');
+                    }}
+                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Tag className="w-3 h-3" />
+                    <span>{showAddBrandInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন ব্র্যান্ড' : '+ Add New Brand')}</span>
+                  </button>
+                </div>
+
+                {showAddBrandInline ? (
+                  <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                    <input
+                      type="text"
+                      placeholder={lang === 'bn' ? 'ব্র্যান্ডের নাম লিখুন...' : 'Enter brand name...'}
+                      value={newBrandName}
+                      onChange={(e) => setNewBrandName(e.target.value)}
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isCreatingBrand || !newBrandName.trim()}
+                      onClick={() => handleCreateBrand(false)}
+                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 cursor-pointer"
+                    >
+                      {isCreatingBrand ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
+                    </Button>
+                  </div>
+                ) : (
+                  <Select
+                    value={newProduct.brand_id || '__none__'}
+                    onValueChange={(val) => {
+                      if (val === '__add_new_brand__') {
+                        setShowAddBrandInline(true);
+                      } else {
+                        setNewProduct({ ...newProduct, brand_id: val === '__none__' ? '' : val });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                      <SelectValue placeholder="Brand" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        value="__add_new_brand__"
+                        className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
+                      >
+                        + {lang === 'bn' ? 'নতুন ব্র্যান্ড তৈরি করুন...' : 'Add New Brand...'}
+                      </SelectItem>
+                      <SelectItem value="__none__">{lang === 'bn' ? 'কোনোটি নয় (None)' : 'None / Generic'}</SelectItem>
+                      {brands.map((b) => (
+                        <SelectItem
+                          key={b._id}
+                          value={b._id}
+                          onDelete={() => promptDeleteBrand(b._id, b.name)}
+                          deleteTitle={lang === 'bn' ? 'ব্র্যান্ড মুছুন' : 'Delete brand'}
+                        >
+                          {b.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1659,12 +1838,24 @@ export default function Products() {
                 ) : (
                   <Select
                     value={editForm.category_id || '__general__'}
-                    onValueChange={(val) => setEditForm({ ...editForm, category_id: val })}
+                    onValueChange={(val) => {
+                      if (val === '__add_new_cat__') {
+                        setShowEditCatInline(true);
+                      } else {
+                        setEditForm({ ...editForm, category_id: val });
+                      }
+                    }}
                   >
                     <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
                       <SelectValue placeholder="General" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem
+                        value="__add_new_cat__"
+                        className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
+                      >
+                        + {lang === 'bn' ? 'নতুন ক্যাটাগরি তৈরি করুন...' : 'Add New Category...'}
+                      </SelectItem>
                       <SelectItem value="__general__">General</SelectItem>
                       {categories.filter(c => c.name?.toLowerCase() !== 'general').map((c) => (
                         <SelectItem
@@ -1674,6 +1865,81 @@ export default function Products() {
                           deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
                         >
                           {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {/* Brand with Inline Creator */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-medium text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'ব্র্যান্ড' : 'Brand'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditBrandInline(!showEditBrandInline);
+                      setNewBrandName('');
+                    }}
+                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Tag className="w-3 h-3" />
+                    <span>{showEditBrandInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন ব্র্যান্ড' : '+ Add New Brand')}</span>
+                  </button>
+                </div>
+
+                {showEditBrandInline ? (
+                  <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                    <input
+                      type="text"
+                      placeholder={lang === 'bn' ? 'ব্র্যান্ডের নাম লিখুন...' : 'Enter brand name...'}
+                      value={newBrandName}
+                      onChange={(e) => setNewBrandName(e.target.value)}
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isCreatingBrand || !newBrandName.trim()}
+                      onClick={() => handleCreateBrand(true)}
+                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 cursor-pointer"
+                    >
+                      {isCreatingBrand ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
+                    </Button>
+                  </div>
+                ) : (
+                  <Select
+                    value={editForm.brand_id || '__none__'}
+                    onValueChange={(val) => {
+                      if (val === '__add_new_brand__') {
+                        setShowEditBrandInline(true);
+                      } else {
+                        setEditForm({ ...editForm, brand_id: val === '__none__' ? '' : val });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                      <SelectValue placeholder="Brand" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        value="__add_new_brand__"
+                        className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
+                      >
+                        + {lang === 'bn' ? 'নতুন ব্র্যান্ড তৈরি করুন...' : 'Add New Brand...'}
+                      </SelectItem>
+                      <SelectItem value="__none__">{lang === 'bn' ? 'কোনোটি নয় (None)' : 'None / Generic'}</SelectItem>
+                      {brands.map((b) => (
+                        <SelectItem
+                          key={b._id}
+                          value={b._id}
+                          onDelete={() => promptDeleteBrand(b._id, b.name)}
+                          deleteTitle={lang === 'bn' ? 'ব্র্যান্ড মুছুন' : 'Delete brand'}
+                        >
+                          {b.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1787,7 +2053,7 @@ export default function Products() {
       />
 
       {/* ---------------------------------------------------- */}
-      {/* CONFIRM DELETE CATEGORY / SUPPLIER OPTION MODAL      */}
+      {/* CONFIRM DELETE CATEGORY / BRAND / SUPPLIER OPTION MODAL */}
       {/* ---------------------------------------------------- */}
       <ConfirmDialog
         isOpen={deleteOptionModal.isOpen}
@@ -1795,11 +2061,15 @@ export default function Products() {
         title={
           deleteOptionModal.type === 'category'
             ? (lang === 'bn' ? `ক্যাটাগরি '${deleteOptionModal.name}' মুছে ফেলবেন?` : `Delete category '${deleteOptionModal.name}'?`)
+            : deleteOptionModal.type === 'brand'
+            ? (lang === 'bn' ? `ব্র্যান্ড '${deleteOptionModal.name}' মুছে ফেলবেন?` : `Delete brand '${deleteOptionModal.name}'?`)
             : (lang === 'bn' ? `সাপ্লায়ার '${deleteOptionModal.name}' মুছে ফেলবেন?` : `Delete supplier '${deleteOptionModal.name}'?`)
         }
         description={
           deleteOptionModal.type === 'category'
             ? (lang === 'bn' ? 'এই ক্যাটাগরিটি মুছে ফেলা হবে। পূর্বে যুক্ত পণ্যগুলো অপরিবর্তিত থাকবে।' : 'This category option will be removed from your store.')
+            : deleteOptionModal.type === 'brand'
+            ? (lang === 'bn' ? 'এই ব্র্যান্ড তথ্যটি মুছে ফেলা হবে।' : 'This brand option will be removed from your store.')
             : (lang === 'bn' ? 'এই সাপ্লায়ার তথ্যটি মুছে ফেলা হবে। পূর্বে করা ক্রয়ের হিসাব অক্ষুণ্ণ থাকবে।' : 'This supplier profile will be removed from your directory.')
         }
         confirmText={lang === 'bn' ? 'হ্যাঁ, মুছুন' : 'Yes, Delete'}
