@@ -15,7 +15,7 @@ import {
   DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
 import {
-  Store, LayoutDashboard, ShoppingCart, Package, Users, UserCheck,
+  Store, LayoutDashboard, ShoppingCart, ShoppingBag, Package, Users, UserCheck,
   BarChart3, Settings, ChevronRight, ChevronsUpDown, ShieldCheck,
   Wallet, HelpCircle, Layers, Building2, Sparkles, FolderPlus,
   ArrowLeftRight, Dumbbell, CreditCard, Calendar, Flame, Activity,
