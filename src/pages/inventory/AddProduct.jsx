@@ -20,6 +20,7 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import ProductImageUploader from '@/components/common/ProductImageUploader';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { Package, ArrowLeft, CheckCircle2, Loader2, Sparkles, Barcode, FolderPlus, Plus, Building2 } from 'lucide-react';
 
 export default function AddProduct() {
@@ -126,29 +127,58 @@ export default function AddProduct() {
     }
   };
 
-  const handleDeleteCategory = async (catId, catName) => {
-    try {
-      await api.categories.delete(catId);
-      setCategories((prev) => prev.filter((c) => c._id !== catId));
-      if (form.category_id === catId) {
-        setForm((prev) => ({ ...prev, category_id: '__general__' }));
-      }
-      toast.success(lang === 'bn' ? `ক্যাটাগরি '${catName}' মুছে ফেলা হয়েছে!` : `Category '${catName}' deleted!`);
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to delete category');
-    }
+  // Confirm Delete Dialog State for Categories and Suppliers
+  const [deleteOptionModal, setDeleteOptionModal] = useState({
+    isOpen: false,
+    type: '', // 'category' | 'supplier'
+    id: null,
+    name: '',
+    isLoading: false,
+  });
+
+  const promptDeleteCategory = (catId, catName) => {
+    setDeleteOptionModal({
+      isOpen: true,
+      type: 'category',
+      id: catId,
+      name: catName,
+      isLoading: false,
+    });
   };
 
-  const handleDeleteSupplier = async (suppId, suppName) => {
+  const promptDeleteSupplier = (suppId, suppName) => {
+    setDeleteOptionModal({
+      isOpen: true,
+      type: 'supplier',
+      id: suppId,
+      name: suppName,
+      isLoading: false,
+    });
+  };
+
+  const handleConfirmDeleteOption = async () => {
+    if (!deleteOptionModal.id) return;
+    setDeleteOptionModal((prev) => ({ ...prev, isLoading: true }));
     try {
-      await api.suppliers.delete(suppId);
-      setSuppliers((prev) => prev.filter((s) => s._id !== suppId));
-      if (form.supplier_id === suppId) {
-        setForm((prev) => ({ ...prev, supplier_id: '' }));
+      if (deleteOptionModal.type === 'category') {
+        await api.categories.delete(deleteOptionModal.id);
+        setCategories((prev) => prev.filter((c) => c._id !== deleteOptionModal.id));
+        if (form.category_id === deleteOptionModal.id) {
+          setForm((prev) => ({ ...prev, category_id: '__general__' }));
+        }
+        toast.success(lang === 'bn' ? `ক্যাটাগরি '${deleteOptionModal.name}' মুছে ফেলা হয়েছে!` : `Category '${deleteOptionModal.name}' deleted!`);
+      } else if (deleteOptionModal.type === 'supplier') {
+        await api.suppliers.delete(deleteOptionModal.id);
+        setSuppliers((prev) => prev.filter((s) => s._id !== deleteOptionModal.id));
+        if (form.supplier_id === deleteOptionModal.id) {
+          setForm((prev) => ({ ...prev, supplier_id: '' }));
+        }
+        toast.success(lang === 'bn' ? `সাপ্লায়ার '${deleteOptionModal.name}' মুছে ফেলা হয়েছে!` : `Supplier '${deleteOptionModal.name}' deleted!`);
       }
-      toast.success(lang === 'bn' ? `সাপ্লায়ার '${suppName}' মুছে ফেলা হয়েছে!` : `Supplier '${suppName}' deleted!`);
+      setDeleteOptionModal({ isOpen: false, type: '', id: null, name: '', isLoading: false });
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to delete supplier');
+      toast.error(err.message || 'Failed to delete option.');
+      setDeleteOptionModal((prev) => ({ ...prev, isLoading: false }));
     }
   };
 
@@ -319,7 +349,7 @@ export default function AddProduct() {
                     <SelectItem
                       key={c._id}
                       value={c._id}
-                      onDelete={() => handleDeleteCategory(c._id, c.name)}
+                      onDelete={() => promptDeleteCategory(c._id, c.name)}
                       deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
                     >
                       {c.name}
@@ -409,7 +439,7 @@ export default function AddProduct() {
                     <SelectItem
                       key={s._id}
                       value={s._id}
-                      onDelete={() => handleDeleteSupplier(s._id, s.name)}
+                      onDelete={() => promptDeleteSupplier(s._id, s.name)}
                       deleteTitle={lang === 'bn' ? 'সাপ্লায়ার মুছুন' : 'Delete supplier'}
                     >
                       {s.name} {s.company_name ? `(${s.company_name})` : ''}
@@ -538,6 +568,26 @@ export default function AddProduct() {
         </form>
 
       </Card>
+
+      {/* Confirm Delete Category / Supplier Option Modal */}
+      <ConfirmDialog
+        isOpen={deleteOptionModal.isOpen}
+        isLoading={deleteOptionModal.isLoading}
+        title={
+          deleteOptionModal.type === 'category'
+            ? (lang === 'bn' ? `ক্যাটাগরি '${deleteOptionModal.name}' মুছে ফেলবেন?` : `Delete category '${deleteOptionModal.name}'?`)
+            : (lang === 'bn' ? `সাপ্লায়ার '${deleteOptionModal.name}' মুছে ফেলবেন?` : `Delete supplier '${deleteOptionModal.name}'?`)
+        }
+        description={
+          deleteOptionModal.type === 'category'
+            ? (lang === 'bn' ? 'এই ক্যাটাগরিটি মুছে ফেলা হবে। পূর্বে যুক্ত পণ্যগুলো অপরিবর্তিত থাকবে।' : 'This category option will be removed from your store.')
+            : (lang === 'bn' ? 'এই সাপ্লায়ার তথ্যটি মুছে ফেলা হবে। পূর্বে করা ক্রয়ের হিসাব অক্ষুণ্ণ থাকবে।' : 'This supplier profile will be removed from your directory.')
+        }
+        confirmText={lang === 'bn' ? 'হ্যাঁ, মুছুন' : 'Yes, Delete'}
+        cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
+        onConfirm={handleConfirmDeleteOption}
+        onCancel={() => setDeleteOptionModal({ isOpen: false, type: '', id: null, name: '', isLoading: false })}
+      />
 
     </div>
   );

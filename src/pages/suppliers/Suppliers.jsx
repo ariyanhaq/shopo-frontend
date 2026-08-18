@@ -630,17 +630,17 @@ export default function Suppliers() {
       {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
-        onClose={() => setDeleteDialog({ isOpen: false, supplier: null, isDeleting: false })}
+        onCancel={() => setDeleteDialog({ isOpen: false, supplier: null, isDeleting: false })}
         onConfirm={handleConfirmDelete}
         isLoading={deleteDialog.isDeleting}
         title={lang === 'bn' ? 'সাপ্লায়ার মুছে ফেলতে চান?' : 'Delete Supplier?'}
-        message={
+        description={
           lang === 'bn'
             ? `আপনি কি নিশ্চিত যে '${deleteDialog.supplier?.name}' সাপ্লায়ারটিকে মুছে ফেলতে চান?`
             : `Are you sure you want to delete '${deleteDialog.supplier?.name}'?`
         }
         confirmText={lang === 'bn' ? 'মুছে ফেলুন' : 'Delete'}
-        confirmVariant="danger"
+        variant="danger"
       />
     </div>
   );

@@ -270,20 +270,40 @@ export default function Purchases() {
     }
   };
 
-  // Handle Inline Supplier Deletion
-  const handleDeleteSupplier = async (suppId, suppName) => {
+  // Confirm Delete Dialog State for Suppliers in dropdowns
+  const [deleteSupplierModal, setDeleteSupplierModal] = useState({
+    isOpen: false,
+    id: null,
+    name: '',
+    isLoading: false,
+  });
+
+  const promptDeleteSupplier = (suppId, suppName) => {
+    setDeleteSupplierModal({
+      isOpen: true,
+      id: suppId,
+      name: suppName,
+      isLoading: false,
+    });
+  };
+
+  const handleConfirmDeleteSupplier = async () => {
+    if (!deleteSupplierModal.id) return;
+    setDeleteSupplierModal((prev) => ({ ...prev, isLoading: true }));
     try {
-      await api.suppliers.delete(suppId);
-      setSuppliers((prev) => prev.filter((s) => s._id !== suppId));
-      if (purchaseForm.supplier_id === suppId) {
+      await api.suppliers.delete(deleteSupplierModal.id);
+      setSuppliers((prev) => prev.filter((s) => s._id !== deleteSupplierModal.id));
+      if (purchaseForm.supplier_id === deleteSupplierModal.id) {
         setPurchaseForm((prev) => ({ ...prev, supplier_id: '', supplier_name: 'General / Walk-in Supplier' }));
       }
-      if (editForm.supplier_id === suppId) {
+      if (editForm.supplier_id === deleteSupplierModal.id) {
         setEditForm((prev) => ({ ...prev, supplier_id: '', supplier_name: 'General / Walk-in Supplier' }));
       }
-      toast.success(lang === 'bn' ? `সাপ্লায়ার '${suppName}' মুছে ফেলা হয়েছে!` : `Supplier '${suppName}' deleted!`);
+      toast.success(lang === 'bn' ? `সাপ্লায়ার '${deleteSupplierModal.name}' মুছে ফেলা হয়েছে!` : `Supplier '${deleteSupplierModal.name}' deleted!`);
+      setDeleteSupplierModal({ isOpen: false, id: null, name: '', isLoading: false });
     } catch (err) {
       toast.error(err.message || 'Failed to delete supplier');
+      setDeleteSupplierModal((prev) => ({ ...prev, isLoading: false }));
     }
   };
 
@@ -781,7 +801,7 @@ export default function Purchases() {
                         <SelectItem
                           key={s._id}
                           value={s._id}
-                          onDelete={() => handleDeleteSupplier(s._id, s.name)}
+                          onDelete={() => promptDeleteSupplier(s._id, s.name)}
                           deleteTitle={lang === 'bn' ? 'সাপ্লায়ার মুছুন' : 'Delete supplier'}
                         >
                           {s.name} {s.company_name ? `(${s.company_name})` : ''}
@@ -1066,7 +1086,7 @@ export default function Purchases() {
                       <SelectItem
                         key={s._id}
                         value={s._id}
-                        onDelete={() => handleDeleteSupplier(s._id, s.name)}
+                        onDelete={() => promptDeleteSupplier(s._id, s.name)}
                         deleteTitle={lang === 'bn' ? 'সাপ্লায়ার মুছুন' : 'Delete supplier'}
                       >
                         {s.name} {s.company_name ? `(${s.company_name})` : ''}
@@ -1447,6 +1467,18 @@ export default function Purchases() {
         cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Delete Supplier Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteSupplierModal.isOpen}
+        isLoading={deleteSupplierModal.isLoading}
+        title={lang === 'bn' ? `সাপ্লায়ার '${deleteSupplierModal.name}' মুছে ফেলবেন?` : `Delete supplier '${deleteSupplierModal.name}'?`}
+        description={lang === 'bn' ? 'এই সাপ্লায়ার তথ্যটি মুছে ফেলা হবে। পূর্বে করা ক্রয়ের হিসাব অক্ষুণ্ণ থাকবে।' : 'This supplier profile will be removed from your directory. Past purchase records will remain intact.'}
+        confirmText={lang === 'bn' ? 'হ্যাঁ, মুছুন' : 'Yes, Delete'}
+        cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
+        onConfirm={handleConfirmDeleteSupplier}
+        onCancel={() => setDeleteSupplierModal({ isOpen: false, id: null, name: '', isLoading: false })}
       />
 
       {/* ---------------------------------------------------- */}

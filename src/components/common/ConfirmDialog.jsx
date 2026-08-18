@@ -12,12 +12,15 @@ export default function ConfirmDialog({
   description = 'This action cannot be undone.',
   confirmText = 'Yes, Delete',
   cancelText = 'Cancel',
+  loadingText,
   variant = 'danger', // 'danger' | 'warning' | 'info'
   isLoading = false,
   onConfirm,
   onCancel,
 }) {
   if (!isOpen) return null;
+
+  const activeLoadingText = loadingText || (confirmText?.includes('মুছ') || title?.includes('মুছ') ? 'মুছে ফেলা হচ্ছে...' : 'Deleting...');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
@@ -86,7 +89,7 @@ export default function ConfirmDialog({
             }`}
           >
             {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            <span>{isLoading ? 'Deleting...' : confirmText}</span>
+            <span>{isLoading ? activeLoadingText : confirmText}</span>
           </Button>
         </div>
 
