@@ -144,6 +144,15 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    update: (id, data) =>
+      request(`/purchases/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id) =>
+      request(`/purchases/${id}`, {
+        method: 'DELETE',
+      }),
   },
 
   // Customers
