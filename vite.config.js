@@ -17,7 +17,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: process.env.VITE_BACKEND_URL || 'http://localhost:8000',
+        target: process.env.VITE_BACKEND_URL || process.env.VITE_API_URL || 'http://pftboyjzu9xpthebqljyvgu1.129.121.121.8.sslip.io',
         changeOrigin: true,
         secure: false,
       },
