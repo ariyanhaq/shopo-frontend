@@ -4,7 +4,14 @@
  */
 import { auth } from '@/firebase.config';
 
-const rawApiUrl = (import.meta?.env?.VITE_API_URL || '').replace(/\/+$/, '').replace(/\/api(\/v1)?\/?$/, '');
+let rawApiUrl = (import.meta?.env?.VITE_API_URL || '').replace(/\/+$/, '').replace(/\/api(\/v1)?\/?$/, '');
+
+// Prevent Mixed Content: If the application is running over HTTPS, never make direct insecure HTTP calls.
+// Instead, use relative '/api/v1' which is securely proxied via Netlify / reverse proxy.
+if (typeof window !== 'undefined' && window.location.protocol === 'https:' && rawApiUrl.startsWith('http://')) {
+  rawApiUrl = '';
+}
+
 const BASE_URL = rawApiUrl ? `${rawApiUrl}/api/v1` : '/api/v1';
 
 /**
