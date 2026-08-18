@@ -731,43 +731,47 @@ export default function Customers() {
                   {/* List of Invoices with Edit & Delete */}
                   <div className="space-y-3 pt-2">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      All Purchases & Cash Transactions ({customerHistory.sales.length})
+                      {lang === 'bn' ? `সকল ক্রয় ও লেনদেন (${customerHistory.sales.length})` : `All Purchases & Cash Transactions (${customerHistory.sales.length})`}
                     </h3>
 
                     {customerHistory.sales.map((sale) => (
                       <div
                         key={sale._id}
-                        className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-3 text-xs"
+                        className="p-4 rounded-2xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-3.5 text-xs shadow-2xs"
                       >
-                        {/* Invoice Header with Actions */}
-                        <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-2">
-                          <div className="flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-slate-400" />
-                            <span className="font-bold text-slate-900 dark:text-white">{sale.invoice_number}</span>
-                            <Badge
-                              variant={sale.payment_method?.toLowerCase() === 'due' ? 'warning' : 'secondary'}
-                              className={`text-[10px] uppercase font-bold px-2 py-0.5 ${
-                                sale.payment_method?.toLowerCase() === 'due'
-                                  ? '!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30'
-                                  : '!bg-slate-100 !text-slate-700 dark:!bg-zinc-800 dark:!text-zinc-300 !border-slate-200 dark:!border-zinc-700'
-                              }`}
-                            >
-                              {sale.payment_method || 'Cash'}
-                            </Badge>
-                            {(sale.due_amount || 0) > 0 && (
+                        {/* Invoice Header: Clean Multi-Level Responsive Layout */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-200 dark:border-zinc-800 pb-3">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white text-xs whitespace-nowrap">
+                                <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="font-mono">{sale.invoice_number}</span>
+                              </div>
                               <Badge
-                                variant="warning"
-                                className="!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30 text-[10px] font-bold px-1.5 py-0"
+                                variant={sale.payment_method?.toLowerCase() === 'due' ? 'warning' : 'secondary'}
+                                className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 whitespace-nowrap shrink-0 ${
+                                  sale.payment_method?.toLowerCase() === 'due'
+                                    ? '!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30'
+                                    : '!bg-slate-100 !text-slate-700 dark:!bg-zinc-800 dark:!text-zinc-300 !border-slate-200 dark:!border-zinc-700'
+                                }`}
                               >
-                                Due: ৳{sale.due_amount.toLocaleString()}
+                                {sale.payment_method || 'Cash'}
                               </Badge>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[11px] text-slate-500 mr-1">
+                              {(sale.due_amount || 0) > 0 && (
+                                <Badge
+                                  variant="warning"
+                                  className="!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30 text-[10px] font-bold px-2 py-0.5 whitespace-nowrap shrink-0"
+                                >
+                                  {lang === 'bn' ? `বকেয়া: ৳${sale.due_amount.toLocaleString()}` : `Due: ৳${sale.due_amount.toLocaleString()}`}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-normal">
                               {new Date(sale.created_at).toLocaleString()}
-                            </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
                             {(sale.due_amount || 0) > 0 && (
                               <Button
                                 size="sm"
@@ -775,88 +779,124 @@ export default function Customers() {
                                   ...customerHistory.customer,
                                   total_due: sale.due_amount,
                                 })}
-                                className="h-6 text-xs px-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1 cursor-pointer mr-0.5"
+                                className="h-7 text-xs px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1.5 shadow-2xs cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center"
                                 title="Collect this bill due"
                               >
-                                <Coins className="w-3 h-3" />
-                                <span>Pay Due</span>
+                                <Coins className="w-3.5 h-3.5 shrink-0" />
+                                <span className="whitespace-nowrap">{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Pay Due'}</span>
                               </Button>
                             )}
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleOpenEditSale(sale)}
-                              className="h-6 text-xs px-1.5 text-slate-500 hover:text-amber-500"
+                              className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500 shrink-0"
                               title="Edit this sale transaction"
                             >
-                              <Edit2 className="w-3 h-3" />
+                              <Edit2 className="w-3.5 h-3.5" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteSale(sale._id, sale.invoice_number)}
-                              className="h-6 text-xs px-1.5 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                              className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
                               title="Delete sale & restore inventory"
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
                         </div>
 
-                        {/* Items Purchased Table */}
-                        <div className="space-y-1">
+                        {/* Items Purchased Table with Product Thumbnails */}
+                        <div className="space-y-1.5">
                           <div className="text-[11px] font-semibold text-slate-600 dark:text-zinc-400">
-                            Items Purchased:
+                            {lang === 'bn' ? 'ক্রয়কৃত পণ্যের তালিকা:' : 'Items Purchased:'}
                           </div>
-                          <div className="divide-y divide-slate-200 dark:divide-zinc-800/80">
-                            {sale.items?.map((it, idx) => (
-                              <div key={idx} className="py-1.5 flex items-center justify-between text-xs">
-                                <div>
-                                  <span className="font-semibold text-slate-800 dark:text-zinc-200">{it.name}</span>
-                                  <span className="text-slate-400 text-[11px] ml-2">
-                                    (৳{it.unit_price} × {it.quantity})
+                          <div className="divide-y divide-slate-100 dark:divide-zinc-800/80 bg-white dark:bg-[#121215] rounded-xl border border-slate-200/90 dark:border-zinc-800/80 p-2.5 space-y-2">
+                            {sale.items?.map((it, idx) => {
+                              const itemImg = it.image_url || it.product_id?.image_url || (it.product_id?.images && it.product_id.images[0]);
+                              return (
+                                <div key={idx} className="pt-2 first:pt-0 flex items-center justify-between gap-3 text-xs">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    {itemImg ? (
+                                      <img
+                                        src={itemImg}
+                                        alt={it.name}
+                                        className="w-10 h-10 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 shrink-0"
+                                        onError={(e) => {
+                                          e.target.onerror = null;
+                                          e.target.style.display = 'none';
+                                        }}
+                                      />
+                                    ) : (
+                                      <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700/80 flex items-center justify-center text-slate-400 shrink-0">
+                                        <ShoppingBag className="w-4 h-4" />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <div className="font-semibold text-slate-900 dark:text-zinc-100 truncate">
+                                        {it.name}
+                                      </div>
+                                      <div className="text-slate-400 text-[11px]">
+                                        ৳{(it.unit_price || 0).toLocaleString()} × {it.quantity}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <span className="font-bold text-slate-900 dark:text-white shrink-0">
+                                    ৳ {(it.subtotal || it.unit_price * it.quantity).toLocaleString()}
                                   </span>
                                 </div>
-                                <span className="font-bold text-slate-900 dark:text-white">
-                                  ৳ {(it.subtotal || it.unit_price * it.quantity).toLocaleString()}
-                                </span>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
 
-                        {/* Financial Calculation & Cash Given / Return */}
-                        <div className="p-3 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-xs">
+                        {/* Financial Calculation Breakdown */}
+                        <div className="p-3 rounded-xl bg-slate-100/70 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-xs">
                           <div className="flex justify-between text-slate-500">
-                            <span>Subtotal:</span>
+                            <span>{lang === 'bn' ? 'সাবটোটাল:' : 'Subtotal:'}</span>
                             <span>৳ {(sale.subtotal || sale.total).toLocaleString()}</span>
                           </div>
 
                           {(sale.discount || 0) > 0 && (
                             <div className="flex justify-between text-rose-500">
                               <span>
-                                Discount {sale.discount_type === 'percentage' ? `(${sale.discount_value}%)` : '(Flat)'}:
+                                {lang === 'bn' ? 'ডিসকাউন্ট' : 'Discount'} {sale.discount_type === 'percentage' ? `(${sale.discount_value}%)` : '(Flat)'}:
                               </span>
                               <span className="font-bold">- ৳ {sale.discount.toLocaleString()}</span>
                             </div>
                           )}
 
-                          <div className="flex justify-between font-bold text-slate-900 dark:text-white pt-1 border-t border-slate-100 dark:border-zinc-800">
-                            <span>Net Total Paid:</span>
-                            <span className="text-[#00a86b] dark:text-[#00df89]">৳ {(sale.total || 0).toLocaleString()}</span>
+                          <div className="flex justify-between font-bold text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-800">
+                            <span>{lang === 'bn' ? 'মোট বিল:' : 'Total Bill:'}</span>
+                            <span className="text-sm font-bold text-slate-900 dark:text-white">৳ {(sale.total || 0).toLocaleString()}</span>
                           </div>
 
+                          <div className="flex justify-between text-slate-600 dark:text-zinc-300 pt-0.5">
+                            <span>{lang === 'bn' ? 'পরিশোধিত টাকা:' : 'Amount Paid:'}</span>
+                            <span className="font-semibold text-[#00a86b] dark:text-[#00df89]">
+                              ৳ {(sale.paid_amount !== undefined ? sale.paid_amount : sale.total).toLocaleString()}
+                            </span>
+                          </div>
+
+                          {(sale.due_amount || 0) > 0 && (
+                            <div className="flex justify-between text-amber-600 dark:text-amber-400 font-bold pt-0.5">
+                              <span>{lang === 'bn' ? 'বকেয়া টাকা:' : 'Due Amount:'}</span>
+                              <span>৳ {sale.due_amount.toLocaleString()}</span>
+                            </div>
+                          )}
+
                           {/* Cash Given & Change Returned */}
-                          {sale.payment_method?.toLowerCase() === 'cash' && (
-                            <div className="grid grid-cols-2 gap-2 pt-2 mt-1 border-t border-slate-100 dark:border-zinc-800 text-[11px]">
-                              <div className="p-1.5 rounded bg-slate-50 dark:bg-zinc-900/60 flex items-center justify-between">
-                                <span className="text-slate-500">Cash Given:</span>
+                          {sale.payment_method?.toLowerCase() === 'cash' && (sale.due_amount || 0) === 0 && (sale.tendered_amount || 0) > 0 && (
+                            <div className="grid grid-cols-2 gap-2 pt-2 mt-1 border-t border-slate-200 dark:border-zinc-800 text-[11px]">
+                              <div className="p-1.5 rounded bg-white dark:bg-zinc-900 flex items-center justify-between border border-slate-100 dark:border-zinc-800">
+                                <span className="text-slate-500">{lang === 'bn' ? 'কাস্টমার দিয়েছেন:' : 'Cash Given:'}</span>
                                 <span className="font-bold text-slate-900 dark:text-white">
-                                  ৳ {(sale.tendered_amount || sale.paid_amount || sale.total).toLocaleString()}
+                                  ৳ {sale.tendered_amount.toLocaleString()}
                                 </span>
                               </div>
-                              <div className="p-1.5 rounded bg-emerald-500/10 flex items-center justify-between text-emerald-600 dark:text-[#00df89]">
-                                <span className="font-medium">Change Return:</span>
+                              <div className="p-1.5 rounded bg-emerald-500/10 flex items-center justify-between text-emerald-600 dark:text-[#00df89] border border-emerald-500/20">
+                                <span className="font-medium">{lang === 'bn' ? 'ফেরত:' : 'Change:'}</span>
                                 <span className="font-bold">
                                   ৳ {(sale.change_amount || 0).toLocaleString()}
                                 </span>

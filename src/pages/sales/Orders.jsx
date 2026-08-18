@@ -657,15 +657,46 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* Items List */}
+              {/* Items List with Product Thumbnails */}
               <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1.5">
-                <div className="font-semibold text-slate-700 dark:text-zinc-300 text-[11px]">Purchased Items:</div>
-                {selectedOrder.items?.map((it, i) => (
-                  <div key={i} className="flex justify-between text-[11px]">
-                    <span className="truncate pr-2">{it.name} x {it.quantity}</span>
-                    <span className="font-semibold shrink-0">৳ {(it.subtotal || it.unit_price * it.quantity).toLocaleString()}</span>
-                  </div>
-                ))}
+                <div className="font-semibold text-slate-700 dark:text-zinc-300 text-[11px]">
+                  {lang === 'bn' ? 'ক্রয়কৃত পণ্যের তালিকা:' : 'Purchased Items:'}
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-zinc-800/80 bg-slate-50 dark:bg-[#09090b] rounded-xl border border-slate-200/90 dark:border-zinc-800/80 p-2 space-y-1.5">
+                  {selectedOrder.items?.map((it, i) => {
+                    const itemImg = it.image_url || it.product_id?.image_url || (it.product_id?.images && it.product_id.images[0]);
+                    return (
+                      <div key={i} className="pt-1.5 first:pt-0 flex items-center justify-between gap-2.5 text-[11px]">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {itemImg ? (
+                            <img
+                              src={itemImg}
+                              alt={it.name}
+                              className="w-8 h-8 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 shrink-0"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex items-center justify-center text-slate-400 shrink-0">
+                              <ShoppingBag className="w-3.5 h-3.5" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 dark:text-zinc-100 truncate">{it.name}</div>
+                            <div className="text-[10px] text-slate-400">
+                              ৳{(it.unit_price || 0).toLocaleString()} × {it.quantity}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="font-bold text-slate-900 dark:text-white shrink-0">
+                          ৳ {(it.subtotal || it.unit_price * it.quantity).toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Financial Calculations Breakdown */}
