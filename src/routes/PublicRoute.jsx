@@ -12,7 +12,7 @@ export default function PublicRoute() {
     return null;
   }
 
-  if (currentUser) {
+  if (currentUser && currentUser.emailVerified) {
     const hasShop = Boolean(mongoUser?.shop_id || mongoShop?._id);
     const target = hasShop
       ? (mongoShop?.business_type === 'gym' ? '/gym/dashboard' : '/dashboard')

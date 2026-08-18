@@ -16,20 +16,47 @@ export default function ForgotPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  const [resendCooldown, setResendCooldown] = useState(0);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!email.trim()) return;
     setErrorMessage('');
     setIsLoading(true);
 
     try {
       await resetPassword(email);
       setSubmitted(true);
+      setResendCooldown(60);
     } catch (err) {
       setErrorMessage(getAuthErrorMessage(err, lang));
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleResend = async () => {
+    if (resendCooldown > 0 || !email.trim()) return;
+    setErrorMessage('');
+    setIsLoading(true);
+    try {
+      await resetPassword(email);
+      setResendCooldown(60);
+    } catch (err) {
+      setErrorMessage(getAuthErrorMessage(err, lang));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Cooldown effect
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-[#FAFBFD]">
@@ -58,7 +85,7 @@ export default function ForgotPassword() {
           </h4>
           <p className="text-xs text-slate-300 leading-relaxed">
             {lang === 'bn'
-              ? 'আপনার নিবন্ধিত ইমেইলে পাসওয়ার্ড রিসেট লিংক পাঠানো হবে।'
+              ? 'আপনার নিবন্ধিত ইমেইলে তাৎক্ষণিক পাসওয়ার্ড রিসেট লিংক পাঠানো হবে।'
               : 'We will send an instant password reset link to your registered email address.'}
           </p>
         </div>
@@ -119,19 +146,50 @@ export default function ForgotPassword() {
           )}
 
           {submitted ? (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl space-y-2">
+            <div className="p-5 bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-xs font-bold rounded-2xl space-y-3 animate-in zoom-in-50 duration-200">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                <span>{lang === 'bn' ? 'রিসেট নির্দেশাবলী পাঠানো হয়েছে!' : 'Reset instructions sent!'}</span>
+                <span className="text-sm">{lang === 'bn' ? 'রিসেট নির্দেশাবলী পাঠানো হয়েছে!' : 'Reset Link Dispatched!'}</span>
               </div>
               <p className="font-normal text-slate-600 leading-relaxed">
-                {lang === 'bn'
-                  ? 'আমরা আপনার ইমেইলে পাসওয়ার্ড রিসেট লিংক পাঠিয়েছি। অনুগ্রহ করে আপনার ইনবক্স চেক করুন।'
-                  : 'We have dispatched a password reset link to your email address. Please check your inbox.'}
+                {lang === 'bn' ? (
+                  <>
+                    আমরা <span className="font-bold text-slate-800">{email}</span> ঠিকানায় পাসওয়ার্ড রিসেট লিংক পাঠিয়েছি। আপনার ইনবক্স বা স্প্যাম ফোল্ডার চেক করে লিংকে ক্লিক করুন।
+                  </>
+                ) : (
+                  <>
+                    We sent a password reset link to <span className="font-bold text-slate-800">{email}</span>. Please check your inbox or spam folder and click the link.
+                  </>
+                )}
               </p>
+              <div className="pt-2 flex items-center justify-between gap-3 border-t border-emerald-200/60">
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={isLoading || resendCooldown > 0}
+                  className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer disabled:text-slate-400 disabled:no-underline"
+                >
+                  {resendCooldown > 0
+                    ? (lang === 'bn' ? `পুনরায় পাঠান (${resendCooldown}s)` : `Resend (${resendCooldown}s)`)
+                    : (lang === 'bn' ? 'লিংক পাননি? আবার পাঠান' : "Didn't receive? Resend")}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSubmitted(false)}
+                  className="text-xs font-bold text-slate-500 hover:text-slate-700 hover:underline cursor-pointer"
+                >
+                  {lang === 'bn' ? 'ভিন্ন ইমেইল ব্যবহার করুন' : 'Change Email'}
+                </button>
+              </div>
+
               <div className="pt-2">
-                <Link to="/login" className="text-xs font-bold text-emerald-700 underline">
-                  {lang === 'bn' ? 'লগইন পেজে যান' : 'Return to login'}
+                <Link
+                  to="/login"
+                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs shadow-sm cursor-pointer"
+                >
+                  <span>{lang === 'bn' ? 'লগইন পেজে ফিরে যান' : 'Return to Login'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
             </div>

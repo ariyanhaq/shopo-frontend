@@ -11,7 +11,7 @@ import PublicRoute from './PublicRoute';
 
 import {
   Landing, Home, Pricing, Features, Testimonials, Contact,
-  Login, Register, ForgotPassword, VerifyEmail,
+  Login, Register, ForgotPassword, ResetPassword, VerifyEmail, AuthAction,
   CreateShop, BusinessCategory, ShopDetails, CompleteSetup,
   Dashboard, Overview, Settings,
   Products, AddProduct, Categories, StockHistory,
@@ -39,15 +39,20 @@ export default function AppRoutes() {
         <Route path="/contact" element={<Contact />} />
       </Route>
 
-      {/* Auth Pages (Protected from already logged-in users) */}
+      {/* Auth Pages */}
       <Route element={<PublicRoute />}>
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
         </Route>
       </Route>
+
+      {/* Universal Firebase Action Handlers */}
+      <Route path="/auth/action" element={<AuthAction />} />
+      <Route path="/__/auth/action" element={<AuthAction />} />
 
       {/* Onboarding Flow (Full screen experience) */}
       <Route element={<ProtectedRoute />}>

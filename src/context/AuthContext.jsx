@@ -1,6 +1,6 @@
 /**
  * @file AuthContext.jsx
- * @description Context API provider for Firebase Authentication state, login, registration, and user session management.
+ * @description Context API provider for Firebase Authentication state, login with email verification enforcement, registration, password recovery, and user session management.
  */
 import { createContext, useContext, useState, useEffect } from 'react';
 import {
@@ -9,6 +9,10 @@ import {
   signInWithPopup,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
+  verifyPasswordResetCode,
+  confirmPasswordReset,
+  applyActionCode,
   updateProfile,
   onAuthStateChanged,
 } from 'firebase/auth';
@@ -22,6 +26,22 @@ export function getAuthErrorMessage(error, lang = 'en') {
   const code = error.code || '';
 
   const messages = {
+    'auth/unverified-email': {
+      en: 'Please verify your email address to log in. We have sent a verification link to your email.',
+      bn: 'লগইন করতে অনুগ্রহ করে আপনার ইমেইল ভেরিফাই করুন। আমরা আপনার ইমেইলে ভেরিফিকেশন লিংক পাঠিয়েছি।',
+    },
+    'auth/expired-action-code': {
+      en: 'This reset or verification link has expired. Please request a new link.',
+      bn: 'এই লিংকটির মেয়াদ শেষ হয়ে গেছে। অনুগ্রহ করে নতুন লিংকের জন্য অনুরোধ করুন।',
+    },
+    'auth/invalid-action-code': {
+      en: 'This link is invalid or has already been used.',
+      bn: 'এই লিংকটি সঠিক নয় অথবা ইতিমধ্যে ব্যবহার করা হয়েছে।',
+    },
+    'auth/too-many-requests': {
+      en: 'Too many requests. Please wait a few moments and try again.',
+      bn: 'অতিরিক্ত বার চেষ্টা করা হয়েছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।',
+    },
     'auth/invalid-credential': {
       en: 'Incorrect email or password. Please try again.',
       bn: 'ভুল ইমেইল অথবা পাসওয়ার্ড। আবার চেষ্টা করুন।',
@@ -132,13 +152,15 @@ export function AuthProvider({ children }) {
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
-      if (user) {
+      if (user && user.emailVerified) {
         await syncBackendProfile();
       } else {
         setMongoUser(null);
         setMongoShop(null);
-        localStorage.removeItem('shopo_has_shop');
-        localStorage.removeItem('shopo_business_type');
+        if (!user) {
+          localStorage.removeItem('shopo_has_shop');
+          localStorage.removeItem('shopo_business_type');
+        }
       }
       setLoading(false);
     });
@@ -147,7 +169,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
-   * Log in with Email and Password
+   * Log in with Email and Password (requires email verification)
    */
   const loginWithEmail = async (email, password) => {
     if (!auth) {
@@ -156,7 +178,25 @@ export function AuthProvider({ children }) {
     setAuthError(null);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
-      return userCredential.user;
+      const user = userCredential.user;
+
+      // Check if email is verified
+      if (!user.emailVerified) {
+        try {
+          await sendEmailVerification(user);
+        } catch (verErr) {
+          console.warn('Auto verification email notice:', verErr.message);
+        }
+        const unverifiedErr = {
+          code: 'auth/unverified-email',
+          user,
+          message: 'Please verify your email address to log in. A verification link has been sent.',
+        };
+        setAuthError(unverifiedErr);
+        throw unverifiedErr;
+      }
+
+      return user;
     } catch (err) {
       setAuthError(err);
       throw err;
@@ -164,7 +204,7 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Register with Email and Password
+   * Register with Email and Password (dispatches verification email)
    */
   const registerWithEmail = async (email, password, { fullName = '', shopName = '' } = {}) => {
     if (!auth) {
@@ -183,6 +223,13 @@ export function AuthProvider({ children }) {
         localStorage.setItem(`shopo_shop_name_${user.uid}`, shopName.trim());
       }
 
+      // Automatically send verification email
+      try {
+        await sendEmailVerification(user);
+      } catch (verErr) {
+        console.warn('Registration verification email notice:', verErr.message);
+      }
+
       // Update state
       setCurrentUser({ ...user, displayName: fullName.trim() || user.displayName });
       return user;
@@ -193,7 +240,32 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Sign In / Sign Up with Google (Gmail)
+   * Send / Resend Verification Email
+   */
+  const sendVerificationEmail = async (targetUser = null) => {
+    const user = targetUser || auth?.currentUser;
+    if (!user) {
+      throw { code: 'auth/user-not-found', message: 'No active user session found to verify.' };
+    }
+    await sendEmailVerification(user);
+  };
+
+  /**
+   * Reload current user to check if email was verified
+   */
+  const checkEmailVerified = async () => {
+    if (!auth?.currentUser) return false;
+    await auth.currentUser.reload();
+    const isVerified = Boolean(auth.currentUser.emailVerified);
+    if (isVerified) {
+      setCurrentUser({ ...auth.currentUser });
+      await syncBackendProfile();
+    }
+    return isVerified;
+  };
+
+  /**
+   * Sign In / Sign Up with Google (inherently verified by Google)
    */
   const loginWithGoogle = async () => {
     if (!auth) {
@@ -250,6 +322,40 @@ export function AuthProvider({ children }) {
     }
   };
 
+  /**
+   * Verify Password Reset Code from Email Link
+   */
+  const verifyResetCode = async (oobCode) => {
+    if (!auth) {
+      throw { code: 'auth/unconfigured', message: 'Firebase is not configured.' };
+    }
+    return await verifyPasswordResetCode(auth, oobCode);
+  };
+
+  /**
+   * Confirm and update password with Reset Code
+   */
+  const confirmNewPassword = async (oobCode, newPassword) => {
+    if (!auth) {
+      throw { code: 'auth/unconfigured', message: 'Firebase is not configured.' };
+    }
+    await confirmPasswordReset(auth, oobCode, newPassword);
+  };
+
+  /**
+   * Universal handler for email action code (verification / reset)
+   */
+  const applyAuthActionCode = async (oobCode) => {
+    if (!auth) {
+      throw { code: 'auth/unconfigured', message: 'Firebase is not configured.' };
+    }
+    await applyActionCode(auth, oobCode);
+    if (auth.currentUser) {
+      await auth.currentUser.reload();
+      setCurrentUser({ ...auth.currentUser });
+    }
+  };
+
   const clearAuthError = () => setAuthError(null);
 
   const hasShop = Boolean(mongoUser?.shop_id || mongoShop?._id || localStorage.getItem('shopo_has_shop') === 'true');
@@ -260,6 +366,7 @@ export function AuthProvider({ children }) {
     mongoShop,
     hasShop,
     isAuthenticated: Boolean(currentUser),
+    isEmailVerified: Boolean(currentUser?.emailVerified),
     loading,
     authError,
     clearAuthError,
@@ -268,9 +375,14 @@ export function AuthProvider({ children }) {
     syncBackendProfile,
     loginWithEmail,
     registerWithEmail,
+    sendVerificationEmail,
+    checkEmailVerified,
     loginWithGoogle,
     logout,
     resetPassword,
+    verifyResetCode,
+    confirmNewPassword,
+    applyAuthActionCode,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

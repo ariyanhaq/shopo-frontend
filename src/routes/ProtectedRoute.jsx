@@ -41,6 +41,11 @@ export default function ProtectedRoute() {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Enforce email verification on protected app routes
+  if (!currentUser.emailVerified) {
+    return <Navigate to="/verify-email" state={{ email: currentUser.email }} replace />;
+  }
+
   const isOnboardingRoute = location.pathname.startsWith('/onboarding');
   const isGym = mongoShop?.business_type === 'gym' || localStorage.getItem('shopo_business_type') === 'gym';
   const dashboardTarget = isGym ? '/gym/dashboard' : '/dashboard';

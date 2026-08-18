@@ -38,6 +38,10 @@ export default function Login() {
       navigateAfterAuth(profile);
     } catch (err) {
       console.error('Login email error:', err);
+      if (err.code === 'auth/unverified-email') {
+        navigate('/verify-email', { state: { email: formData.email } });
+        return;
+      }
       setErrorMessage(getAuthErrorMessage(err, lang));
     } finally {
       setIsLoading(false);

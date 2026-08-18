@@ -49,8 +49,7 @@ export default function Register() {
         fullName: formData.fullName,
         shopName: formData.shopName
       });
-      const profile = await syncBackendProfile();
-      navigateAfterAuth(profile);
+      navigate('/verify-email', { state: { email: formData.email }, replace: true });
     } catch (err) {
       console.error('Register email error:', err);
       setErrorMessage(getAuthErrorMessage(err, lang));
