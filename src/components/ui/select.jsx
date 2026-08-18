@@ -4,7 +4,7 @@
  */
 import { useState, useRef, useEffect, useMemo, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const SelectContext = createContext(null);
