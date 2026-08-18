@@ -731,7 +731,7 @@ export default function NewSale() {
                 <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs animate-in fade-in">
                   <div className="flex items-center gap-1.5 font-bold text-amber-700 dark:text-amber-400">
                     <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span>{lang === 'bn' ? 'পূর্বের বকেয়া (Previous Due):' : 'Previous Due Balance:'}</span>
+                    <span>{lang === 'bn' ? 'পূর্বের বকেয়া:' : 'Previous Due Balance:'}</span>
                   </div>
                   <div className="font-bold text-sm text-amber-700 dark:text-amber-400 font-mono">
                     ৳ {previousCustomerDue.toLocaleString()}
@@ -750,7 +750,7 @@ export default function NewSale() {
               <div className="flex items-center justify-between text-xs">
                 <label className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
                   <Percent className="w-3.5 h-3.5 text-[#00df89]" />
-                  <span>Discount Option</span>
+                  <span>{lang === 'bn' ? 'ডিসকাউন্ট অপশন' : 'Discount Option'}</span>
                 </label>
 
                 {/* Flat vs Percentage Toggle */}
@@ -764,7 +764,7 @@ export default function NewSale() {
                         : 'text-slate-500'
                     }`}
                   >
-                    Flat (৳)
+                    {lang === 'bn' ? 'ফ্ল্যাট (৳)' : 'Flat (৳)'}
                   </button>
                   <button
                     type="button"
@@ -775,7 +775,7 @@ export default function NewSale() {
                         : 'text-slate-500'
                     }`}
                   >
-                    Percent (%)
+                    {lang === 'bn' ? 'শতাংশ (%)' : 'Percent (%)'}
                   </button>
                 </div>
               </div>
@@ -783,7 +783,7 @@ export default function NewSale() {
               <div className="relative">
                 <input
                   type="number"
-                  placeholder={discountType === 'flat' ? 'Discount Amount (৳ e.g. 50)' : 'Discount Percentage (% e.g. 10)'}
+                  placeholder={discountType === 'flat' ? (lang === 'bn' ? 'ডিসকাউন্ট পরিমাণ (৳ যেমন ৫০)' : 'Discount Amount (৳ e.g. 50)') : (lang === 'bn' ? 'ডিসকাউন্ট শতাংশ (% যেমন ১০)' : 'Discount Percentage (% e.g. 10)')}
                   value={discountValue}
                   onChange={(e) => setDiscountValue(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-1 focus:ring-[#00df89]"
@@ -804,17 +804,17 @@ export default function NewSale() {
                 </label>
                 {paymentMethod === 'Due' && (
                   <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
-                    {lang === 'bn' ? 'বকেয়া বিক্রি' : 'Due / Credit Sale'}
+                    {lang === 'bn' ? 'বকেয়া বিক্রি' : 'Due Sale'}
                   </Badge>
                 )}
               </div>
               <div className="grid grid-cols-5 gap-1.5">
                 {[
-                  { key: 'Cash', label: 'Cash' },
-                  { key: 'bKash', label: 'bKash' },
-                  { key: 'Nagad', label: 'Nagad' },
-                  { key: 'Card', label: 'Card' },
-                  { key: 'Due', label: lang === 'bn' ? 'বাকি (Due)' : 'Due' },
+                  { key: 'Cash', label: lang === 'bn' ? 'নগদ' : 'Cash' },
+                  { key: 'bKash', label: lang === 'bn' ? 'বিকাশ' : 'bKash' },
+                  { key: 'Nagad', label: lang === 'bn' ? 'নগদ' : 'Nagad' },
+                  { key: 'Card', label: lang === 'bn' ? 'কার্ড' : 'Card' },
+                  { key: 'Due', label: lang === 'bn' ? 'বাকি' : 'Due' },
                 ].map(({ key, label }) => (
                   <button
                     key={key}
@@ -851,7 +851,7 @@ export default function NewSale() {
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
-                      placeholder="Paid Now (৳ e.g. 0 for full due)"
+                      placeholder={lang === 'bn' ? 'এখন জমা দিচ্ছেন (৳ সম্পূর্ণ বাকির জন্য ০)' : 'Paid Now (৳ e.g. 0 for full due)'}
                       value={duePaidAmount}
                       onChange={(e) => setDuePaidAmount(e.target.value)}
                       className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-[#121215] border border-amber-500/40 text-xs font-semibold outline-none focus:ring-1 focus:ring-amber-500"
@@ -861,9 +861,9 @@ export default function NewSale() {
                       variant="outline"
                       size="sm"
                       onClick={() => setDuePaidAmount('0')}
-                      className="text-[11px] h-8 px-2 border-amber-500/30 text-amber-700 dark:text-amber-400"
+                      className="text-[11px] h-8 px-2 border-amber-500/30 text-amber-700 dark:text-amber-400 whitespace-nowrap"
                     >
-                      Full Due (৳0)
+                      {lang === 'bn' ? 'সম্পূর্ণ বাকি (৳০)' : 'Full Due (৳0)'}
                     </Button>
                   </div>
 
@@ -872,25 +872,25 @@ export default function NewSale() {
                     <button
                       type="button"
                       onClick={() => setDuePaidAmount('0')}
-                      className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 hover:border-amber-500"
+                      className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 hover:border-amber-500 whitespace-nowrap cursor-pointer"
                     >
-                      ৳0 (Full Due)
+                      {lang === 'bn' ? '৳০ (সম্পূর্ণ বাকি)' : '৳0 (Full Due)'}
                     </button>
                     {totalPayable > 0 && (
                       <>
                         <button
                           type="button"
                           onClick={() => setDuePaidAmount(String(Math.round(totalPayable / 2)))}
-                          className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 hover:border-amber-500"
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 hover:border-amber-500 whitespace-nowrap cursor-pointer"
                         >
                           50% (৳{Math.round(totalPayable / 2)})
                         </button>
                         <button
                           type="button"
                           onClick={() => setDuePaidAmount(String(totalPayable))}
-                          className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 hover:border-[#00df89]"
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 hover:border-[#00df89] whitespace-nowrap cursor-pointer"
                         >
-                          Full Paid (৳{totalPayable})
+                          {lang === 'bn' ? `সম্পূর্ণ পরিশোধ (৳${totalPayable})` : `Full Paid (৳${totalPayable})`}
                         </button>
                       </>
                     )}
@@ -904,22 +904,22 @@ export default function NewSale() {
                     <span className="font-semibold">৳ {totalPayable.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-[#00a86b] dark:text-[#00df89]">
-                    <span>{lang === 'bn' ? 'নগদ জমা (Paid Now):' : 'Amount Paid Now:'}</span>
+                    <span>{lang === 'bn' ? 'নগদ জমা:' : 'Amount Paid Now:'}</span>
                     <span className="font-semibold">৳ {paidNow.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-amber-600 dark:text-amber-400 font-bold">
-                    <span>{lang === 'bn' ? 'এই বিলের বকেয়া (Bill Due):' : 'This Bill Due:'}</span>
+                    <span>{lang === 'bn' ? 'এই বিলের বকেয়া:' : 'This Bill Due:'}</span>
                     <span>৳ {currentBillDue.toLocaleString()}</span>
                   </div>
                   {previousCustomerDue > 0 && (
                     <div className="flex justify-between text-slate-600 dark:text-zinc-400">
-                      <span>{lang === 'bn' ? 'পূর্বের বকেয়া (Previous Due):' : 'Previous Due:'}</span>
+                      <span>{lang === 'bn' ? 'পূর্বের বকেয়া:' : 'Previous Due:'}</span>
                       <span className="font-semibold text-amber-600">৳ {previousCustomerDue.toLocaleString()}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1.5 border-t border-amber-500/30">
                     <span className="text-amber-700 dark:text-amber-400">
-                      {lang === 'bn' ? 'সর্বমোট বকেয়া (Total Due):' : 'Total Outstanding Due:'}
+                      {lang === 'bn' ? 'সর্বমোট বকেয়া:' : 'Total Outstanding Due:'}
                     </span>
                     <span className="text-amber-600 dark:text-amber-400 font-mono text-base">
                       ৳ {totalOutstandingDue.toLocaleString()}
@@ -1175,18 +1175,18 @@ export default function NewSale() {
                   <div className="pt-1.5 mt-1 border-t border-dashed border-slate-200 dark:border-zinc-700 space-y-1 text-[11px]">
                     {completedOrder.currentBillDue > 0 && (
                       <div className="flex justify-between text-amber-600 font-bold">
-                        <span>This Bill Due (এই বিক্রির বকেয়া):</span>
+                        <span>{lang === 'bn' ? 'এই বিক্রির বকেয়া:' : 'This Bill Due:'}</span>
                         <span>৳ {completedOrder.currentBillDue.toLocaleString()}</span>
                       </div>
                     )}
                     {completedOrder.previousDue > 0 && (
                       <div className="flex justify-between text-slate-500">
-                        <span>Previous Customer Due (পূর্বের বকেয়া):</span>
+                        <span>{lang === 'bn' ? 'পূর্বের বকেয়া:' : 'Previous Customer Due:'}</span>
                         <span className="font-semibold text-amber-600">৳ {completedOrder.previousDue.toLocaleString()}</span>
                       </div>
                     )}
                     <div className="flex justify-between font-bold text-xs text-amber-600 dark:text-amber-400 pt-1 border-t border-slate-200 dark:border-zinc-800">
-                      <span>Total Customer Due (সর্বমোট বকেয়া):</span>
+                      <span>{lang === 'bn' ? 'সর্বমোট বকেয়া:' : 'Total Customer Due:'}</span>
                       <span className="font-mono text-sm">৳ {(completedOrder.totalDue ?? (completedOrder.previousDue + completedOrder.currentBillDue)).toLocaleString()}</span>
                     </div>
                   </div>
@@ -1195,11 +1195,11 @@ export default function NewSale() {
                 {completedOrder.method.toLowerCase() === 'cash' && completedOrder.currentBillDue === 0 && (
                   <>
                     <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
-                      <span>Cash Received:</span>
+                      <span>{lang === 'bn' ? 'কাস্টমার দিয়েছেন:' : 'Cash Received:'}</span>
                       <span className="font-semibold">৳ {completedOrder.cashReceived.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-emerald-600 dark:text-[#00df89] font-bold">
-                      <span>Change Returned:</span>
+                      <span>{lang === 'bn' ? 'ফেরত দেওয়া হয়েছে:' : 'Change Returned:'}</span>
                       <span>৳ {completedOrder.changeToReturn.toLocaleString()}</span>
                     </div>
                   </>

@@ -373,14 +373,14 @@ export default function Orders() {
             <table className="w-full text-xs text-left">
               <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-500 border-b border-slate-200 dark:border-zinc-800">
                 <tr>
-                  <th className="p-3.5">Invoice #</th>
-                  <th className="p-3.5">Customer</th>
-                  <th className="p-3.5">Items</th>
-                  <th className="p-3.5">Discount</th>
-                  <th className="p-3.5">Date & Time</th>
-                  <th className="p-3.5">Payment / Due Status</th>
-                  <th className="p-3.5">Net Total (৳)</th>
-                  <th className="p-3.5 text-right">Actions</th>
+                  <th className="p-3.5 whitespace-nowrap">Invoice #</th>
+                  <th className="p-3.5 whitespace-nowrap">Customer</th>
+                  <th className="p-3.5 whitespace-nowrap">Items</th>
+                  <th className="p-3.5 whitespace-nowrap">Discount</th>
+                  <th className="p-3.5 whitespace-nowrap">Date & Time</th>
+                  <th className="p-3.5 whitespace-nowrap">Payment / Due Status</th>
+                  <th className="p-3.5 whitespace-nowrap">Net Total (৳)</th>
+                  <th className="p-3.5 text-right whitespace-nowrap">{lang === 'bn' ? 'অ্যাকশন' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
@@ -388,12 +388,12 @@ export default function Orders() {
                   const isDue = (order.due_amount || 0) > 0;
                   return (
                     <tr key={order._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
-                      <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                        <FileText className="w-3.5 h-3.5 text-slate-400" />
+                      <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2 whitespace-nowrap">
+                        <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span>{order.invoice_number}</span>
                       </td>
                       <td className="p-3.5 text-slate-800 dark:text-zinc-200 font-medium">
-                        <div>{order.customer_id?.name || 'Walk-in Customer'}</div>
+                        <div className="whitespace-nowrap">{order.customer_id?.name || 'Walk-in Customer'}</div>
                         {order.customer_id?.phone && (
                           <div className="text-[10px] text-slate-400 font-mono">{order.customer_id.phone}</div>
                         )}
@@ -401,21 +401,21 @@ export default function Orders() {
                       <td className="p-3.5 text-slate-600 dark:text-zinc-300">
                         {order.items?.map(it => `${it.name} (${it.quantity})`).join(', ') || '1 item'}
                       </td>
-                      <td className="p-3.5 text-rose-500 font-medium">
+                      <td className="p-3.5 text-rose-500 font-medium whitespace-nowrap">
                         {order.discount > 0 ? (
                           <span>- ৳ {order.discount.toLocaleString()} {order.discount_type === 'percentage' ? `(${order.discount_value}%)` : ''}</span>
                         ) : (
                           <span className="text-slate-400">None</span>
                         )}
                       </td>
-                      <td className="p-3.5 text-slate-500">
+                      <td className="p-3.5 text-slate-500 whitespace-nowrap">
                         {new Date(order.created_at).toLocaleString()}
                       </td>
-                      <td className="p-3.5">
+                      <td className="p-3.5 whitespace-nowrap">
                         <div className="flex flex-col items-start gap-1">
                           <Badge
                             variant={order.payment_method?.toLowerCase() === 'due' ? 'warning' : 'secondary'}
-                            className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 ${
+                            className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 whitespace-nowrap ${
                               order.payment_method?.toLowerCase() === 'due'
                                 ? '!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30'
                                 : '!bg-slate-100 !text-slate-700 dark:!bg-zinc-800 dark:!text-zinc-300 !border-slate-200 dark:!border-zinc-700'
@@ -426,41 +426,41 @@ export default function Orders() {
                           {isDue ? (
                             <Badge
                               variant="warning"
-                              className="!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30 text-[10px] font-bold px-2 py-0.5"
+                              className="!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30 text-[10px] font-bold px-2 py-0.5 whitespace-nowrap"
                             >
                               Due: ৳{order.due_amount.toLocaleString()}
                             </Badge>
                           ) : (
                             <Badge
                               variant="default"
-                              className="!bg-emerald-500/10 !text-emerald-700 dark:!text-emerald-400 !border-emerald-500/20 text-[9px] font-semibold px-2 py-0.5"
+                              className="!bg-emerald-500/10 !text-emerald-700 dark:!text-emerald-400 !border-emerald-500/20 text-[9px] font-semibold px-2 py-0.5 whitespace-nowrap"
                             >
                               Paid in Full
                             </Badge>
                           )}
                         </div>
                       </td>
-                      <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89]">
+                      <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89] whitespace-nowrap">
                         ৳ {(order.total || 0).toLocaleString()}
                       </td>
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="p-3.5 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1 flex-nowrap">
                           {isDue && (
                             <Button
                               size="sm"
                               onClick={() => handleOpenCollectDue(order)}
-                              className="h-7 text-xs px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1 shadow-2xs cursor-pointer mr-1"
+                              className="h-7 text-xs px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1.5 shadow-2xs cursor-pointer mr-1 whitespace-nowrap shrink-0 inline-flex items-center"
                               title="Collect Due Payment"
                             >
-                              <Coins className="w-3.5 h-3.5" />
-                              <span>{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Collect Due'}</span>
+                              <Coins className="w-3.5 h-3.5 shrink-0" />
+                              <span className="whitespace-nowrap">{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Collect Due'}</span>
                             </Button>
                           )}
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => setSelectedOrder(order)}
-                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-[#00df89]"
+                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-[#00df89] shrink-0"
                             title="View Receipt Memo"
                           >
                             <Printer className="w-3.5 h-3.5" />
@@ -469,7 +469,7 @@ export default function Orders() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleOpenEdit(order)}
-                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500"
+                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500 shrink-0"
                             title="Edit Sale Details"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -478,7 +478,7 @@ export default function Orders() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteSale(order._id, order.invoice_number)}
-                            className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                            className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
                             title="Delete Sale & Restore Stock"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -699,13 +699,13 @@ export default function Orders() {
                   <div className="pt-1.5 mt-1 border-t border-dashed border-slate-200 dark:border-zinc-700 space-y-0.5 text-[11px]">
                     {selectedOrder.due_amount > 0 && (
                       <div className="flex justify-between text-amber-600 font-bold">
-                        <span>This Bill Due (এই মেমোর বকেয়া):</span>
+                        <span>{lang === 'bn' ? 'এই মেমোর বকেয়া:' : 'This Bill Due:'}</span>
                         <span>৳ {selectedOrder.due_amount.toLocaleString()}</span>
                       </div>
                     )}
                     {(selectedOrder.customer_id?.total_due || 0) > 0 && (
                       <div className="flex justify-between text-slate-500 font-medium">
-                        <span>Customer Total Outstanding Due:</span>
+                        <span>{lang === 'bn' ? 'কাস্টমারের মোট বকেয়া:' : 'Customer Total Outstanding Due:'}</span>
                         <span className="text-amber-600 font-semibold">৳ {selectedOrder.customer_id.total_due.toLocaleString()}</span>
                       </div>
                     )}
@@ -716,11 +716,11 @@ export default function Orders() {
                 {selectedOrder.payment_method?.toLowerCase() === 'cash' && (selectedOrder.tendered_amount || 0) > 0 && (selectedOrder.due_amount || 0) === 0 && (
                   <>
                     <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
-                      <span>Cash Given by Customer:</span>
+                      <span>{lang === 'bn' ? 'কাস্টমার দিয়েছেন:' : 'Cash Given by Customer:'}</span>
                       <span className="font-semibold">৳ {selectedOrder.tendered_amount.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-emerald-600 dark:text-[#00df89] font-bold">
-                      <span>Change Returned:</span>
+                      <span>{lang === 'bn' ? 'ফেরত দেওয়া হয়েছে:' : 'Change Returned:'}</span>
                       <span>৳ {(selectedOrder.change_amount || 0).toLocaleString()}</span>
                     </div>
                   </>
@@ -730,7 +730,7 @@ export default function Orders() {
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800">
               <Button variant="outline" size="sm" onClick={() => setSelectedOrder(null)}>
-                Close
+                {lang === 'bn' ? 'বন্ধ করুন' : 'Close'}
               </Button>
               {selectedOrder.due_amount > 0 && (
                 <Button
@@ -746,7 +746,7 @@ export default function Orders() {
                 </Button>
               )}
               <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
-                <Printer className="w-3.5 h-3.5" /> Print Receipt
+                <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'প্রিন্ট রশিদ' : 'Print Receipt'}
               </Button>
             </div>
           </Card>
@@ -785,28 +785,28 @@ export default function Orders() {
             {/* Customer & Bill Overview Box */}
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2 text-xs">
               <div className="flex justify-between items-center text-slate-700 dark:text-zinc-300 font-medium">
-                <span>Customer:</span>
+                <span>{lang === 'bn' ? 'কাস্টমার:' : 'Customer:'}</span>
                 <span className="font-bold text-slate-900 dark:text-white">
-                  {collectingOrder.customer_id?.name || 'Walk-in Customer'}
+                  {collectingOrder.customer_id?.name || (lang === 'bn' ? 'সাধারণ কাস্টমার' : 'Walk-in Customer')}
                 </span>
               </div>
               {collectingOrder.customer_id?.phone && (
                 <div className="flex justify-between items-center text-slate-500">
-                  <span>Phone:</span>
+                  <span>{lang === 'bn' ? 'মোবাইল নম্বর:' : 'Phone:'}</span>
                   <span className="font-mono">{collectingOrder.customer_id.phone}</span>
                 </div>
               )}
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200 dark:border-zinc-800 text-center">
                 <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800">
-                  <div className="text-[10px] text-slate-400">Total Bill</div>
+                  <div className="text-[10px] text-slate-400">{lang === 'bn' ? 'মোট বিল' : 'Total Bill'}</div>
                   <div className="font-bold text-slate-900 dark:text-white">৳ {collectingOrder.total.toLocaleString()}</div>
                 </div>
                 <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800">
-                  <div className="text-[10px] text-slate-400">Paid so far</div>
+                  <div className="text-[10px] text-slate-400">{lang === 'bn' ? 'পরিশোধিত' : 'Paid so far'}</div>
                   <div className="font-bold text-emerald-600">৳ {(collectingOrder.paid_amount || 0).toLocaleString()}</div>
                 </div>
                 <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                  <div className="text-[10px] text-amber-600 font-semibold">Bill Due</div>
+                  <div className="text-[10px] text-amber-600 font-semibold">{lang === 'bn' ? 'বকেয়া' : 'Bill Due'}</div>
                   <div className="font-bold text-amber-600">৳ {collectingOrder.due_amount.toLocaleString()}</div>
                 </div>
               </div>
@@ -823,14 +823,14 @@ export default function Orders() {
                     <button
                       type="button"
                       onClick={() => setCollectForm({ ...collectForm, amount: String(collectingOrder.due_amount) })}
-                      className="px-2 py-0.5 rounded-md font-bold bg-amber-500/15 text-amber-600 border border-amber-500/30 hover:bg-amber-500/25 transition-colors cursor-pointer"
+                      className="px-2 py-0.5 rounded-md font-bold bg-amber-500/15 text-amber-600 border border-amber-500/30 hover:bg-amber-500/25 transition-colors cursor-pointer whitespace-nowrap"
                     >
-                      Full Due (৳{collectingOrder.due_amount})
+                      {lang === 'bn' ? `সম্পূর্ণ বাকি (৳${collectingOrder.due_amount})` : `Full Due (৳${collectingOrder.due_amount})`}
                     </button>
                     <button
                       type="button"
                       onClick={() => setCollectForm({ ...collectForm, amount: String(Math.round(collectingOrder.due_amount / 2)) })}
-                      className="px-2 py-0.5 rounded-md font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-200 transition-colors cursor-pointer"
+                      className="px-2 py-0.5 rounded-md font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-200 transition-colors cursor-pointer whitespace-nowrap"
                     >
                       50% (৳{Math.round(collectingOrder.due_amount / 2)})
                     </button>
@@ -859,15 +859,15 @@ export default function Orders() {
                   onValueChange={(val) => setCollectForm({ ...collectForm, payment_method: val })}
                 >
                   <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
-                    <SelectValue placeholder="Payment Method" />
+                    <SelectValue placeholder={lang === 'bn' ? 'পেমেন্ট মাধ্যম নির্বাচন করুন' : 'Payment Method'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cash">Cash (নগদ)</SelectItem>
-                    <SelectItem value="bkash">bKash (বিকাশ)</SelectItem>
-                    <SelectItem value="nagad">Nagad (নগদ)</SelectItem>
-                    <SelectItem value="rocket">Rocket (রকেট)</SelectItem>
-                    <SelectItem value="card">Card (কার্ড)</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="cash">{lang === 'bn' ? 'নগদ' : 'Cash'}</SelectItem>
+                    <SelectItem value="bkash">{lang === 'bn' ? 'বিকাশ' : 'bKash'}</SelectItem>
+                    <SelectItem value="nagad">{lang === 'bn' ? 'নগদ (Nagad)' : 'Nagad'}</SelectItem>
+                    <SelectItem value="rocket">{lang === 'bn' ? 'রকেট' : 'Rocket'}</SelectItem>
+                    <SelectItem value="card">{lang === 'bn' ? 'কার্ড' : 'Card'}</SelectItem>
+                    <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার' : 'Bank Transfer'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -879,7 +879,7 @@ export default function Orders() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Paid in cash at counter"
+                  placeholder={lang === 'bn' ? 'যেমন: কাউন্টারে নগদ পরিশোধ' : 'e.g. Paid in cash at counter'}
                   value={collectForm.note}
                   onChange={(e) => setCollectForm({ ...collectForm, note: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
@@ -889,7 +889,7 @@ export default function Orders() {
               {/* Real-Time Balance Preview */}
               {parseFloat(collectForm.amount) > 0 && (
                 <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  <span>Remaining Bill Due after Payment:</span>
+                  <span>{lang === 'bn' ? 'বকেয়া অবশিষ্ট থাকবে:' : 'Remaining Bill Due after Payment:'}</span>
                   <span className="font-mono text-sm font-bold">
                     ৳ {Math.max(0, collectingOrder.due_amount - (parseFloat(collectForm.amount) || 0)).toLocaleString()}
                   </span>
@@ -906,7 +906,7 @@ export default function Orders() {
                     setCollectingOrder(null);
                   }}
                 >
-                  Cancel
+                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
                 </Button>
                 <Button
                   type="submit"
@@ -935,7 +935,9 @@ export default function Orders() {
                   <CheckCircle2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">Money Receipt / বকেয়া জমার রশিদ</h2>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    {lang === 'bn' ? 'বকেয়া জমার রশিদ' : 'Money Receipt'}
+                  </h2>
                   <p className="text-xs text-slate-400 font-mono">Ref: {collectedVoucher.invoice_number}</p>
                 </div>
               </div>
@@ -949,42 +951,42 @@ export default function Orders() {
                 <h3 className="font-bold text-sm text-slate-900 dark:text-white">{mongoShop?.name || 'Shopo Store'}</h3>
                 <p className="text-[11px] text-slate-400">{collectedVoucher.date}</p>
                 <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-[#00df89] border-emerald-500/30 text-[10px] font-bold mt-1">
-                  Payment Received
+                  {lang === 'bn' ? 'টাকা জমা সম্পন্ন' : 'Payment Received'}
                 </Badge>
               </div>
 
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Received From:</span>
+                  <span className="text-slate-500">{lang === 'bn' ? 'প্রদানকারী:' : 'Received From:'}</span>
                   <span className="font-semibold text-slate-900 dark:text-white">{collectedVoucher.customer_name}</span>
                 </div>
                 {collectedVoucher.customer_phone && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Phone:</span>
+                    <span className="text-slate-500">{lang === 'bn' ? 'মোবাইল নম্বর:' : 'Phone:'}</span>
                     <span className="font-mono text-slate-700 dark:text-zinc-300">{collectedVoucher.customer_phone}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Payment Method:</span>
+                  <span className="text-slate-500">{lang === 'bn' ? 'পেমেন্ট মাধ্যম:' : 'Payment Method:'}</span>
                   <span className="font-semibold uppercase">{collectedVoucher.payment_method}</span>
                 </div>
                 {collectedVoucher.note && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Remarks:</span>
+                    <span className="text-slate-500">{lang === 'bn' ? 'মন্তব্য:' : 'Remarks:'}</span>
                     <span className="text-slate-700 dark:text-zinc-300">{collectedVoucher.note}</span>
                   </div>
                 )}
 
                 <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1 text-xs">
                   <div className="flex justify-between items-center text-sm font-bold text-slate-900 dark:text-white pt-1">
-                    <span>Amount Received:</span>
+                    <span>{lang === 'bn' ? 'গৃহীত টাকা:' : 'Amount Received:'}</span>
                     <span className="text-[#00a86b] dark:text-[#00df89] text-base">
                       ৳ {collectedVoucher.collected_amount.toLocaleString()}
                     </span>
                   </div>
 
                   <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
-                    <span>Remaining Bill Due:</span>
+                    <span>{lang === 'bn' ? 'বকেয়া অবশিষ্ট:' : 'Remaining Bill Due:'}</span>
                     <span className={`font-semibold ${collectedVoucher.remaining_sale_due > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600'}`}>
                       ৳ {collectedVoucher.remaining_sale_due.toLocaleString()}
                     </span>
@@ -992,7 +994,7 @@ export default function Orders() {
 
                   {collectedVoucher.customer_total_due > 0 && (
                     <div className="flex justify-between text-slate-500 text-[11px]">
-                      <span>Customer Total Due:</span>
+                      <span>{lang === 'bn' ? 'কাস্টমারের মোট বকেয়া:' : 'Customer Total Due:'}</span>
                       <span className="font-semibold text-amber-600">৳ {collectedVoucher.customer_total_due.toLocaleString()}</span>
                     </div>
                   )}
@@ -1002,10 +1004,10 @@ export default function Orders() {
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800">
               <Button variant="outline" size="sm" onClick={() => setCollectedVoucher(null)}>
-                Close
+                {lang === 'bn' ? 'বন্ধ করুন' : 'Close'}
               </Button>
               <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
-                <Printer className="w-3.5 h-3.5" /> Print Money Receipt
+                <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'রশিদ প্রিন্ট করুন' : 'Print Money Receipt'}
               </Button>
             </div>
           </Card>

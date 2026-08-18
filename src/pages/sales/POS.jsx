@@ -630,7 +630,7 @@ export default function POS() {
                 </div>
                 <input
                   type="number"
-                  placeholder="0 (Full Due / সম্পূর্ণ বাকি)"
+                  placeholder={lang === 'bn' ? '০ (সম্পূর্ণ বাকি)' : '0 (Full Due)'}
                   value={duePaidAmount}
                   onChange={(e) => setDuePaidAmount(e.target.value)}
                   className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-amber-500/40 text-xs font-semibold outline-none focus:ring-1 focus:ring-amber-500"

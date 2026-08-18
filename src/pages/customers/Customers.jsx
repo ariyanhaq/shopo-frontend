@@ -516,13 +516,13 @@ export default function Customers() {
             <table className="w-full text-xs text-left">
               <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-500 border-b border-slate-200 dark:border-zinc-800 select-none">
                 <tr>
-                  <th className="p-3.5">Customer</th>
-                  <th className="p-3.5">Phone Number</th>
-                  <th className="p-3.5">Total Orders</th>
-                  <th className="p-3.5">Total Purchases (৳)</th>
-                  <th className="p-3.5">Due Remaining (৳)</th>
-                  <th className="p-3.5">Last Active</th>
-                  <th className="p-3.5 text-right">Actions</th>
+                  <th className="p-3.5 whitespace-nowrap">Customer</th>
+                  <th className="p-3.5 whitespace-nowrap">Phone Number</th>
+                  <th className="p-3.5 whitespace-nowrap">Total Orders</th>
+                  <th className="p-3.5 whitespace-nowrap">Total Purchases (৳)</th>
+                  <th className="p-3.5 whitespace-nowrap">Due Remaining (৳)</th>
+                  <th className="p-3.5 whitespace-nowrap">Last Active</th>
+                  <th className="p-3.5 text-right whitespace-nowrap">{lang === 'bn' ? 'অ্যাকশন' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
@@ -536,7 +536,7 @@ export default function Customers() {
                       onClick={() => handleOpenCustomerHistory(c)}
                       className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors cursor-pointer group"
                     >
-                      <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2.5">
+                      <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2.5 whitespace-nowrap">
                         <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-bold text-xs shrink-0">
                           {c.name ? c.name.slice(0, 2).toUpperCase() : 'CU'}
                         </div>
@@ -550,10 +550,10 @@ export default function Customers() {
                         </div>
                       </td>
 
-                      <td className="p-3.5 text-slate-700 dark:text-zinc-300 font-mono">
+                      <td className="p-3.5 text-slate-700 dark:text-zinc-300 font-mono whitespace-nowrap">
                         {c.phone ? (
                           <div className="flex items-center gap-1">
-                            <Phone className="w-3 h-3 text-slate-400" />
+                            <Phone className="w-3 h-3 text-slate-400 shrink-0" />
                             <span>{c.phone}</span>
                           </div>
                         ) : (
@@ -561,17 +561,17 @@ export default function Customers() {
                         )}
                       </td>
 
-                      <td className="p-3.5 text-slate-700 dark:text-zinc-300 font-medium">
+                      <td className="p-3.5 text-slate-700 dark:text-zinc-300 font-medium whitespace-nowrap">
                         <Badge variant="secondary" className="text-[10px]">
                           {ordersCount} {ordersCount === 1 ? 'order' : 'orders'}
                         </Badge>
                       </td>
 
-                      <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89]">
+                      <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89] whitespace-nowrap">
                         ৳ {spent.toLocaleString()}
                       </td>
 
-                      <td className="p-3.5 font-semibold">
+                      <td className="p-3.5 font-semibold whitespace-nowrap">
                         {(c.total_due || 0) > 0 ? (
                           <span className="text-amber-500">৳ {c.total_due.toLocaleString()}</span>
                         ) : (
@@ -579,7 +579,7 @@ export default function Customers() {
                         )}
                       </td>
 
-                      <td className="p-3.5 text-slate-500 text-[11px]">
+                      <td className="p-3.5 text-slate-500 text-[11px] whitespace-nowrap">
                         {c.last_order_date
                           ? new Date(c.last_order_date).toLocaleDateString()
                           : c.created_at
@@ -587,17 +587,17 @@ export default function Customers() {
                           : 'Recent'}
                       </td>
 
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="p-3.5 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1 flex-nowrap">
                           {(c.total_due || 0) > 0 && (
                             <Button
                               size="sm"
                               onClick={(e) => handleOpenCollectCustomerDue(c, e)}
-                              className="h-7 text-xs px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1 shadow-2xs cursor-pointer mr-1"
+                              className="h-7 text-xs px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1.5 shadow-2xs cursor-pointer mr-1 whitespace-nowrap shrink-0 inline-flex items-center"
                               title="Collect Due Payment"
                             >
-                              <Coins className="w-3.5 h-3.5" />
-                              <span>{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Collect Due'}</span>
+                              <Coins className="w-3.5 h-3.5 shrink-0" />
+                              <span className="whitespace-nowrap">{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Collect Due'}</span>
                             </Button>
                           )}
                           <Button
@@ -607,7 +607,7 @@ export default function Customers() {
                               e.stopPropagation();
                               handleOpenCustomerHistory(c);
                             }}
-                            className="h-7 text-xs px-2 text-[#00a86b] dark:text-[#00df89] hover:bg-emerald-500/10 gap-1 font-semibold"
+                            className="h-7 text-xs px-2 text-[#00a86b] dark:text-[#00df89] hover:bg-emerald-500/10 gap-1 font-semibold shrink-0"
                             title="View Purchases"
                           >
                             <span>View Purchases</span>
@@ -617,7 +617,7 @@ export default function Customers() {
                             variant="ghost"
                             size="sm"
                             onClick={(e) => handleOpenEditCustomer(c, e)}
-                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500"
+                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500 shrink-0"
                             title="Edit Customer Profile"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -626,7 +626,7 @@ export default function Customers() {
                             variant="ghost"
                             size="sm"
                             onClick={(e) => handleDeleteCustomer(c, e)}
-                            className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                            className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
                             title="Delete Customer Profile"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1226,15 +1226,15 @@ export default function Customers() {
                   onValueChange={(val) => setCustomerDueForm({ ...customerDueForm, payment_method: val })}
                 >
                   <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
-                    <SelectValue placeholder="Payment Method" />
+                    <SelectValue placeholder={lang === 'bn' ? 'পেমেন্ট মাধ্যম নির্বাচন করুন' : 'Payment Method'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cash">Cash (নগদ)</SelectItem>
-                    <SelectItem value="bkash">bKash (বিকাশ)</SelectItem>
-                    <SelectItem value="nagad">Nagad (নগদ)</SelectItem>
-                    <SelectItem value="rocket">Rocket (রকেট)</SelectItem>
-                    <SelectItem value="card">Card (কার্ড)</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="cash">{lang === 'bn' ? 'নগদ' : 'Cash'}</SelectItem>
+                    <SelectItem value="bkash">{lang === 'bn' ? 'বিকাশ' : 'bKash'}</SelectItem>
+                    <SelectItem value="nagad">{lang === 'bn' ? 'নগদ (Nagad)' : 'Nagad'}</SelectItem>
+                    <SelectItem value="rocket">{lang === 'bn' ? 'রকেট' : 'Rocket'}</SelectItem>
+                    <SelectItem value="card">{lang === 'bn' ? 'কার্ড' : 'Card'}</SelectItem>
+                    <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার' : 'Bank Transfer'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1246,7 +1246,7 @@ export default function Customers() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Cleared pending dues"
+                  placeholder={lang === 'bn' ? 'যেমন: বাকি টাকা পরিশোধ' : 'e.g. Cleared pending dues'}
                   value={customerDueForm.note}
                   onChange={(e) => setCustomerDueForm({ ...customerDueForm, note: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
@@ -1256,7 +1256,7 @@ export default function Customers() {
               {/* Real-Time Balance Preview */}
               {parseFloat(customerDueForm.amount) > 0 && (
                 <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  <span>Remaining Customer Due:</span>
+                  <span>{lang === 'bn' ? 'বকেয়া অবশিষ্ট থাকবে:' : 'Remaining Customer Due:'}</span>
                   <span className="font-mono text-sm font-bold">
                     ৳ {Math.max(0, (collectingCustomer.total_due || 0) - (parseFloat(customerDueForm.amount) || 0)).toLocaleString()}
                   </span>
@@ -1273,7 +1273,7 @@ export default function Customers() {
                     setCollectingCustomer(null);
                   }}
                 >
-                  Cancel
+                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
                 </Button>
                 <Button
                   type="submit"
@@ -1302,7 +1302,9 @@ export default function Customers() {
                   <CheckCircle2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">Customer Money Receipt / বকেয়া জমার রশিদ</h2>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    {lang === 'bn' ? 'বকেয়া জমার রশিদ' : 'Customer Money Receipt'}
+                  </h2>
                   <p className="text-xs text-slate-400 font-mono">{customerVoucher.date}</p>
                 </div>
               </div>
@@ -1316,42 +1318,42 @@ export default function Customers() {
                 <h3 className="font-bold text-sm text-slate-900 dark:text-white">{mongoShop?.name || 'Shopo Store'}</h3>
                 <p className="text-[11px] text-slate-400">{customerVoucher.date}</p>
                 <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-[#00df89] border-emerald-500/30 text-[10px] font-bold mt-1">
-                  Customer Due Settled
+                  {lang === 'bn' ? 'টাকা জমা সম্পন্ন' : 'Customer Due Settled'}
                 </Badge>
               </div>
 
               <div className="space-y-1.5 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Customer:</span>
+                  <span className="text-slate-500">{lang === 'bn' ? 'কাস্টমার:' : 'Customer:'}</span>
                   <span className="font-semibold text-slate-900 dark:text-white">{customerVoucher.customer_name}</span>
                 </div>
                 {customerVoucher.customer_phone && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Phone:</span>
+                    <span className="text-slate-500">{lang === 'bn' ? 'মোবাইল নম্বর:' : 'Phone:'}</span>
                     <span className="font-mono text-slate-700 dark:text-zinc-300">{customerVoucher.customer_phone}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Payment Method:</span>
+                  <span className="text-slate-500">{lang === 'bn' ? 'পেমেন্ট মাধ্যম:' : 'Payment Method:'}</span>
                   <span className="font-semibold uppercase">{customerVoucher.payment_method}</span>
                 </div>
                 {customerVoucher.note && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Remarks:</span>
+                    <span className="text-slate-500">{lang === 'bn' ? 'মন্তব্য:' : 'Remarks:'}</span>
                     <span className="text-slate-700 dark:text-zinc-300">{customerVoucher.note}</span>
                   </div>
                 )}
 
                 <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1 text-xs">
                   <div className="flex justify-between items-center text-sm font-bold text-slate-900 dark:text-white pt-1">
-                    <span>Amount Collected:</span>
+                    <span>{lang === 'bn' ? 'গৃহীত টাকা:' : 'Amount Collected:'}</span>
                     <span className="text-[#00a86b] dark:text-[#00df89] text-base">
                       ৳ {customerVoucher.collected_amount.toLocaleString()}
                     </span>
                   </div>
 
                   <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
-                    <span>Remaining Customer Due:</span>
+                    <span>{lang === 'bn' ? 'বকেয়া অবশিষ্ট:' : 'Remaining Customer Due:'}</span>
                     <span className={`font-semibold ${customerVoucher.remaining_customer_due > 0 ? 'text-amber-500 font-bold' : 'text-emerald-600'}`}>
                       ৳ {customerVoucher.remaining_customer_due.toLocaleString()}
                     </span>
@@ -1362,10 +1364,10 @@ export default function Customers() {
 
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800">
               <Button variant="outline" size="sm" onClick={() => setCustomerVoucher(null)}>
-                Close
+                {lang === 'bn' ? 'বন্ধ করুন' : 'Close'}
               </Button>
               <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
-                <Printer className="w-3.5 h-3.5" /> Print Receipt
+                <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'রশিদ প্রিন্ট করুন' : 'Print Receipt'}
               </Button>
             </div>
           </Card>
