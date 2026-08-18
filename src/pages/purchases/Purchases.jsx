@@ -74,6 +74,19 @@ export default function Purchases() {
     isLoading: false,
   });
 
+  // Inline Category State inside Quick Product Modal
+  const [showAddCatInline, setShowAddCatInline] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [isCreatingCat, setIsCreatingCat] = useState(false);
+
+  // Confirm Delete Dialog State for Categories in dropdowns
+  const [deleteCategoryModal, setDeleteCategoryModal] = useState({
+    isOpen: false,
+    id: null,
+    name: '',
+    isLoading: false,
+  });
+
   // Delete State
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -265,6 +278,56 @@ export default function Purchases() {
     } catch (err) {
       toast.error(err.message || 'Failed to delete product');
       setDeleteProductModal((prev) => ({ ...prev, isLoading: false }));
+    }
+  };
+
+  // Inline Category Creation in Quick Product Modal
+  const handleCreateCategory = async (e) => {
+    e?.preventDefault();
+    if (!newCatName.trim()) return;
+
+    setIsCreatingCat(true);
+    try {
+      const res = await api.categories.create({ name: newCatName.trim() });
+      const created = res?.data;
+      if (created?._id) {
+        setCategories((prev) => [...prev, created]);
+        setQuickProductModal((prev) => ({ ...prev, category_id: created._id }));
+        toast.success(lang === 'bn' ? 'ক্যাটাগরি তৈরি সম্পন্ন হয়েছে!' : 'Category created successfully!');
+      }
+      setNewCatName('');
+      setShowAddCatInline(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to create category');
+    } finally {
+      setIsCreatingCat(false);
+    }
+  };
+
+  // Category Delete Prompt from Select Options
+  const promptDeleteCategory = (catId, catName) => {
+    setDeleteCategoryModal({
+      isOpen: true,
+      id: catId,
+      name: catName,
+      isLoading: false,
+    });
+  };
+
+  const handleConfirmDeleteCategory = async () => {
+    if (!deleteCategoryModal.id) return;
+    setDeleteCategoryModal((prev) => ({ ...prev, isLoading: true }));
+    try {
+      await api.categories.delete(deleteCategoryModal.id);
+      setCategories((prev) => prev.filter((c) => c._id !== deleteCategoryModal.id));
+      if (quickProductModal.category_id === deleteCategoryModal.id) {
+        setQuickProductModal((prev) => ({ ...prev, category_id: '' }));
+      }
+      toast.success(lang === 'bn' ? `ক্যাটাগরি '${deleteCategoryModal.name}' মুছে ফেলা হয়েছে!` : `Category '${deleteCategoryModal.name}' deleted!`);
+      setDeleteCategoryModal({ isOpen: false, id: null, name: '', isLoading: false });
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete category');
+      setDeleteCategoryModal((prev) => ({ ...prev, isLoading: false }));
     }
   };
 
@@ -1785,25 +1848,87 @@ export default function Purchases() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                    {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
-                  </label>
-                  <Select
-                    value={quickProductModal.category_id || '__none__'}
-                    onValueChange={(val) => setQuickProductModal((prev) => ({ ...prev, category_id: val === '__none__' ? '' : val }))}
-                  >
-                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
-                      <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ (None)' : 'General / None'}</SelectItem>
-                      {categories.map((c) => (
-                        <SelectItem key={c._id} value={c._id}>
-                          {c.name}
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700 dark:text-zinc-300">
+                      {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCatInline(!showAddCatInline)}
+                      className="text-[10px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                    >
+                      {showAddCatInline ? (
+                        <span>{lang === 'bn' ? 'তালিকা' : 'List'}</span>
+                      ) : (
+                        <>
+                          <Plus className="w-2.5 h-2.5" />
+                          <span>{lang === 'bn' ? '+ নতুন' : '+ New'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {showAddCatInline ? (
+                    <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                      <input
+                        type="text"
+                        placeholder={lang === 'bn' ? 'ক্যাটাগরির নাম...' : 'Category name...'}
+                        value={newCatName}
+                        onChange={(e) => setNewCatName(e.target.value)}
+                        className="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isCreatingCat || !newCatName.trim()}
+                        onClick={handleCreateCategory}
+                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-[11px] h-7 px-2.5 cursor-pointer"
+                      >
+                        {isCreatingCat ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCatInline(false)}
+                        className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <Select
+                      value={quickProductModal.category_id || '__none__'}
+                      onValueChange={(val) => {
+                        if (val === '__add_new_cat__') {
+                          setShowAddCatInline(true);
+                        } else {
+                          setQuickProductModal((prev) => ({ ...prev, category_id: val === '__none__' ? '' : val }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                        <SelectValue placeholder="General / None" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem
+                          value="__add_new_cat__"
+                          className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
+                        >
+                          + {lang === 'bn' ? 'নতুন ক্যাটাগরি তৈরি করুন...' : 'Add New Category...'}
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ (General / None)' : 'General / None'}</SelectItem>
+                        {categories.filter(c => c.name?.toLowerCase() !== 'general').map((c) => (
+                          <SelectItem
+                            key={c._id}
+                            value={c._id}
+                            onDelete={() => promptDeleteCategory(c._id, c.name)}
+                            deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
+                          >
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
 
@@ -1851,6 +1976,18 @@ export default function Purchases() {
         cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
         onConfirm={handleConfirmDeleteProduct}
         onCancel={() => setDeleteProductModal({ isOpen: false, id: null, name: '', isLoading: false })}
+      />
+
+      {/* Delete Category Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteCategoryModal.isOpen}
+        isLoading={deleteCategoryModal.isLoading}
+        title={lang === 'bn' ? `ক্যাটাগরি '${deleteCategoryModal.name}' মুছে ফেলবেন?` : `Delete category '${deleteCategoryModal.name}'?`}
+        description={lang === 'bn' ? 'এই ক্যাটাগরি তথ্যটি মুছে ফেলা হবে।' : 'This category will be removed.'}
+        confirmText={lang === 'bn' ? 'হ্যাঁ, মুছুন' : 'Yes, Delete'}
+        cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
+        onConfirm={handleConfirmDeleteCategory}
+        onCancel={() => setDeleteCategoryModal({ isOpen: false, id: null, name: '', isLoading: false })}
       />
 
       {/* ---------------------------------------------------- */}
