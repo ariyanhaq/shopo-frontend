@@ -4,6 +4,7 @@
  */
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import Loader from '@/components/common/Loader';
 
 export default function PublicRoute() {
   const { currentUser, mongoUser, mongoShop, hasShop, loading, isProfileLoading, isProfileChecked } = useAuth();
@@ -11,7 +12,7 @@ export default function PublicRoute() {
   const isVerifying = loading || isProfileLoading || (currentUser && currentUser.emailVerified && !isProfileChecked);
 
   if (isVerifying) {
-    return null;
+    return <Loader message="Checking store session..." />;
   }
 
   if (currentUser && currentUser.emailVerified) {
