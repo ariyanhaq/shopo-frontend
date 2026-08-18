@@ -9,6 +9,18 @@ import { cn } from '@/lib/utils';
 
 const SelectContext = createContext(null);
 
+function extractText(node) {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join('');
+  if (typeof node === 'object') {
+    if (node.props && node.props.children !== undefined) {
+      return extractText(node.props.children);
+    }
+  }
+  return '';
+}
+
 function extractItemLabels(children) {
   const map = {};
   const scan = (nodes) => {
@@ -17,15 +29,9 @@ function extractItemLabels(children) {
     for (const child of array) {
       if (!child || typeof child !== 'object') continue;
       if (child.props) {
-        if (child.props.value !== undefined && child.props.children !== undefined) {
-          if (typeof child.props.children === 'string') {
-            map[String(child.props.value)] = child.props.children;
-          } else if (Array.isArray(child.props.children)) {
-            const text = child.props.children
-              .filter((c) => typeof c === 'string' || typeof c === 'number')
-              .join('');
-            if (text) map[String(child.props.value)] = text;
-          }
+        if (child.props.value !== undefined) {
+          const text = extractText(child.props.children);
+          if (text) map[String(child.props.value)] = text.trim();
         }
         if (child.props.children) {
           scan(child.props.children);
@@ -46,20 +52,24 @@ export function Select({
   className,
 }) {
   const [selectedValue, setSelectedValue] = useState(value !== undefined ? value : defaultValue);
-  const [selectedLabel, setSelectedLabel] = useState('');
+  const [registeredLabels, setRegisteredLabels] = useState({});
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
-  const itemLabelsMap = useMemo(() => extractItemLabels(children), [children]);
+  const scannedLabels = useMemo(() => extractItemLabels(children), [children]);
+  const itemLabelsMap = useMemo(() => ({ ...scannedLabels, ...registeredLabels }), [scannedLabels, registeredLabels]);
+
+  const registerItem = (val, text) => {
+    if (val !== undefined && text) {
+      setRegisteredLabels((prev) => (prev[String(val)] === text ? prev : { ...prev, [String(val)]: text }));
+    }
+  };
 
   useEffect(() => {
     if (value !== undefined) {
       setSelectedValue(value);
-      if (itemLabelsMap[String(value)]) {
-        setSelectedLabel(itemLabelsMap[String(value)]);
-      }
     }
-  }, [value, itemLabelsMap]);
+  }, [value]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -77,16 +87,18 @@ export function Select({
 
   const handleSelect = (val, label) => {
     setSelectedValue(val);
-    const resolvedLabel = label || itemLabelsMap[String(val)] || '';
-    setSelectedLabel(resolvedLabel);
+    if (label) {
+      registerItem(val, label);
+    }
     onValueChange?.(val);
     setIsOpen(false);
   };
 
   const currentDisplayLabel =
-    selectedLabel ||
     itemLabelsMap[String(selectedValue)] ||
-    (selectedValue === '__general__' ? 'General' : '');
+    (selectedValue === '__general__' ? 'General' : '') ||
+    (selectedValue === '__walk_in__' ? 'General / Walk-in Supplier' : '') ||
+    (selectedValue === '__none__' ? 'General / Walk-in Supplier' : '');
 
   return (
     <SelectContext.Provider
@@ -94,8 +106,8 @@ export function Select({
         value: selectedValue,
         selectedValue,
         selectedLabel: currentDisplayLabel,
-        setSelectedLabel,
         handleSelect,
+        registerItem,
         itemLabelsMap,
         isOpen,
         setIsOpen,
@@ -126,11 +138,15 @@ export function SelectTrigger({
   };
 
   const isHexId = typeof value === 'string' && /^[0-9a-fA-F]{24}$/.test(value);
+  const resolvedText = selectedLabel || (!isHexId && value ? String(value) : '');
+
   const displayContent =
     children ||
-    (value
-      ? (selectedLabel || (isHexId ? placeholder : value))
-      : <span className="text-slate-400 dark:text-zinc-500 font-normal">{placeholder}</span>);
+    (resolvedText ? (
+      resolvedText
+    ) : (
+      <span className="text-slate-400 dark:text-zinc-500 font-normal">{placeholder}</span>
+    ));
 
   return (
     <button
@@ -165,10 +181,11 @@ export function SelectTrigger({
 export function SelectValue({ placeholder = 'Select...', children }) {
   const { value, selectedLabel } = useContext(SelectContext);
   const isHexId = typeof value === 'string' && /^[0-9a-fA-F]{24}$/.test(value);
+  const resolvedText = selectedLabel || (!isHexId && value ? String(value) : '');
 
   if (children) return children;
-  if (value) {
-    return selectedLabel || (isHexId ? placeholder : value);
+  if (resolvedText) {
+    return resolvedText;
   }
   return <span className="text-slate-400 dark:text-zinc-500">{placeholder}</span>;
 }
@@ -215,22 +232,21 @@ export function SelectItem({
   className,
   ...props
 }) {
-  const { selectedValue, handleSelect, setSelectedLabel } = useContext(SelectContext);
-  const isSelected = selectedValue === value;
+  const { selectedValue, handleSelect, registerItem } = useContext(SelectContext);
+  const isSelected = String(selectedValue) === String(value);
+  const itemText = extractText(children) || (typeof children === 'string' ? children : String(value));
 
-  // Auto-record text label if selected
   useEffect(() => {
-    if (isSelected && typeof children === 'string') {
-      setSelectedLabel(children);
+    if (value !== undefined && itemText) {
+      registerItem(value, itemText);
     }
-  }, [isSelected, children, setSelectedLabel]);
+  }, [value, itemText]);
 
   return (
     <div
       onClick={() => {
         if (!disabled) {
-          const labelText = typeof children === 'string' ? children : undefined;
-          handleSelect(value, labelText);
+          handleSelect(value, itemText);
         }
       }}
       className={cn(
