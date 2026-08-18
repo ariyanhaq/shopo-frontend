@@ -1,11 +1,11 @@
 /**
  * @file Card.jsx
- * @description Reusable Card container component.
+ * @description Reusable Card component with both named and default exports.
  */
-export default function Card({ children, className = '' }) {
-  return (
-    <div className={`p-4 border rounded-lg shadow-sm bg-white ${className}`}>
-      {children}
-    </div>
-  );
+import { Card as UICard } from '@/components/ui/card';
+
+export function Card(props) {
+  return <UICard {...props} />;
 }
+
+export default Card;

@@ -1,11 +1,11 @@
 /**
  * @file Button.jsx
- * @description Reusable Button component.
+ * @description Reusable Button component with both named and default exports.
  */
-export default function Button({ children, ...props }) {
-  return (
-    <button className="px-4 py-2 rounded font-medium bg-blue-600 text-white hover:bg-blue-700 transition" {...props}>
-      {children || 'Button'}
-    </button>
-  );
+import { Button as UIButton } from '@/components/ui/button';
+
+export function Button(props) {
+  return <UIButton {...props} />;
 }
+
+export default Button;
