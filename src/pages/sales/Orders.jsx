@@ -341,15 +341,28 @@ export default function Orders() {
                       </td>
                       <td className="p-3.5">
                         <div className="flex flex-col items-start gap-1">
-                          <Badge variant="default" className="text-[10px] uppercase font-normal">
+                          <Badge
+                            variant={order.payment_method?.toLowerCase() === 'due' ? 'warning' : 'secondary'}
+                            className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 ${
+                              order.payment_method?.toLowerCase() === 'due'
+                                ? '!bg-amber-500/15 !text-amber-700 dark:!text-amber-300 !border-amber-500/30'
+                                : '!bg-slate-100 !text-slate-700 dark:!bg-zinc-800 dark:!text-zinc-300 !border-slate-200 dark:!border-zinc-700'
+                            }`}
+                          >
                             {order.payment_method || 'Cash'}
                           </Badge>
                           {isDue ? (
-                            <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-bold px-1.5 py-0">
+                            <Badge
+                              variant="destructive"
+                              className="!bg-rose-500/15 !text-rose-700 dark:!text-rose-400 !border-rose-500/30 text-[10px] font-bold px-2 py-0.5 shadow-2xs"
+                            >
                               Due: ৳{order.due_amount.toLocaleString()}
                             </Badge>
                           ) : (
-                            <Badge className="bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] text-[9px] font-medium px-1.5 py-0 border-0">
+                            <Badge
+                              variant="default"
+                              className="!bg-emerald-500/10 !text-emerald-700 dark:!text-emerald-400 !border-emerald-500/20 text-[9px] font-semibold px-2 py-0.5"
+                            >
                               Paid in Full
                             </Badge>
                           )}

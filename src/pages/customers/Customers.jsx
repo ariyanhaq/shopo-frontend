@@ -646,9 +646,24 @@ export default function Customers() {
                           <div className="flex items-center gap-2">
                             <FileText className="w-4 h-4 text-slate-400" />
                             <span className="font-bold text-slate-900 dark:text-white">{sale.invoice_number}</span>
-                            <Badge variant="default" className="text-[10px] uppercase font-normal">
+                            <Badge
+                              variant={sale.payment_method?.toLowerCase() === 'due' ? 'warning' : 'secondary'}
+                              className={`text-[10px] uppercase font-bold px-2 py-0.5 ${
+                                sale.payment_method?.toLowerCase() === 'due'
+                                  ? '!bg-amber-500/15 !text-amber-700 dark:!text-amber-300 !border-amber-500/30'
+                                  : '!bg-slate-100 !text-slate-700 dark:!bg-zinc-800 dark:!text-zinc-300 !border-slate-200 dark:!border-zinc-700'
+                              }`}
+                            >
                               {sale.payment_method || 'Cash'}
                             </Badge>
+                            {(sale.due_amount || 0) > 0 && (
+                              <Badge
+                                variant="destructive"
+                                className="!bg-rose-500/15 !text-rose-700 dark:!text-rose-400 !border-rose-500/30 text-[10px] font-bold px-1.5 py-0"
+                              >
+                                Due: ৳{sale.due_amount.toLocaleString()}
+                              </Badge>
+                            )}
                           </div>
                           
                           <div className="flex items-center gap-1.5">
