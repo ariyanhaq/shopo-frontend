@@ -38,6 +38,7 @@ export default function Purchases() {
   const [purchases, setPurchases] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [stats, setStats] = useState({ total_purchases: 0, total_amount: 0, total_paid: 0, total_due: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -51,6 +52,27 @@ export default function Purchases() {
   const [editingPurchase, setEditingPurchase] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+
+  // Quick Add Product Modal State
+  const [quickProductModal, setQuickProductModal] = useState({
+    isOpen: false,
+    rowIndex: null,
+    mode: 'create', // 'create' | 'edit'
+    name: '',
+    cost_price: '',
+    selling_price: '',
+    unit: 'piece',
+    category_id: '',
+    isSubmitting: false,
+  });
+
+  // Confirm Delete Dialog State for Products in dropdowns
+  const [deleteProductModal, setDeleteProductModal] = useState({
+    isOpen: false,
+    id: null,
+    name: '',
+    isLoading: false,
+  });
 
   // Delete State
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -93,11 +115,12 @@ export default function Purchases() {
   const fetchPurchasesData = async () => {
     setIsLoading(true);
     try {
-      const [purchRes, statsRes, suppRes, prodRes] = await Promise.all([
+      const [purchRes, statsRes, suppRes, prodRes, catRes] = await Promise.all([
         api.purchases.list(),
         api.purchases.getStats().catch(() => ({ data: {} })),
         api.suppliers.list().catch(() => ({ data: [] })),
         api.products.list().catch(() => ({ data: [] })),
+        api.categories.list().catch(() => ({ data: [] })),
       ]);
 
       setPurchases(Array.isArray(purchRes?.data) ? purchRes.data : []);
@@ -105,6 +128,7 @@ export default function Purchases() {
         setStats(statsRes.data);
       }
       setSuppliers(Array.isArray(suppRes?.data) ? suppRes.data : []);
+      setCategories(Array.isArray(catRes?.data) ? catRes.data : []);
 
       const rawProds = Array.isArray(prodRes?.data)
         ? prodRes.data
@@ -138,8 +162,119 @@ export default function Purchases() {
     });
   }, [purchases, statusFilter, searchQuery]);
 
+  // Open Quick Add Product Modal
+  const handleOpenQuickAddProduct = (rowIndex, mode = 'create') => {
+    setQuickProductModal({
+      isOpen: true,
+      rowIndex,
+      mode,
+      name: '',
+      cost_price: '',
+      selling_price: '',
+      unit: 'piece',
+      category_id: '',
+      isSubmitting: false,
+    });
+  };
+
+  // Submit Quick Add Product
+  const handleCreateQuickProduct = async (e) => {
+    e.preventDefault();
+    if (!quickProductModal.name.trim()) {
+      toast.error(lang === 'bn' ? 'পণ্যের নাম লিখুন' : 'Product name is required');
+      return;
+    }
+
+    const cost = parseFloat(quickProductModal.cost_price) || 0;
+    const sell = parseFloat(quickProductModal.selling_price) || cost;
+
+    setQuickProductModal((prev) => ({ ...prev, isSubmitting: true }));
+    try {
+      const res = await api.products.create({
+        name: quickProductModal.name.trim(),
+        cost_price: cost,
+        selling_price: sell,
+        unit: quickProductModal.unit || 'piece',
+        category_id: quickProductModal.category_id || undefined,
+        stock_quantity: 0,
+      });
+
+      const newProd = res?.data;
+      toast.success(lang === 'bn' ? 'নতুন পণ্য সফলভাবে তৈরি হয়েছে!' : 'New product created successfully!');
+
+      // Refresh products list
+      const prodRes = await api.products.list().catch(() => ({ data: [] }));
+      const rawProds = Array.isArray(prodRes?.data)
+        ? prodRes.data
+        : Array.isArray(prodRes?.data?.docs)
+        ? prodRes.data.docs
+        : [];
+      setProducts(rawProds);
+
+      // Automatically select in the row
+      const targetId = newProd?._id || newProd?.id;
+      if (targetId && quickProductModal.rowIndex !== null) {
+        if (quickProductModal.mode === 'create') {
+          const updated = [...purchaseForm.items];
+          const itm = { ...updated[quickProductModal.rowIndex] };
+          itm.product_id = targetId;
+          itm.product_name = newProd.name;
+          itm.unit_cost = cost;
+          itm.selling_price = sell;
+          itm.total_cost = (itm.quantity || 1) * cost;
+          updated[quickProductModal.rowIndex] = itm;
+          setPurchaseForm((prev) => ({ ...prev, items: updated }));
+        } else {
+          const updated = [...editForm.items];
+          const itm = { ...updated[quickProductModal.rowIndex] };
+          itm.product_id = targetId;
+          itm.product_name = newProd.name;
+          itm.unit_cost = cost;
+          itm.selling_price = sell;
+          itm.total_cost = (itm.quantity || 1) * cost;
+          updated[quickProductModal.rowIndex] = itm;
+          setEditForm((prev) => ({ ...prev, items: updated }));
+        }
+      }
+
+      setQuickProductModal((prev) => ({ ...prev, isOpen: false, isSubmitting: false }));
+    } catch (err) {
+      toast.error(err.message || 'Failed to create product');
+      setQuickProductModal((prev) => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
+  // Product Delete Prompt from Select Options
+  const promptDeleteProduct = (prodId, prodName) => {
+    setDeleteProductModal({
+      isOpen: true,
+      id: prodId,
+      name: prodName,
+      isLoading: false,
+    });
+  };
+
+  const handleConfirmDeleteProduct = async () => {
+    if (!deleteProductModal.id) return;
+    setDeleteProductModal((prev) => ({ ...prev, isLoading: true }));
+    try {
+      await api.products.delete(deleteProductModal.id);
+      setProducts((prev) => prev.filter((p) => p._id !== deleteProductModal.id));
+      toast.success(lang === 'bn' ? `পণ্য '${deleteProductModal.name}' মুছে ফেলা হয়েছে!` : `Product '${deleteProductModal.name}' deleted!`);
+      setDeleteProductModal({ isOpen: false, id: null, name: '', isLoading: false });
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete product');
+      setDeleteProductModal((prev) => ({ ...prev, isLoading: false }));
+    }
+  };
+
   // Handle Form Item Changes (Create)
   const handleItemChange = (index, field, value) => {
+    if (field === 'product_id' && value === '__add_new__') {
+      handleOpenQuickAddProduct(index, 'create');
+      return;
+    }
+
     const updated = [...purchaseForm.items];
     const item = { ...updated[index], [field]: value };
 
@@ -150,6 +285,11 @@ export default function Purchases() {
         item.unit_cost = found.cost_price || 0;
         item.selling_price = found.selling_price || 0;
         item.total_cost = (item.quantity || 1) * (found.cost_price || 0);
+      } else {
+        item.product_name = '';
+        item.unit_cost = 0;
+        item.selling_price = 0;
+        item.total_cost = 0;
       }
     } else if (field === 'quantity' || field === 'unit_cost') {
       const q = field === 'quantity' ? Number(value) || 0 : Number(item.quantity) || 0;
@@ -190,6 +330,11 @@ export default function Purchases() {
 
   // Handle Form Item Changes (Edit)
   const handleEditItemChange = (index, field, value) => {
+    if (field === 'product_id' && value === '__add_new__') {
+      handleOpenQuickAddProduct(index, 'edit');
+      return;
+    }
+
     const updated = [...editForm.items];
     const item = { ...updated[index], [field]: value };
 
@@ -200,6 +345,11 @@ export default function Purchases() {
         item.unit_cost = found.cost_price || 0;
         item.selling_price = found.selling_price || 0;
         item.total_cost = (item.quantity || 1) * (found.cost_price || 0);
+      } else {
+        item.product_name = '';
+        item.unit_cost = 0;
+        item.selling_price = 0;
+        item.total_cost = 0;
       }
     } else if (field === 'quantity' || field === 'unit_cost') {
       const q = field === 'quantity' ? Number(value) || 0 : Number(item.quantity) || 0;
@@ -855,9 +1005,19 @@ export default function Purchases() {
                     >
                       {/* Product Selector */}
                       <div className="col-span-12 sm:col-span-5">
-                        <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
-                          {lang === 'bn' ? 'পণ্য' : 'Product'}
-                        </label>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="block text-[10px] font-bold text-slate-400">
+                            {lang === 'bn' ? 'পণ্য' : 'Product'}
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenQuickAddProduct(idx, 'create')}
+                            className="text-[10px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>{lang === 'bn' ? '+ নতুন পণ্য' : '+ New Product'}</span>
+                          </button>
+                        </div>
                         <Select
                           value={item.product_id || '__none__'}
                           onValueChange={(val) => handleItemChange(idx, 'product_id', val === '__none__' ? '' : val)}
@@ -866,9 +1026,20 @@ export default function Purchases() {
                             <SelectValue placeholder={lang === 'bn' ? 'পণ্য বেছে নিন...' : 'Select product...'} />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem
+                              value="__add_new__"
+                              className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
+                            >
+                              + {lang === 'bn' ? 'নতুন পণ্য তৈরি করুন...' : 'Add New Product...'}
+                            </SelectItem>
                             <SelectItem value="__none__">{lang === 'bn' ? 'পণ্য বেছে নিন...' : 'Select product...'}</SelectItem>
                             {products.map((prod) => (
-                              <SelectItem key={prod._id} value={prod._id}>
+                              <SelectItem
+                                key={prod._id}
+                                value={prod._id}
+                                onDelete={() => promptDeleteProduct(prod._id, prod.name)}
+                                deleteTitle={lang === 'bn' ? 'পণ্য মুছুন' : 'Delete product'}
+                              >
                                 {prod.name} (Stock: {prod.stock_quantity || 0})
                               </SelectItem>
                             ))}
@@ -1139,9 +1310,19 @@ export default function Purchases() {
                     >
                       {/* Product Selector */}
                       <div className="col-span-12 sm:col-span-5">
-                        <label className="block text-[10px] font-bold text-slate-400 mb-0.5">
-                          {lang === 'bn' ? 'পণ্য' : 'Product'}
-                        </label>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <label className="block text-[10px] font-bold text-slate-400">
+                            {lang === 'bn' ? 'পণ্য' : 'Product'}
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenQuickAddProduct(idx, 'edit')}
+                            className="text-[10px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>{lang === 'bn' ? '+ নতুন পণ্য' : '+ New Product'}</span>
+                          </button>
+                        </div>
                         <Select
                           value={item.product_id || '__none__'}
                           onValueChange={(val) => handleEditItemChange(idx, 'product_id', val === '__none__' ? '' : val)}
@@ -1150,9 +1331,20 @@ export default function Purchases() {
                             <SelectValue placeholder={lang === 'bn' ? 'পণ্য বেছে নিন...' : 'Select product...'} />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem
+                              value="__add_new__"
+                              className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
+                            >
+                              + {lang === 'bn' ? 'নতুন পণ্য তৈরি করুন...' : 'Add New Product...'}
+                            </SelectItem>
                             <SelectItem value="__none__">{lang === 'bn' ? 'পণ্য বেছে নিন...' : 'Select product...'}</SelectItem>
                             {products.map((prod) => (
-                              <SelectItem key={prod._id} value={prod._id}>
+                              <SelectItem
+                                key={prod._id}
+                                value={prod._id}
+                                onDelete={() => promptDeleteProduct(prod._id, prod.name)}
+                                deleteTitle={lang === 'bn' ? 'পণ্য মুছুন' : 'Delete product'}
+                              >
                                 {prod.name} (Stock: {prod.stock_quantity || 0})
                               </SelectItem>
                             ))}
@@ -1498,6 +1690,167 @@ export default function Purchases() {
         cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
         onConfirm={handleConfirmDeleteSupplier}
         onCancel={() => setDeleteSupplierModal({ isOpen: false, id: null, name: '', isLoading: false })}
+      />
+
+      {/* Quick Add Product Modal */}
+      {quickProductModal.isOpen && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <PlusCircle className="w-5 h-5 text-[#00df89]" />
+                <span>{lang === 'bn' ? 'নতুন পণ্য তৈরি করুন' : 'Add New Product'}</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => setQuickProductModal((prev) => ({ ...prev, isOpen: false }))}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateQuickProduct} className="space-y-3.5 text-xs">
+              {/* Product Name */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                  {lang === 'bn' ? 'পণ্যের নাম *' : 'Product Name *'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={lang === 'bn' ? 'যেমন: কলম, খাতা, শ্যাম্পু...' : 'e.g. Pen, Notebook, Shampoo...'}
+                  value={quickProductModal.name}
+                  onChange={(e) => setQuickProductModal((prev) => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
+                />
+              </div>
+
+              {/* Price Row: Cost Price & Selling Price */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    {lang === 'bn' ? 'ক্রয়মূল্য (৳)' : 'Cost Price (৳)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="0.00"
+                    value={quickProductModal.cost_price}
+                    onChange={(e) => setQuickProductModal((prev) => ({ ...prev, cost_price: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    {lang === 'bn' ? 'বিক্রয়মূল্য (৳)' : 'Selling Price (৳)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="0.00"
+                    value={quickProductModal.selling_price}
+                    onChange={(e) => setQuickProductModal((prev) => ({ ...prev, selling_price: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
+                  />
+                </div>
+              </div>
+
+              {/* Unit & Category Row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    {lang === 'bn' ? 'একক (Unit)' : 'Unit'}
+                  </label>
+                  <Select
+                    value={quickProductModal.unit}
+                    onValueChange={(val) => setQuickProductModal((prev) => ({ ...prev, unit: val }))}
+                  >
+                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                      <SelectValue placeholder="Unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="piece">{lang === 'bn' ? 'পিস (piece)' : 'Piece (pcs)'}</SelectItem>
+                      <SelectItem value="kg">{lang === 'bn' ? 'কেজি (kg)' : 'Kilogram (kg)'}</SelectItem>
+                      <SelectItem value="liter">{lang === 'bn' ? 'লিটার (liter)' : 'Liter (L)'}</SelectItem>
+                      <SelectItem value="box">{lang === 'bn' ? 'বক্স (box)' : 'Box'}</SelectItem>
+                      <SelectItem value="packet">{lang === 'bn' ? 'প্যাকেট (packet)' : 'Packet'}</SelectItem>
+                      <SelectItem value="meter">{lang === 'bn' ? 'মিটার (meter)' : 'Meter (m)'}</SelectItem>
+                      <SelectItem value="pair">{lang === 'bn' ? 'জোড়া (pair)' : 'Pair'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                    {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
+                  </label>
+                  <Select
+                    value={quickProductModal.category_id || '__none__'}
+                    onValueChange={(val) => setQuickProductModal((prev) => ({ ...prev, category_id: val === '__none__' ? '' : val }))}
+                  >
+                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ (None)' : 'General / None'}</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c._id} value={c._id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-zinc-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={quickProductModal.isSubmitting}
+                  onClick={() => setQuickProductModal((prev) => ({ ...prev, isOpen: false }))}
+                  className="cursor-pointer"
+                >
+                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                </Button>
+
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={quickProductModal.isSubmitting}
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold cursor-pointer"
+                >
+                  {quickProductModal.isSubmitting ? (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      {lang === 'bn' ? 'তৈরি হচ্ছে...' : 'Creating...'}
+                    </span>
+                  ) : (
+                    <span>{lang === 'bn' ? 'পণ্য তৈরি করুন' : 'Create Product'}</span>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* Delete Product Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteProductModal.isOpen}
+        isLoading={deleteProductModal.isLoading}
+        title={lang === 'bn' ? `পণ্য '${deleteProductModal.name}' মুছে ফেলবেন?` : `Delete product '${deleteProductModal.name}'?`}
+        description={lang === 'bn' ? 'এই পণ্যটি ক্যাটালগ থেকে মুছে ফেলা হবে। পূর্বে করা ক্রয়ের হিসাব অক্ষুণ্ণ থাকবে।' : 'This product will be removed from your catalog. Past purchase records will remain intact.'}
+        confirmText={lang === 'bn' ? 'হ্যাঁ, মুছুন' : 'Yes, Delete'}
+        cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
+        onConfirm={handleConfirmDeleteProduct}
+        onCancel={() => setDeleteProductModal({ isOpen: false, id: null, name: '', isLoading: false })}
       />
 
       {/* ---------------------------------------------------- */}
