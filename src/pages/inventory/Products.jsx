@@ -106,27 +106,38 @@ export default function Products() {
         ? prodRes.data.docs
         : [];
 
-      const mapped = rawList.map((p) => ({
-        id: p._id,
-        name: p.name,
-        image_url: p.image_url || (Array.isArray(p.images) && p.images[0]) || '',
-        sku: p.sku || 'N/A',
-        barcode: p.barcode || '',
-        category_id: p.category_id?._id || p.category_id || '',
-        category: p.category_id?.name || 'General',
-        stock: p.stock_quantity ?? 0,
-        unit: p.unit || 'Pcs',
-        buyPrice: p.cost_price ?? 0,
-        sellPrice: p.selling_price ?? 0,
-        lowStockThreshold: p.low_stock_threshold ?? 5,
-        status: p.stock_quantity <= 0 ? 'out_of_stock' : p.stock_quantity <= (p.low_stock_threshold || 5) ? 'low_stock' : 'in_stock',
-        created_at: p.created_at || '',
-      }));
-      setProductList(mapped);
-
+      const fetchedCategories = Array.isArray(catRes?.data) ? catRes.data : [];
       if (catRes?.data) {
-        setCategories(Array.isArray(catRes.data) ? catRes.data : []);
+        setCategories(fetchedCategories);
       }
+
+      const mapped = rawList.map((p) => {
+        const catObj = typeof p.category_id === 'object' ? p.category_id : null;
+        const catId = catObj?._id || p.category_id || '';
+        const matchingCat = fetchedCategories.find((c) => String(c._id) === String(catId));
+        const catName =
+          catObj?.name ||
+          matchingCat?.name ||
+          (typeof p.category_id === 'string' && p.category_id.length !== 24 ? p.category_id : 'General');
+
+        return {
+          id: p._id,
+          name: p.name,
+          image_url: p.image_url || (Array.isArray(p.images) && p.images[0]) || '',
+          sku: p.sku || 'N/A',
+          barcode: p.barcode || '',
+          category_id: matchingCat ? matchingCat._id : (catId || '__general__'),
+          category: catName,
+          stock: p.stock_quantity ?? 0,
+          unit: p.unit || 'Pcs',
+          buyPrice: p.cost_price ?? 0,
+          sellPrice: p.selling_price ?? 0,
+          lowStockThreshold: p.low_stock_threshold ?? 5,
+          status: p.stock_quantity <= 0 ? 'out_of_stock' : p.stock_quantity <= (p.low_stock_threshold || 5) ? 'low_stock' : 'in_stock',
+          created_at: p.created_at || '',
+        };
+      });
+      setProductList(mapped);
     } catch (err) {
       console.warn('Could not fetch DB products:', err.message);
     } finally {
@@ -143,29 +154,25 @@ export default function Products() {
     const list = productList.filter(prod => {
       const matchesCategory = categoryFilter === 'all' || prod.category.toLowerCase() === categoryFilter.toLowerCase();
       const matchesStatus = stockStatusFilter === 'all' || prod.status === stockStatusFilter;
-      const q = searchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        prod.name.toLowerCase().includes(q) ||
-        prod.sku.toLowerCase().includes(q) ||
-        prod.category.toLowerCase().includes(q);
-
+      const matchesSearch = !searchQuery.trim() || 
+        prod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        prod.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        prod.barcode.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesStatus && matchesSearch;
     });
 
-    // Apply sorting
     return list.sort((a, b) => {
-      if (sortBy === 'category_asc') {
-        return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
-      }
-      if (sortBy === 'category_desc') {
-        return b.category.localeCompare(a.category) || a.name.localeCompare(b.name);
-      }
       if (sortBy === 'name_asc') {
         return a.name.localeCompare(b.name);
       }
       if (sortBy === 'name_desc') {
         return b.name.localeCompare(a.name);
+      }
+      if (sortBy === 'category_asc') {
+        return a.category.localeCompare(b.category);
+      }
+      if (sortBy === 'category_desc') {
+        return b.category.localeCompare(a.category);
       }
       if (sortBy === 'price_asc') {
         return a.sellPrice - b.sellPrice;
@@ -271,7 +278,7 @@ export default function Products() {
         unit: 'Pcs',
         lowStockThreshold: 5,
       });
-      toast.success(lang === 'bn' ? 'পণ্যটি সফলভাবে যোগ করা হয়েছে!' : 'Product created successfully!');
+      toast.success(lang === 'bn' ? 'পণ্য সফলভাবে যুক্ত হয়েছে!' : 'Product added successfully!');
       fetchDbProducts();
     } catch (err) {
       toast.error(err.message || 'Failed to save product in database.');
@@ -283,11 +290,22 @@ export default function Products() {
   // Open Edit Modal
   const handleOpenEdit = (product) => {
     setEditingProduct(product);
+    let catId = product.category_id;
+    if (catId && typeof catId === 'object') {
+      catId = catId._id;
+    }
+    const matchingCat = categories.find(
+      (c) => String(c._id) === String(catId) || c.name?.toLowerCase() === (product.category || '').toLowerCase()
+    );
+    const resolvedCatId = matchingCat
+      ? matchingCat._id
+      : (catId && catId !== '__general__' && categories.some((c) => String(c._id) === String(catId)) ? catId : '__general__');
+
     setEditForm({
       id: product.id,
       name: product.name,
       image_url: product.image_url || '',
-      category_id: product.category_id || '',
+      category_id: resolvedCatId,
       sku: product.sku !== 'N/A' ? product.sku : '',
       barcode: product.barcode || '',
       stock: product.stock,

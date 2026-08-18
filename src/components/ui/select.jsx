@@ -2,12 +2,40 @@
  * @file select.jsx
  * @description Smooth, custom Shadcn-style Select dropdown component powered by Framer Motion, matching the dark/emerald aesthetics.
  */
-import { useState, useRef, useEffect, createContext, useContext } from 'react';
+import { useState, useRef, useEffect, useMemo, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const SelectContext = createContext(null);
+
+function extractItemLabels(children) {
+  const map = {};
+  const scan = (nodes) => {
+    if (!nodes) return;
+    const array = Array.isArray(nodes) ? nodes : [nodes];
+    for (const child of array) {
+      if (!child || typeof child !== 'object') continue;
+      if (child.props) {
+        if (child.props.value !== undefined && child.props.children !== undefined) {
+          if (typeof child.props.children === 'string') {
+            map[String(child.props.value)] = child.props.children;
+          } else if (Array.isArray(child.props.children)) {
+            const text = child.props.children
+              .filter((c) => typeof c === 'string' || typeof c === 'number')
+              .join('');
+            if (text) map[String(child.props.value)] = text;
+          }
+        }
+        if (child.props.children) {
+          scan(child.props.children);
+        }
+      }
+    }
+  };
+  scan(children);
+  return map;
+}
 
 export function Select({
   value,
@@ -22,11 +50,16 @@ export function Select({
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
 
+  const itemLabelsMap = useMemo(() => extractItemLabels(children), [children]);
+
   useEffect(() => {
     if (value !== undefined) {
       setSelectedValue(value);
+      if (itemLabelsMap[String(value)]) {
+        setSelectedLabel(itemLabelsMap[String(value)]);
+      }
     }
-  }, [value]);
+  }, [value, itemLabelsMap]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -44,21 +77,26 @@ export function Select({
 
   const handleSelect = (val, label) => {
     setSelectedValue(val);
-    if (label !== undefined) {
-      setSelectedLabel(label);
-    }
+    const resolvedLabel = label || itemLabelsMap[String(val)] || '';
+    setSelectedLabel(resolvedLabel);
     onValueChange?.(val);
     setIsOpen(false);
   };
+
+  const currentDisplayLabel =
+    selectedLabel ||
+    itemLabelsMap[String(selectedValue)] ||
+    (selectedValue === '__general__' ? 'General' : '');
 
   return (
     <SelectContext.Provider
       value={{
         value: selectedValue,
         selectedValue,
-        selectedLabel,
+        selectedLabel: currentDisplayLabel,
         setSelectedLabel,
         handleSelect,
+        itemLabelsMap,
         isOpen,
         setIsOpen,
         disabled,
@@ -87,6 +125,13 @@ export function SelectTrigger({
     lg: 'h-12 px-4 text-sm rounded-2xl',
   };
 
+  const isHexId = typeof value === 'string' && /^[0-9a-fA-F]{24}$/.test(value);
+  const displayContent =
+    children ||
+    (value
+      ? (selectedLabel || (isHexId ? placeholder : value))
+      : <span className="text-slate-400 dark:text-zinc-500 font-normal">{placeholder}</span>);
+
   return (
     <button
       type="button"
@@ -104,7 +149,7 @@ export function SelectTrigger({
       <div className="flex items-center gap-2 truncate">
         {CustomIcon && <CustomIcon className="w-4 h-4 text-slate-400 shrink-0" />}
         <span className="truncate">
-          {children || (value ? selectedLabel || value : <span className="text-slate-400 dark:text-zinc-500 font-normal">{placeholder}</span>)}
+          {displayContent}
         </span>
       </div>
       <ChevronDown
@@ -117,9 +162,15 @@ export function SelectTrigger({
   );
 }
 
-export function SelectValue({ placeholder, children }) {
+export function SelectValue({ placeholder = 'Select...', children }) {
   const { value, selectedLabel } = useContext(SelectContext);
-  return children || (value ? selectedLabel || value : <span className="text-slate-400 dark:text-zinc-500">{placeholder}</span>);
+  const isHexId = typeof value === 'string' && /^[0-9a-fA-F]{24}$/.test(value);
+
+  if (children) return children;
+  if (value) {
+    return selectedLabel || (isHexId ? placeholder : value);
+  }
+  return <span className="text-slate-400 dark:text-zinc-500">{placeholder}</span>;
 }
 
 export function SelectContent({
