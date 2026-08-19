@@ -4,15 +4,26 @@
  */
 import { auth } from '@/firebase.config';
 
-let rawApiUrl = (import.meta?.env?.VITE_API_URL || '').replace(/\/+$/, '').replace(/\/api(\/v1)?\/?$/, '');
+const DEFAULT_PROD_API_URL = 'https://shopo-api.vidflix.live';
 
-// Prevent Mixed Content: If the application is running over HTTPS, never make direct insecure HTTP calls.
-// Instead, use relative '/api/v1' which is securely proxied via Netlify / reverse proxy.
-if (typeof window !== 'undefined' && window.location.protocol === 'https:' && rawApiUrl.startsWith('http://')) {
-  rawApiUrl = '';
-}
+const getBaseUrl = () => {
+  const envUrl = (import.meta?.env?.VITE_API_URL || '').trim();
+  if (envUrl) {
+    return `${envUrl.replace(/\/+$/, '').replace(/\/api(\/v1)?\/?$/, '')}/api/v1`;
+  }
 
-const BASE_URL = rawApiUrl ? `${rawApiUrl}/api/v1` : '/api/v1';
+  if (
+    typeof window !== 'undefined' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1'
+  ) {
+    return `${DEFAULT_PROD_API_URL}/api/v1`;
+  }
+
+  return 'http://localhost:8000/api/v1';
+};
+
+const BASE_URL = getBaseUrl();
 
 /**
  * Universal request wrapper attaching Firebase ID Token with safety timeout
