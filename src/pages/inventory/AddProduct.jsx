@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select';
 import ProductImageUploader from '@/components/common/ProductImageUploader';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
-import { Package, ArrowLeft, CheckCircle2, Loader2, Sparkles, Barcode, FolderPlus, Plus, Building2, Tag } from 'lucide-react';
+import { Package, ArrowLeft, CheckCircle2, Loader2, Sparkles, Barcode, FolderPlus, Plus, Building2, Tag, Wallet } from 'lucide-react';
 
 export default function AddProduct() {
   const navigate = useNavigate();
@@ -64,6 +64,9 @@ export default function AddProduct() {
     cost_price: '',
     selling_price: '',
     stock_quantity: '',
+    payment_type: 'due',
+    paid_amount: '0',
+    payment_method: 'cash',
     low_stock_threshold: 5,
     unit: 'pcs',
   });
@@ -246,6 +249,28 @@ export default function AddProduct() {
       const initialStock = parseInt(form.stock_quantity, 10) || 0;
       const costPrice = parseFloat(form.cost_price) || 0;
       const sellPrice = parseFloat(form.selling_price) || 0;
+      const totalCost = initialStock * costPrice;
+
+      let calculatedPaid = 0;
+      if (form.supplier_id) {
+        if (form.payment_type === 'due') {
+          calculatedPaid = 0;
+        } else if (form.payment_type === 'full') {
+          calculatedPaid = totalCost;
+        } else if (form.payment_type === 'partial') {
+          if (form.paid_amount !== '' && form.paid_amount !== undefined) {
+            const val = parseFloat(form.paid_amount);
+            calculatedPaid = !isNaN(val) ? Math.min(totalCost, Math.max(0, val)) : Math.round(totalCost * 0.5);
+          } else {
+            calculatedPaid = Math.round(totalCost * 0.5);
+          }
+        } else {
+          calculatedPaid = 0;
+        }
+      } else {
+        // No supplier -> fully paid walk-in stock
+        calculatedPaid = totalCost;
+      }
 
       const payload = {
         name: form.name.trim(),
@@ -260,34 +285,13 @@ export default function AddProduct() {
         cost_price: costPrice,
         selling_price: sellPrice,
         stock_quantity: initialStock,
+        paid_amount: calculatedPaid,
+        payment_method: form.payment_method || 'cash',
         low_stock_threshold: parseInt(form.low_stock_threshold, 10) || 5,
         unit: form.unit || 'pcs',
       };
 
-      const createdRes = await api.products.create(payload);
-
-      // If initial stock > 0, log purchase ledger transaction
-      if (initialStock > 0 && createdRes?.data?._id) {
-        try {
-          await api.purchases.create({
-            supplier_id: form.supplier_id || null,
-            items: [
-              {
-                product_id: createdRes.data._id,
-                product_name: createdRes.data.name,
-                quantity: initialStock,
-                unit_cost: costPrice,
-                selling_price: sellPrice,
-              },
-            ],
-            paid_amount: initialStock * costPrice,
-            payment_method: 'cash',
-            notes: 'Initial stock recorded on product creation',
-          });
-        } catch (pErr) {
-          console.warn('Initial stock purchase logging skipped:', pErr);
-        }
-      }
+      await api.products.create(payload);
 
       toast.success(lang === 'bn' ? 'পণ্য সফলভাবে ইনভেন্টরিতে সংরক্ষিত হয়েছে!' : 'Product added successfully to inventory!');
       navigate('/products');
@@ -692,6 +696,173 @@ export default function AddProduct() {
               />
             </div>
           </div>
+
+          {/* Supplier Stock Purchase Payment Section in AddProduct Page */}
+          {form.supplier_id && (
+            <div className="p-4 rounded-2xl bg-amber-500/5 dark:bg-zinc-900/70 border border-amber-500/20 dark:border-zinc-800 space-y-3.5 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-amber-500" />
+                  <span className="font-bold text-slate-800 dark:text-zinc-200 text-xs sm:text-sm">
+                    {lang === 'bn' ? 'সাপ্লায়ার পেমেন্ট অপশন' : 'Supplier Payment Option'}
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'মোট ক্রয় বিল:' : 'Total Cost:'}{' '}
+                  <span className="text-[#00a86b] dark:text-[#00df89]">
+                    ৳{((parseFloat(form.cost_price) || 0) * (parseInt(form.stock_quantity, 10) || 0)).toLocaleString()}
+                  </span>
+                </span>
+              </div>
+
+              {/* Payment Type Tabs: Full Paid vs Partial vs Full Due */}
+              <div className="space-y-1.5">
+                <label className="block font-medium text-slate-700 dark:text-zinc-300 text-xs">
+                  {lang === 'bn' ? 'পেমেন্টের ধরন নির্বাচন করুন:' : 'Select Payment Option:'}
+                </label>
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        payment_type: 'full',
+                        paid_amount: String((parseFloat(prev.cost_price) || 0) * (parseInt(prev.stock_quantity, 10) || 0)),
+                      }))
+                    }
+                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                      form.payment_type === 'full'
+                        ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] shadow-xs'
+                        : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="font-bold">{lang === 'bn' ? 'সম্পূর্ণ পরিশোধ' : 'Full Paid'}</span>
+                    <span className="text-[10px] font-normal opacity-80">(100% Paid)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((prev) => {
+                        const tot = (parseFloat(prev.cost_price) || 0) * (parseInt(prev.stock_quantity, 10) || 0);
+                        return {
+                          ...prev,
+                          payment_type: 'partial',
+                          paid_amount: String(Math.round(tot / 2)),
+                        };
+                      })
+                    }
+                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                      form.payment_type === 'partial'
+                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500 shadow-xs'
+                        : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="font-bold">{lang === 'bn' ? 'আংশিক পরিশোধ' : 'Partial Paid'}</span>
+                    <span className="text-[10px] font-normal opacity-80">(Partial Due)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, payment_type: 'due', paid_amount: '0' }))}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-semibold border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                      form.payment_type === 'due'
+                        ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500 shadow-xs'
+                        : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="font-bold">{lang === 'bn' ? 'সম্পূর্ণ বাকি' : 'Full Due'}</span>
+                    <span className="text-[10px] font-normal opacity-80">(0% Paid)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Partial Input Box */}
+              {form.payment_type === 'partial' && (
+                <div className="p-3 rounded-xl bg-white dark:bg-[#09090b] border border-amber-500/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-medium text-slate-700 dark:text-zinc-300 text-xs">
+                      {lang === 'bn' ? 'কত টাকা দিয়েছেন (৳):' : 'Amount Paid (৳):'}
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const tot = (parseFloat(form.cost_price) || 0) * (parseInt(form.stock_quantity, 10) || 0);
+                          setForm((prev) => ({ ...prev, payment_type: 'partial', paid_amount: String(Math.round(tot * 0.5)) }));
+                        }}
+                        className="px-2.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 hover:bg-amber-500/10 text-xs font-bold text-slate-700 dark:text-zinc-300 cursor-pointer"
+                      >
+                        50%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const tot = (parseFloat(form.cost_price) || 0) * (parseInt(form.stock_quantity, 10) || 0);
+                          setForm((prev) => ({ ...prev, payment_type: 'partial', paid_amount: String(Math.round(tot * 0.25)) }));
+                        }}
+                        className="px-2.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 hover:bg-amber-500/10 text-xs font-bold text-slate-700 dark:text-zinc-300 cursor-pointer"
+                      >
+                        25%
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    value={form.paid_amount}
+                    onChange={(e) => setForm((prev) => ({ ...prev, payment_type: 'partial', paid_amount: e.target.value }))}
+                    className="w-full px-3.5 py-2 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm font-mono font-bold text-slate-900 dark:text-white outline-none"
+                  />
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <span className="text-slate-500">{lang === 'bn' ? 'সাপ্লায়ার বাকি থাকবে:' : 'Remaining Due:'}</span>
+                    <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                      ৳{Math.max(
+                        0,
+                        (parseFloat(form.cost_price) || 0) * (parseInt(form.stock_quantity, 10) || 0) -
+                          (parseFloat(form.paid_amount) || 0)
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Due message */}
+              {form.payment_type === 'due' && (
+                <div className="px-3.5 py-2 rounded-xl bg-red-500/5 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center justify-between">
+                  <span>{lang === 'bn' ? 'সম্পূর্ণ বিল বাকি রাখা হবে' : 'Full cost will remain as supplier due'}</span>
+                  <span className="font-mono font-bold">
+                    ৳{((parseFloat(form.cost_price) || 0) * (parseInt(form.stock_quantity, 10) || 0)).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {/* Payment Method Selector (shown if not full due) */}
+              {form.payment_type !== 'due' && (
+                <div className="space-y-1">
+                  <label className="font-medium text-slate-700 dark:text-zinc-300 text-xs">
+                    {lang === 'bn' ? 'পেমেন্ট মাধ্যম (Payment Method)' : 'Payment Method'}
+                  </label>
+                  <Select
+                    value={form.payment_method || 'cash'}
+                    onValueChange={(val) => setForm((prev) => ({ ...prev, payment_method: val }))}
+                  >
+                    <SelectTrigger className="w-full bg-white dark:bg-[#09090b] h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">{lang === 'bn' ? 'ক্যাশ / নগদ (Cash)' : 'Cash'}</SelectItem>
+                      <SelectItem value="bkash">{lang === 'bn' ? 'বিকাশ (bKash)' : 'bKash'}</SelectItem>
+                      <SelectItem value="nagad">{lang === 'bn' ? 'নগদ (Nagad)' : 'Nagad'}</SelectItem>
+                      <SelectItem value="rocket">{lang === 'bn' ? 'রকেট (Rocket)' : 'Rocket'}</SelectItem>
+                      <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার (Bank Transfer)' : 'Bank Transfer'}</SelectItem>
+                      <SelectItem value="card">{lang === 'bn' ? 'কার্ড (Card)' : 'Card'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="pt-4 flex justify-end gap-2 border-t border-slate-100 dark:border-zinc-800">
             <Button type="button" variant="outline" size="sm" onClick={() => navigate('/products')} className="cursor-pointer">

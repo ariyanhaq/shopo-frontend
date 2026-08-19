@@ -9,7 +9,7 @@ import {
   Building2, Plus, Search, Phone, Mail, MapPin,
   Edit2, Trash2, Receipt, ArrowUpDown, ChevronRight,
   TrendingUp, AlertCircle, CheckCircle2, Loader2, X,
-  ShoppingBag, Calendar, DollarSign, CreditCard
+  ShoppingBag, Calendar, DollarSign, CreditCard, Wallet
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,17 @@ export default function Suppliers() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Pay Due Modal State
+  const [payDueModal, setPayDueModal] = useState({
+    isOpen: false,
+    supplier: null,
+    purchase: null,
+    amount: '',
+    payment_method: 'cash',
+    notes: '',
+    isSubmitting: false,
+  });
 
   // Supplier Form
   const [formData, setFormData] = useState({
@@ -151,6 +162,73 @@ export default function Suppliers() {
       toast.error(err.message || 'Failed to save supplier');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Open Pay Due Modal
+  const handleOpenPayDue = (supplier, purchase = null) => {
+    const initialDue = purchase ? (purchase.due_amount || 0) : (supplier.total_due || 0);
+    setPayDueModal({
+      isOpen: true,
+      supplier,
+      purchase,
+      amount: initialDue > 0 ? String(initialDue) : '',
+      payment_method: 'cash',
+      notes: '',
+      isSubmitting: false,
+    });
+  };
+
+  // Submit Due Payment
+  const handleSubmitPayDue = async (e) => {
+    e.preventDefault();
+    if (!payDueModal.supplier) return;
+
+    const amountNum = Number(payDueModal.amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast.error(lang === 'bn' ? 'সঠিক পেমেন্টের পরিমাণ লিখুন' : 'Please enter a valid payment amount');
+      return;
+    }
+
+    setPayDueModal((prev) => ({ ...prev, isSubmitting: true }));
+    try {
+      await api.suppliers.payDue(payDueModal.supplier._id, {
+        amount: amountNum,
+        payment_method: payDueModal.payment_method,
+        notes: payDueModal.notes,
+        purchase_id: payDueModal.purchase?._id || undefined,
+      });
+
+      toast.success(
+        lang === 'bn'
+          ? `৳${amountNum.toLocaleString()} বাকি পরিশোধ সফল হয়েছে!`
+          : `Due payment of ৳${amountNum.toLocaleString()} recorded successfully!`
+      );
+
+      setPayDueModal({
+        isOpen: false,
+        supplier: null,
+        purchase: null,
+        amount: '',
+        payment_method: 'cash',
+        notes: '',
+        isSubmitting: false,
+      });
+
+      fetchSuppliers();
+
+      // If purchase history drawer is currently open, refresh the purchase list
+      if (historyDrawer.isOpen && historyDrawer.supplier) {
+        const res = await api.suppliers.getPurchases(historyDrawer.supplier._id);
+        setHistoryDrawer((prev) => ({
+          ...prev,
+          purchases: Array.isArray(res?.data) ? res.data : [],
+        }));
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to record due payment');
+    } finally {
+      setPayDueModal((prev) => ({ ...prev, isSubmitting: false }));
     }
   };
 
@@ -433,6 +511,17 @@ export default function Suppliers() {
 
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Pay Due Action Button */}
+                        {(s.total_due || 0) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPayDue(s)}
+                            title={lang === 'bn' ? 'বাকি পরিশোধ করুন' : 'Pay Due Balance'}
+                            className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-600 dark:text-amber-400 flex items-center justify-center transition-colors cursor-pointer border border-amber-500/20 shadow-xs"
+                          >
+                            <Wallet className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {/* Purchase History */}
                         <button
                           type="button"
@@ -686,14 +775,219 @@ export default function Suppliers() {
                       <span className="text-slate-500">
                         {lang === 'bn' ? 'পরিশোধ:' : 'Paid:'} ৳{(p.paid_amount || 0).toLocaleString()} / {lang === 'bn' ? 'বাকি:' : 'Due:'} <span className={p.due_amount > 0 ? 'text-amber-500' : ''}>৳{(p.due_amount || 0).toLocaleString()}</span>
                       </span>
-                      <span className="text-slate-900 dark:text-white font-mono">
-                        {lang === 'bn' ? 'মোট:' : 'Total:'} ৳{(p.net_amount || p.total_amount || 0).toLocaleString()}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {p.due_amount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPayDue(historyDrawer.supplier, p)}
+                            className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[10px] flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+                          >
+                            <Wallet className="w-3 h-3" />
+                            <span>{lang === 'bn' ? 'বাকি পরিশোধ' : 'Pay Due'}</span>
+                          </button>
+                        )}
+                        <span className="text-slate-900 dark:text-white font-mono">
+                          {lang === 'bn' ? 'মোট:' : 'Total:'} ৳{(p.net_amount || p.total_amount || 0).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))
               )}
             </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Pay Due Modal */}
+      {payDueModal.isOpen && payDueModal.supplier && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                  <Wallet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    {lang === 'bn' ? 'সাপ্লায়ার বাকি পরিশোধ' : 'Pay Supplier Due'}
+                  </h2>
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    {payDueModal.supplier.name} {payDueModal.supplier.company_name ? `(${payDueModal.supplier.company_name})` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setPayDueModal({
+                    isOpen: false,
+                    supplier: null,
+                    purchase: null,
+                    amount: '',
+                    payment_method: 'cash',
+                    notes: '',
+                    isSubmitting: false,
+                  })
+                }
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Info & Due Banner */}
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 block uppercase tracking-wider">
+                  {payDueModal.purchase
+                    ? (lang === 'bn'
+                        ? `ইনভয়েস #${payDueModal.purchase.purchase_number} বাকি`
+                        : `Invoice #${payDueModal.purchase.purchase_number} Due`)
+                    : (lang === 'bn' ? 'সর্বমোট বকেয়া পাওনা' : 'Total Outstanding Due')}
+                </span>
+                <span className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400">
+                  ৳{(payDueModal.purchase ? payDueModal.purchase.due_amount : (payDueModal.supplier.total_due || 0)).toLocaleString()}
+                </span>
+              </div>
+              <DollarSign className="w-8 h-8 text-amber-500/40" />
+            </div>
+
+            <form onSubmit={handleSubmitPayDue} className="space-y-3.5 text-xs">
+              {/* Amount Input */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'পরিশোধের পরিমাণ (৳) *' : 'Payment Amount (৳) *'}
+                  </label>
+                  {/* Quick Preset Buttons */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetDue = payDueModal.purchase
+                          ? payDueModal.purchase.due_amount
+                          : (payDueModal.supplier.total_due || 0);
+                        setPayDueModal((prev) => ({ ...prev, amount: String(targetDue) }));
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-emerald-500/10 hover:text-[#00a86b] dark:hover:text-[#00df89] text-[10px] font-bold text-slate-600 dark:text-zinc-300 transition-colors cursor-pointer"
+                    >
+                      {lang === 'bn' ? 'সম্পূর্ণ (100%)' : 'Full Due'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetDue = payDueModal.purchase
+                          ? payDueModal.purchase.due_amount
+                          : (payDueModal.supplier.total_due || 0);
+                        setPayDueModal((prev) => ({ ...prev, amount: String(Math.round(targetDue / 2)) }));
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-blue-500/10 hover:text-blue-600 text-[10px] font-bold text-slate-600 dark:text-zinc-300 transition-colors cursor-pointer"
+                    >
+                      50%
+                    </button>
+                  </div>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">৳</span>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="any"
+                    placeholder="0.00"
+                    value={payDueModal.amount}
+                    onChange={(e) => setPayDueModal({ ...payDueModal, amount: e.target.value })}
+                    className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white font-mono font-bold text-sm outline-none focus:ring-2 focus:ring-[#00df89]"
+                  />
+                </div>
+
+                {/* Remaining Due Preview */}
+                {Number(payDueModal.amount) > 0 && (
+                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>{lang === 'bn' ? 'পরিশোধের পর বাকি থাকবে:' : 'Remaining due after payment:'}</span>
+                    <span className="font-mono font-bold text-slate-800 dark:text-zinc-200">
+                      ৳{Math.max(
+                        0,
+                        (payDueModal.purchase
+                          ? payDueModal.purchase.due_amount
+                          : (payDueModal.supplier.total_due || 0)) - Number(payDueModal.amount)
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Payment Method */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                  {lang === 'bn' ? 'পেমেন্ট মাধ্যম *' : 'Payment Method *'}
+                </label>
+                <Select
+                  value={payDueModal.payment_method}
+                  onValueChange={(val) => setPayDueModal({ ...payDueModal, payment_method: val })}
+                >
+                  <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">{lang === 'bn' ? 'ক্যাশ / নগদ (Cash)' : 'Cash'}</SelectItem>
+                    <SelectItem value="bkash">{lang === 'bn' ? 'বিকাশ (bKash)' : 'bKash'}</SelectItem>
+                    <SelectItem value="nagad">{lang === 'bn' ? 'নগদ (Nagad)' : 'Nagad'}</SelectItem>
+                    <SelectItem value="rocket">{lang === 'bn' ? 'রকেট (Rocket)' : 'Rocket'}</SelectItem>
+                    <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার (Bank Transfer)' : 'Bank Transfer'}</SelectItem>
+                    <SelectItem value="card">{lang === 'bn' ? 'কার্ড (Card)' : 'Card'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Notes / Reference */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                  {lang === 'bn' ? 'নোট / ট্রানজেকশন রেফারেন্স (ঐচ্ছিক)' : 'Notes / Reference (Optional)'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={lang === 'bn' ? 'যেমন: TrxID / চেক নম্বর / ব্যাংক স্লিপ...' : 'e.g. TrxID / Cheque # / Slip #...'}
+                  value={payDueModal.notes}
+                  onChange={(e) => setPayDueModal({ ...payDueModal, notes: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setPayDueModal({
+                      isOpen: false,
+                      supplier: null,
+                      purchase: null,
+                      amount: '',
+                      payment_method: 'cash',
+                      notes: '',
+                      isSubmitting: false,
+                    })
+                  }
+                  className="h-9 px-4 rounded-xl cursor-pointer"
+                >
+                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={payDueModal.isSubmitting || !payDueModal.amount || Number(payDueModal.amount) <= 0}
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs h-9 px-4 rounded-xl cursor-pointer disabled:opacity-50"
+                >
+                  {payDueModal.isSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    (lang === 'bn' ? 'পেমেন্ট নিশ্চিত করুন' : 'Confirm Payment')
+                  )}
+                </Button>
+              </div>
+            </form>
           </Card>
         </div>
       )}

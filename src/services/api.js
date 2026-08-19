@@ -182,6 +182,11 @@ export const api = {
       request(`/suppliers/${id}`, {
         method: 'DELETE',
       }),
+    payDue: (id, data) =>
+      request(`/suppliers/${id}/pay-due`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 
   // Purchases & Stock In

@@ -28,7 +28,7 @@ import {
   Download, Edit2, Trash2, CheckCircle2, Clock, X, Barcode,
   Layers, ArrowUpRight, ShieldCheck, Tag, ChevronRight, Loader2,
   Sparkles, FolderPlus, ArrowUpDown, ArrowUp, ArrowDown, ImageIcon,
-  Building2, ShoppingBag, Boxes, HelpCircle
+  Building2, ShoppingBag, Boxes, HelpCircle, Wallet
 } from 'lucide-react';
 
 export default function Products() {
@@ -81,6 +81,7 @@ export default function Products() {
 
   // Inline Supplier Creator State
   const [showAddSuppInline, setShowAddSuppInline] = useState(false);
+  const [showEditSuppInline, setShowEditSuppInline] = useState(false);
   const [newSuppData, setNewSuppData] = useState({ name: '', phone: '', company_name: '', address: '' });
   const [isCreatingSupp, setIsCreatingSupp] = useState(false);
 
@@ -96,6 +97,9 @@ export default function Products() {
     stock: '',
     buyPrice: '',
     sellPrice: '',
+    payment_type: 'due',
+    paid_amount: '0',
+    payment_method: 'cash',
     unit: 'Pcs',
     lowStockThreshold: 5,
   });
@@ -190,6 +194,7 @@ export default function Products() {
           sellPrice: p.selling_price ?? 0,
           lowStockThreshold: p.low_stock_threshold ?? 5,
           status: p.stock_quantity <= 0 ? 'out_of_stock' : p.stock_quantity <= (p.low_stock_threshold || 5) ? 'low_stock' : 'in_stock',
+          purchase_info: p.purchase_info || null,
           created_at: p.created_at || '',
         };
       });
@@ -322,19 +327,22 @@ export default function Products() {
   };
 
   // Handle Inline Supplier Creation
-  const handleCreateSupplier = async (forRestock = false) => {
+  const handleCreateSupplier = async (target = 'create') => {
     if (!newSuppData.name.trim()) return;
     setIsCreatingSupp(true);
     try {
       const res = await api.suppliers.create(newSuppData);
       if (res?.data) {
         setSuppliers((prev) => [res.data, ...prev]);
-        if (forRestock) {
+        if (target === 'restock' || target === true) {
           setRestockForm((prev) => ({ ...prev, supplier_id: res.data._id }));
+        } else if (target === 'edit') {
+          setEditForm((prev) => ({ ...prev, supplier_id: res.data._id }));
+          setShowEditSuppInline(false);
         } else {
           setNewProduct((prev) => ({ ...prev, supplier_id: res.data._id }));
+          setShowAddSuppInline(false);
         }
-        setShowAddSuppInline(false);
         setNewSuppData({ name: '', phone: '', company_name: '', address: '' });
         toast.success(lang === 'bn' ? `সাপ্লায়ার '${res.data.name}' যুক্ত হয়েছে!` : `Supplier '${res.data.name}' created!`);
       }
@@ -445,8 +453,30 @@ export default function Products() {
       const initialStock = parseInt(newProduct.stock, 10) || 0;
       const costPrice = parseFloat(newProduct.buyPrice) || 0;
       const sellPrice = parseFloat(newProduct.sellPrice) || 0;
+      const totalCost = initialStock * costPrice;
 
-      const createdRes = await api.products.create({
+      let calculatedPaid = 0;
+      if (newProduct.supplier_id) {
+        if (newProduct.payment_type === 'due') {
+          calculatedPaid = 0;
+        } else if (newProduct.payment_type === 'full') {
+          calculatedPaid = totalCost;
+        } else if (newProduct.payment_type === 'partial') {
+          if (newProduct.paid_amount !== '' && newProduct.paid_amount !== undefined) {
+            const val = parseFloat(newProduct.paid_amount);
+            calculatedPaid = !isNaN(val) ? Math.min(totalCost, Math.max(0, val)) : Math.round(totalCost * 0.5);
+          } else {
+            calculatedPaid = Math.round(totalCost * 0.5);
+          }
+        } else {
+          calculatedPaid = 0;
+        }
+      } else {
+        // No supplier -> fully paid walk-in stock
+        calculatedPaid = totalCost;
+      }
+
+      await api.products.create({
         name: newProduct.name.trim(),
         image_url: newProduct.image_url || undefined,
         images: newProduct.image_url ? [newProduct.image_url] : [],
@@ -459,32 +489,11 @@ export default function Products() {
         cost_price: costPrice,
         selling_price: sellPrice,
         stock_quantity: initialStock,
+        paid_amount: calculatedPaid,
+        payment_method: newProduct.payment_method || 'cash',
         unit: newProduct.unit || 'Pcs',
         low_stock_threshold: parseInt(newProduct.lowStockThreshold, 10) || 5,
       });
-
-      // If initial stock > 0, also log a purchase transaction in the Purchase ledger
-      if (initialStock > 0 && createdRes?.data?._id) {
-        try {
-          await api.purchases.create({
-            supplier_id: newProduct.supplier_id || null,
-            items: [
-              {
-                product_id: createdRes.data._id,
-                product_name: createdRes.data.name,
-                quantity: initialStock,
-                unit_cost: costPrice,
-                selling_price: sellPrice,
-              },
-            ],
-            paid_amount: initialStock * costPrice,
-            payment_method: 'cash',
-            notes: 'Initial stock recorded on product creation',
-          });
-        } catch (pErr) {
-          console.warn('Initial stock purchase logging notice:', pErr);
-        }
-      }
 
       setIsAddModalOpen(false);
       setNewProduct({
@@ -498,6 +507,9 @@ export default function Products() {
         stock: '',
         buyPrice: '',
         sellPrice: '',
+        payment_type: 'due',
+        paid_amount: '0',
+        payment_method: 'cash',
         unit: 'Pcs',
         lowStockThreshold: 5,
       });
@@ -590,20 +602,56 @@ export default function Products() {
     );
     const resolvedBrandId = matchingBrand ? matchingBrand._id : (brandId || '');
 
+    let suppId = product.supplier_id || product.raw?.supplier_id;
+    if (suppId && typeof suppId === 'object') {
+      suppId = suppId._id;
+    }
+    const matchingSupp = suppliers.find((s) => String(s._id) === String(suppId));
+    const resolvedSuppId = matchingSupp ? matchingSupp._id : (suppId || '');
+
+    const purchaseInfo = product.purchase_info || null;
+    const initialStock = Number(product.stock) || 0;
+    const initialBuyPrice = Number(product.buyPrice) || 0;
+    const initialTotalCost = initialStock * initialBuyPrice;
+
+    let alreadyPaid = 0;
+    let initialDue = 0;
+
+    if (purchaseInfo) {
+      initialDue = Number(purchaseInfo.due_amount || 0);
+      alreadyPaid = initialDue === 0
+        ? (initialTotalCost > 0 ? initialTotalCost : Number(purchaseInfo.paid_amount || 0))
+        : Math.max(0, initialTotalCost - initialDue);
+    } else {
+      alreadyPaid = resolvedSuppId ? 0 : initialTotalCost;
+      initialDue = resolvedSuppId ? initialTotalCost : 0;
+    }
+
     setEditForm({
       id: product.id,
       name: product.name,
       image_url: product.image_url || '',
       category_id: resolvedCatId,
       brand_id: resolvedBrandId,
+      supplier_id: resolvedSuppId,
       sku: product.sku !== 'N/A' ? product.sku : '',
       barcode: product.barcode || '',
       stock: product.stock,
       buyPrice: product.buyPrice,
       sellPrice: product.sellPrice,
+      initial_stock: initialStock,
+      initial_buy_price: initialBuyPrice,
+      already_paid: alreadyPaid,
+      initial_due: initialDue,
+      payment_type: 'keep_existing',
+      extra_payment_type: initialDue === 0 ? 'extra_full' : 'extra_due',
+      extra_paid_amount: '',
+      paid_amount: String(alreadyPaid),
+      payment_method: purchaseInfo?.payment_method || 'cash',
       unit: product.unit || 'Pcs',
       lowStockThreshold: product.lowStockThreshold || 5,
     });
+    setShowEditSuppInline(false);
     setIsEditModalOpen(true);
   };
 
@@ -617,6 +665,47 @@ export default function Products() {
       : null;
     const selectedBrand = brands.find((b) => b._id === editForm.brand_id);
 
+    const initialStock = parseInt(editForm.stock, 10) || 0;
+    const costPrice = parseFloat(editForm.buyPrice) || 0;
+    const newTotalCost = initialStock * costPrice;
+    const prevTotalCost = (editForm.initial_stock || 0) * (editForm.initial_buy_price || 0);
+    const costDiff = newTotalCost - prevTotalCost;
+    const alreadyPaid = Number(editForm.already_paid) || 0;
+
+    let calculatedPaid = newTotalCost;
+    if (editForm.supplier_id) {
+      if (costDiff > 0) {
+        // Stock / Cost was INCREASED: evaluate extra payment choices
+        if (editForm.extra_payment_type === 'extra_full') {
+          calculatedPaid = Math.min(newTotalCost, alreadyPaid + costDiff);
+        } else if (editForm.extra_payment_type === 'extra_partial') {
+          const extraVal = parseFloat(editForm.extra_paid_amount);
+          const extraPaid = !isNaN(extraVal) ? Math.min(costDiff, Math.max(0, extraVal)) : Math.round(costDiff * 0.5);
+          calculatedPaid = Math.min(newTotalCost, alreadyPaid + extraPaid);
+        } else if (editForm.extra_payment_type === 'clear_all') {
+          calculatedPaid = newTotalCost;
+        } else if (editForm.extra_payment_type === 'extra_due') {
+          calculatedPaid = Math.min(newTotalCost, alreadyPaid);
+        } else {
+          calculatedPaid = Math.min(newTotalCost, alreadyPaid);
+        }
+      } else {
+        // Stock / Cost was UNCHANGED or REDUCED
+        if (editForm.payment_type === 'due') {
+          calculatedPaid = 0;
+        } else if (editForm.payment_type === 'full' || editForm.payment_type === 'pay_full') {
+          calculatedPaid = newTotalCost;
+        } else if (editForm.payment_type === 'partial') {
+          const val = parseFloat(editForm.paid_amount);
+          calculatedPaid = !isNaN(val) ? Math.min(newTotalCost, Math.max(0, val)) : Math.min(newTotalCost, alreadyPaid);
+        } else {
+          calculatedPaid = Math.min(newTotalCost, alreadyPaid);
+        }
+      }
+    } else {
+      calculatedPaid = newTotalCost;
+    }
+
     setIsSubmitting(true);
     try {
       await api.products.update(editForm.id, {
@@ -626,11 +715,14 @@ export default function Products() {
         category_id: editForm.category_id || null,
         brand_id: finalBrandId,
         brand: selectedBrand?.name || '',
+        supplier_id: editForm.supplier_id || undefined,
         sku: editForm.sku ? editForm.sku.trim() : undefined,
         barcode: editForm.barcode ? editForm.barcode.trim() : undefined,
-        cost_price: parseFloat(editForm.buyPrice) || 0,
+        cost_price: costPrice,
         selling_price: parseFloat(editForm.sellPrice) || 0,
-        stock_quantity: parseInt(editForm.stock, 10) || 0,
+        stock_quantity: initialStock,
+        paid_amount: calculatedPaid,
+        payment_method: editForm.payment_method || 'cash',
         unit: editForm.unit || 'Pcs',
         low_stock_threshold: parseInt(editForm.lowStockThreshold, 10) || 5,
       });
@@ -1094,9 +1186,9 @@ export default function Products() {
       {/* 2. ADD BRAND NEW PRODUCT MODAL                       */}
       {/* ---------------------------------------------------- */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
-          <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 shrink-0">
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#00df89]" />
                 <span>{lang === 'bn' ? 'নতুন পণ্য যুক্ত করুন' : 'Add New Product to Inventory'}</span>
@@ -1106,7 +1198,7 @@ export default function Products() {
               </button>
             </div>
 
-            <form onSubmit={handleAddProduct} className="space-y-3.5 text-xs">
+            <form onSubmit={handleAddProduct} className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3.5 text-xs py-1">
               <div>
                 <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
                   {lang === 'bn' ? 'পণ্যের নাম *' : 'Product Name *'}
@@ -1457,7 +1549,174 @@ export default function Products() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              {/* Supplier Stock Purchase Payment Option in Add Modal */}
+              {newProduct.supplier_id && (
+                <div className="p-3.5 rounded-2xl bg-amber-500/5 dark:bg-zinc-900/70 border border-amber-500/20 dark:border-zinc-800 space-y-3 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Wallet className="w-4 h-4 text-amber-500" />
+                      <span className="font-bold text-slate-800 dark:text-zinc-200 text-xs">
+                        {lang === 'bn' ? 'সাপ্লায়ার পেমেন্ট অপশন' : 'Supplier Payment Option'}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono font-bold text-slate-700 dark:text-zinc-300">
+                      {lang === 'bn' ? 'মোট ক্রয় বিল:' : 'Total Cost:'}{' '}
+                      <span className="text-[#00a86b] dark:text-[#00df89]">
+                        ৳{((parseFloat(newProduct.buyPrice) || 0) * (parseInt(newProduct.stock, 10) || 0)).toLocaleString()}
+                      </span>
+                    </span>
+                  </div>
+
+                  {/* Payment Type Tabs: Full Paid vs Partial vs Full Due */}
+                  <div className="space-y-1">
+                    <label className="block font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
+                      {lang === 'bn' ? 'পেমেন্টের ধরন নির্বাচন করুন:' : 'Select Payment Option:'}
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewProduct((prev) => ({
+                            ...prev,
+                            payment_type: 'full',
+                            paid_amount: String((parseFloat(prev.buyPrice) || 0) * (parseInt(prev.stock, 10) || 0)),
+                          }))
+                        }
+                        className={`py-2 px-1 rounded-xl text-xs font-semibold border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                          newProduct.payment_type === 'full'
+                            ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] shadow-xs'
+                            : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                        }`}
+                      >
+                        <span>{lang === 'bn' ? 'সম্পূর্ণ পরিশোধ' : 'Full Paid'}</span>
+                        <span className="text-[10px] font-normal opacity-80">(100% Paid)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewProduct((prev) => {
+                            const tot = (parseFloat(prev.buyPrice) || 0) * (parseInt(prev.stock, 10) || 0);
+                            return {
+                              ...prev,
+                              payment_type: 'partial',
+                              paid_amount: String(Math.round(tot / 2)),
+                            };
+                          })
+                        }
+                        className={`py-2 px-1 rounded-xl text-xs font-semibold border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                          newProduct.payment_type === 'partial'
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500 shadow-xs'
+                            : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                        }`}
+                      >
+                        <span>{lang === 'bn' ? 'আংশিক পরিশোধ' : 'Partial Paid'}</span>
+                        <span className="text-[10px] font-normal opacity-80">(Partial Due)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setNewProduct((prev) => ({ ...prev, payment_type: 'due', paid_amount: '0' }))}
+                        className={`py-2 px-1 rounded-xl text-xs font-semibold border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                          newProduct.payment_type === 'due'
+                            ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500 shadow-xs'
+                            : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                        }`}
+                      >
+                        <span>{lang === 'bn' ? 'সম্পূর্ণ বাকি' : 'Full Due'}</span>
+                        <span className="text-[10px] font-normal opacity-80">(0% Paid)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Partial Input Box */}
+                  {newProduct.payment_type === 'partial' && (
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-amber-500/30 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
+                          {lang === 'bn' ? 'কত টাকা দিয়েছেন (৳):' : 'Amount Paid (৳):'}
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const tot = (parseFloat(newProduct.buyPrice) || 0) * (parseInt(newProduct.stock, 10) || 0);
+                              setNewProduct((prev) => ({ ...prev, payment_type: 'partial', paid_amount: String(Math.round(tot * 0.5)) }));
+                            }}
+                            className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 hover:bg-amber-500/10 text-[10px] font-bold text-slate-700 dark:text-zinc-300 cursor-pointer"
+                          >
+                            50%
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const tot = (parseFloat(newProduct.buyPrice) || 0) * (parseInt(newProduct.stock, 10) || 0);
+                              setNewProduct((prev) => ({ ...prev, payment_type: 'partial', paid_amount: String(Math.round(tot * 0.25)) }));
+                            }}
+                            className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 hover:bg-amber-500/10 text-[10px] font-bold text-slate-700 dark:text-zinc-300 cursor-pointer"
+                          >
+                            25%
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        value={newProduct.paid_amount}
+                        onChange={(e) => setNewProduct((prev) => ({ ...prev, payment_type: 'partial', paid_amount: e.target.value }))}
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold text-slate-900 dark:text-white outline-none"
+                      />
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">{lang === 'bn' ? 'সাপ্লায়ার বাকি থাকবে:' : 'Remaining Due:'}</span>
+                        <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                          ৳{Math.max(
+                            0,
+                            (parseFloat(newProduct.buyPrice) || 0) * (parseInt(newProduct.stock, 10) || 0) -
+                              (parseFloat(newProduct.paid_amount) || 0)
+                          ).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Due message */}
+                  {newProduct.payment_type === 'due' && (
+                    <div className="px-3 py-1.5 rounded-xl bg-red-500/5 border border-red-500/20 text-red-600 dark:text-red-400 text-[11px] flex items-center justify-between">
+                      <span>{lang === 'bn' ? 'সম্পূর্ণ বিল বাকি রাখা হবে' : 'Full cost will remain as supplier due'}</span>
+                      <span className="font-mono font-bold">
+                        ৳{((parseFloat(newProduct.buyPrice) || 0) * (parseInt(newProduct.stock, 10) || 0)).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Payment Method Selector (shown if not full due) */}
+                  {newProduct.payment_type !== 'due' && (
+                    <div className="space-y-1">
+                      <label className="font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
+                        {lang === 'bn' ? 'পেমেন্ট মাধ্যম (Payment Method)' : 'Payment Method'}
+                      </label>
+                      <Select
+                        value={newProduct.payment_method || 'cash'}
+                        onValueChange={(val) => setNewProduct((prev) => ({ ...prev, payment_method: val }))}
+                      >
+                        <SelectTrigger className="w-full bg-white dark:bg-[#09090b] h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">{lang === 'bn' ? 'ক্যাশ / নগদ (Cash)' : 'Cash'}</SelectItem>
+                          <SelectItem value="bkash">{lang === 'bn' ? 'বিকাশ (bKash)' : 'bKash'}</SelectItem>
+                          <SelectItem value="nagad">{lang === 'bn' ? 'নগদ (Nagad)' : 'Nagad'}</SelectItem>
+                          <SelectItem value="rocket">{lang === 'bn' ? 'রকেট (Rocket)' : 'Rocket'}</SelectItem>
+                          <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার (Bank Transfer)' : 'Bank Transfer'}</SelectItem>
+                          <SelectItem value="card">{lang === 'bn' ? 'কার্ড (Card)' : 'Card'}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800 shrink-0">
                 <Button type="button" variant="outline" size="sm" onClick={() => setIsAddModalOpen(false)} className="cursor-pointer">
                   {lang === 'bn' ? 'বাতিল' : 'Cancel'}
                 </Button>
@@ -1479,9 +1738,9 @@ export default function Products() {
       {/* 3. RESTOCK / PURCHASE STOCK FOR EXISTING PRODUCT     */}
       {/* ---------------------------------------------------- */}
       {isRestockModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
-          <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl my-8">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 shrink-0">
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <ShoppingBag className="w-4 h-4 text-blue-500" />
                 <span>{lang === 'bn' ? 'বিদ্যমান পণ্যে স্টক যোগ ও ক্রয়' : 'Restock / Purchase Stock'}</span>
@@ -1491,7 +1750,7 @@ export default function Products() {
               </button>
             </div>
 
-            <form onSubmit={handleRestockSubmit} className="space-y-3.5 text-xs">
+            <form onSubmit={handleRestockSubmit} className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3.5 text-xs py-1">
               {/* Product Selector */}
               <div>
                 <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
@@ -1700,7 +1959,7 @@ export default function Products() {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800 shrink-0">
                 <Button type="button" variant="outline" size="sm" onClick={() => setIsRestockModalOpen(false)} className="cursor-pointer">
                   {lang === 'bn' ? 'বাতিল' : 'Cancel'}
                 </Button>
@@ -1734,7 +1993,7 @@ export default function Products() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2 text-xs">
               {productList.length === 0 ? (
                 <p className="py-8 text-center text-slate-400">
                   {lang === 'bn' ? 'কোনো পণ্য নেই' : 'No products available.'}
@@ -1772,15 +2031,15 @@ export default function Products() {
       {/* ---------------------------------------------------- */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+          <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 shrink-0">
               <h2 className="text-base font-bold text-slate-900 dark:text-white">Edit Product Details</h2>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 p-1">
+              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleUpdateProduct} className="space-y-3.5 text-xs">
+            <form onSubmit={handleUpdateProduct} className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3.5 text-xs py-1">
               <div>
                 <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Product Name *</label>
                 <input
@@ -1947,6 +2206,75 @@ export default function Products() {
                 )}
               </div>
 
+              {/* Supplier with Inline Creator inside Edit Modal */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-medium text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'সাপ্লায়ার (সরবরাহকারী)' : 'Supplier (Vendor)'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditSuppInline(!showEditSuppInline);
+                      setNewSuppData({ name: '', phone: '', company_name: '', address: '' });
+                    }}
+                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Building2 className="w-3 h-3" />
+                    <span>{showEditSuppInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন সাপ্লায়ার' : '+ Add New Supplier')}</span>
+                  </button>
+                </div>
+
+                {showEditSuppInline ? (
+                  <div className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder={lang === 'bn' ? 'সাপ্লায়ারের নাম *' : 'Supplier Name *'}
+                        value={newSuppData.name}
+                        onChange={(e) => setNewSuppData({ ...newSuppData, name: e.target.value })}
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder={lang === 'bn' ? 'ফোন নম্বর' : 'Phone Number'}
+                        value={newSuppData.phone}
+                        onChange={(e) => setNewSuppData({ ...newSuppData, phone: e.target.value })}
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs outline-none"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isCreatingSupp || !newSuppData.name.trim()}
+                        onClick={() => handleCreateSupplier('edit')}
+                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 cursor-pointer"
+                      >
+                        {isCreatingSupp ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Select
+                    value={editForm.supplier_id || '__none__'}
+                    onValueChange={(val) => setEditForm({ ...editForm, supplier_id: val === '__none__' ? '' : val })}
+                  >
+                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                      <SelectValue placeholder={lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'}</SelectItem>
+                      {suppliers.map((s) => (
+                        <SelectItem key={s._id} value={s._id}>
+                          {s.name} {s.company_name ? `(${s.company_name})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">SKU Code</label>
@@ -2020,15 +2348,358 @@ export default function Products() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsEditModalOpen(false)}>
+              {/* Supplier Stock Purchase Payment Section in Edit Modal */}
+              {editForm.supplier_id && (() => {
+                const curStock = parseInt(editForm.stock, 10) || 0;
+                const curCost = parseFloat(editForm.buyPrice) || 0;
+                const newTotalCost = curStock * curCost;
+                const prevStock = editForm.initial_stock || 0;
+                const prevCost = editForm.initial_buy_price || 0;
+                const prevTotalCost = prevStock * prevCost;
+                const stockDiff = curStock - prevStock;
+                const costDiff = newTotalCost - prevTotalCost;
+                const alreadyPaid = Number(editForm.already_paid) || 0;
+                const prevDue = Math.max(0, prevTotalCost - alreadyPaid);
+                const isOriginallyFullyPaid = prevTotalCost > 0 && alreadyPaid >= prevTotalCost;
+
+                // Compute effective total paid & live remaining due
+                let effectiveTotalPaid = alreadyPaid;
+                let effectiveExtraPaid = 0;
+
+                if (costDiff > 0) {
+                  const extraType = editForm.extra_payment_type || 'extra_due';
+                  if (extraType === 'extra_full') {
+                    effectiveExtraPaid = costDiff;
+                    effectiveTotalPaid = Math.min(newTotalCost, alreadyPaid + costDiff);
+                  } else if (extraType === 'extra_partial') {
+                    const parsedExtra = parseFloat(editForm.extra_paid_amount);
+                    effectiveExtraPaid = !isNaN(parsedExtra)
+                      ? Math.min(costDiff, Math.max(0, parsedExtra))
+                      : Math.round(costDiff * 0.5);
+                    effectiveTotalPaid = Math.min(newTotalCost, alreadyPaid + effectiveExtraPaid);
+                  } else if (extraType === 'clear_all') {
+                    effectiveExtraPaid = costDiff;
+                    effectiveTotalPaid = newTotalCost;
+                  } else {
+                    // extra_due
+                    effectiveExtraPaid = 0;
+                    effectiveTotalPaid = Math.min(newTotalCost, alreadyPaid);
+                  }
+                } else {
+                  if (editForm.payment_type === 'due') {
+                    effectiveTotalPaid = 0;
+                  } else if (editForm.payment_type === 'full' || editForm.payment_type === 'pay_full') {
+                    effectiveTotalPaid = newTotalCost;
+                  } else if (editForm.payment_type === 'partial') {
+                    const parsed = parseFloat(editForm.paid_amount);
+                    effectiveTotalPaid = !isNaN(parsed)
+                      ? Math.min(newTotalCost, Math.max(0, parsed))
+                      : Math.min(newTotalCost, alreadyPaid);
+                  } else {
+                    effectiveTotalPaid = Math.min(newTotalCost, alreadyPaid);
+                  }
+                }
+
+                const liveRemainingDue = Math.max(0, newTotalCost - effectiveTotalPaid);
+
+                return (
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 space-y-3 animate-in fade-in duration-200">
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-zinc-800">
+                      <div className="flex items-center gap-1.5">
+                        <Wallet className="w-3.5 h-3.5 text-[#00a86b] dark:text-[#00df89]" />
+                        <span className="font-bold text-slate-800 dark:text-zinc-200 text-xs">
+                          {lang === 'bn' ? 'সাপ্লায়ার পেমেন্ট ও বাকি সমন্বয়' : 'Supplier Payment & Reconciliation'}
+                        </span>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-slate-700 dark:text-zinc-300">
+                        {lang === 'bn' ? 'মোট বিল:' : 'Total Cost:'}{' '}
+                        <span className="text-[#00a86b] dark:text-[#00df89]">৳{newTotalCost.toLocaleString()}</span>
+                      </span>
+                    </div>
+
+                    {/* Compact Metrics Strip */}
+                    <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200/80 dark:border-zinc-800 text-xs">
+                      <div>
+                        <div className="text-[10px] text-slate-400 font-medium">{lang === 'bn' ? 'পূর্বের স্টক' : 'Initial Stock'}</div>
+                        <div className="font-semibold text-slate-800 dark:text-zinc-200 mt-0.5">
+                          {prevStock} {editForm.unit} <span className="text-[10px] text-slate-400 font-mono font-normal">(@ ৳{prevCost})</span>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-400 font-medium">{lang === 'bn' ? 'পূর্বে পরিশোধিত' : 'Already Paid'}</div>
+                        <div className="font-mono font-semibold text-emerald-600 dark:text-[#00df89] mt-0.5">
+                          ৳{alreadyPaid.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-400 font-medium">{lang === 'bn' ? 'পূর্বের বাকি' : 'Previous Due'}</div>
+                        <div className={`font-mono font-semibold mt-0.5 ${prevDue > 0 ? 'text-amber-500' : 'text-slate-500 dark:text-zinc-400'}`}>
+                          ৳{prevDue.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CASE 1: Stock was INCREASED (costDiff > 0) */}
+                    {costDiff > 0 ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
+                            {lang === 'bn' ? 'অতিরিক্ত খরচ সমন্বয়:' : 'Extra Stock Payment:'}
+                          </span>
+                          <span className="font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md text-[11px]">
+                            +{stockDiff} {editForm.unit} (+৳{costDiff.toLocaleString()})
+                          </span>
+                        </div>
+
+                        {/* 4 Clean Segmented Button Tabs - Brand Uniform Styling */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditForm((prev) => ({ ...prev, extra_payment_type: 'extra_full' }))}
+                            className={`py-2 px-2 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              (editForm.extra_payment_type || 'extra_due') === 'extra_full'
+                                ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{lang === 'bn' ? 'অতিরিক্ত পরিশোধ' : 'Pay Extra Full'}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">+৳{costDiff.toLocaleString()}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                extra_payment_type: 'extra_partial',
+                                extra_paid_amount: prev.extra_paid_amount || String(Math.round(costDiff * 0.5)),
+                              }))
+                            }
+                            className={`py-2 px-2 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              editForm.extra_payment_type === 'extra_partial'
+                                ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{lang === 'bn' ? 'অতিরিক্ত আংশিক' : 'Pay Extra Partial'}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">{lang === 'bn' ? 'কাস্টম' : 'Custom'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setEditForm((prev) => ({ ...prev, extra_payment_type: 'extra_due' }))}
+                            className={`py-2 px-2 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              (editForm.extra_payment_type || 'extra_due') === 'extra_due'
+                                ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{lang === 'bn' ? 'অতিরিক্ত বাকি' : 'Add to Due'}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">+৳0</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setEditForm((prev) => ({ ...prev, extra_payment_type: 'clear_all' }))}
+                            className={`py-2 px-2 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              editForm.extra_payment_type === 'clear_all'
+                                ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{lang === 'bn' ? 'সব পরিশোধ' : 'Settle All'}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">৳{newTotalCost.toLocaleString()}</span>
+                          </button>
+                        </div>
+
+                        {/* Extra Partial Custom Input Box */}
+                        {editForm.extra_payment_type === 'extra_partial' && (
+                          <div className="p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 animate-in fade-in duration-150">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-600 dark:text-zinc-400 text-[11px]">
+                                {lang === 'bn' ? `অতিরিক্ত +৳${costDiff.toLocaleString()} থেকে পরিশোধ (৳):` : `Amount to pay from extra +৳${costDiff.toLocaleString()} (৳):`}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {[0.25, 0.5, 0.75, 1].map((ratio) => {
+                                  const val = Math.round(costDiff * ratio);
+                                  return (
+                                    <button
+                                      key={ratio}
+                                      type="button"
+                                      onClick={() => setEditForm((prev) => ({ ...prev, extra_paid_amount: String(val) }))}
+                                      className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-zinc-800 hover:bg-[#00df89]/15 hover:text-[#00a86b] dark:hover:text-[#00df89] text-slate-600 dark:text-zinc-400 cursor-pointer transition-colors"
+                                    >
+                                      {ratio * 100}%
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            <input
+                              type="number"
+                              placeholder="0.00"
+                              value={editForm.extra_paid_amount}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, extra_paid_amount: e.target.value }))}
+                              className="w-full px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-[#00df89]"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* CASE 2: Stock was UNCHANGED or REDUCED */
+                      <div className="space-y-1.5">
+                        <label className="block font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
+                          {lang === 'bn' ? 'পেমেন্ট সমন্বয়:' : 'Payment Option:'}
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                payment_type: 'keep_existing',
+                                paid_amount: String(alreadyPaid),
+                              }))
+                            }
+                            className={`py-2 px-1 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              (editForm.payment_type || 'keep_existing') === 'keep_existing'
+                                ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{isOriginallyFullyPaid ? (lang === 'bn' ? 'পরিশোধিত' : 'Keep Paid') : (lang === 'bn' ? 'বাকি বহাল' : 'Keep Due')}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">৳{alreadyPaid.toLocaleString()}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                payment_type: 'full',
+                                paid_amount: String(newTotalCost),
+                              }))
+                            }
+                            className={`py-2 px-1 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              editForm.payment_type === 'full'
+                                ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{lang === 'bn' ? 'সম্পূর্ণ পরিশোধ' : 'Pay Full'}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">100%</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                payment_type: 'partial',
+                                paid_amount: prev.paid_amount || String(Math.round(newTotalCost * 0.5)),
+                              }))
+                            }
+                            className={`py-2 px-1 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              editForm.payment_type === 'partial'
+                                ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{lang === 'bn' ? 'আংশিক' : 'Partial'}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">{lang === 'bn' ? 'কাস্টম' : 'Custom'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                payment_type: 'due',
+                                paid_amount: '0',
+                              }))
+                            }
+                            className={`py-2 px-1 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              editForm.payment_type === 'due'
+                                ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500 font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{lang === 'bn' ? 'সম্পূর্ণ বাকি' : 'Full Due'}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">0%</span>
+                          </button>
+                        </div>
+
+                        {/* Partial custom input when unchanged/reduced */}
+                        {editForm.payment_type === 'partial' && (
+                          <div className="p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 animate-in fade-in duration-150">
+                            <label className="text-slate-600 dark:text-zinc-400 text-[11px]">
+                              {lang === 'bn' ? 'মোট কত টাকা পরিশোধ করবেন (৳):' : 'Total Paid Amount (৳):'}
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="0.00"
+                              value={editForm.paid_amount}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, payment_type: 'partial', paid_amount: e.target.value }))}
+                              className="w-full px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-[#00df89]"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Final Reconciliation Receipt / Summary Banner */}
+                    <div className="p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200/80 dark:border-zinc-800 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 dark:text-zinc-400 text-[11px]">{lang === 'bn' ? 'মোট পরিশোধ:' : 'Total Paid:'}</span>
+                        <span className="font-mono font-bold text-[#00a86b] dark:text-[#00df89]">৳{effectiveTotalPaid.toLocaleString()}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 dark:text-zinc-400 text-[11px]">{lang === 'bn' ? 'সাপ্লায়ার বাকি:' : 'Supplier Due:'}</span>
+                        <span className={`font-mono font-bold ${liveRemainingDue > 0 ? 'text-amber-500' : 'text-slate-500 dark:text-zinc-400'}`}>
+                          ৳{liveRemainingDue.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Payment Method Selector */}
+                    {effectiveTotalPaid > 0 && (
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-medium text-slate-700 dark:text-zinc-300">
+                          {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
+                        </label>
+                        <Select
+                          value={editForm.payment_method || 'cash'}
+                          onValueChange={(val) => setEditForm((prev) => ({ ...prev, payment_method: val }))}
+                        >
+                          <SelectTrigger className="w-full h-8 text-xs bg-white dark:bg-[#09090b] border-slate-200 dark:border-zinc-800">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="dark:bg-zinc-900 dark:border-zinc-800">
+                            <SelectItem value="cash">{lang === 'bn' ? 'নগদ (Cash)' : 'Cash'}</SelectItem>
+                            <SelectItem value="bkash">bKash</SelectItem>
+                            <SelectItem value="nagad">Nagad</SelectItem>
+                            <SelectItem value="rocket">Rocket</SelectItem>
+                            <SelectItem value="bank">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার' : 'Bank Transfer'}</SelectItem>
+                            <SelectItem value="card">{lang === 'bn' ? 'কার্ড' : 'Card'}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800 shrink-0">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsEditModalOpen(false)} className="cursor-pointer">
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting}
                   size="sm"
-                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold"
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold cursor-pointer"
                 >
                   {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update Product'}
                 </Button>

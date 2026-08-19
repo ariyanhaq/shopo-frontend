@@ -9,37 +9,59 @@ import { cn } from '@/lib/utils';
 
 const SelectContext = createContext(null);
 
+function normalizeValue(val) {
+  if (val === undefined || val === null) return '';
+  if (typeof val === 'object') {
+    if (val._id) return String(val._id);
+    if (val.id) return String(val.id);
+    if (val.value) return String(val.value);
+  }
+  return String(val);
+}
+
 function extractText(node) {
   if (node === null || node === undefined || typeof node === 'boolean') return '';
   if (typeof node === 'string' || typeof node === 'number') return String(node);
   if (Array.isArray(node)) return node.map(extractText).join('');
   if (typeof node === 'object') {
-    if (node.props && node.props.children !== undefined) {
-      return extractText(node.props.children);
+    if (node.props) {
+      if (node.props.children !== undefined) {
+        return extractText(node.props.children);
+      }
+      if (node.props.label !== undefined) {
+        return extractText(node.props.label);
+      }
     }
   }
   return '';
 }
 
-function extractItemLabels(children) {
+function extractItemLabels(nodes) {
   const map = {};
-  const scan = (nodes) => {
-    if (!nodes) return;
-    const array = Array.isArray(nodes) ? nodes : [nodes];
-    for (const child of array) {
-      if (!child || typeof child !== 'object') continue;
-      if (child.props) {
-        if (child.props.value !== undefined) {
-          const text = extractText(child.props.children);
-          if (text) map[String(child.props.value)] = text.trim();
+  const scan = (curr) => {
+    if (!curr) return;
+    if (Array.isArray(curr)) {
+      for (let i = 0; i < curr.length; i++) {
+        scan(curr[i]);
+      }
+      return;
+    }
+    if (typeof curr !== 'object') return;
+
+    if (curr.props) {
+      if (curr.props.value !== undefined) {
+        const valStr = normalizeValue(curr.props.value);
+        const text = extractText(curr.props.children) || (curr.props.label ? String(curr.props.label) : '') || valStr;
+        if (text && valStr !== '') {
+          map[valStr] = text.trim();
         }
-        if (child.props.children) {
-          scan(child.props.children);
-        }
+      }
+      if (curr.props.children) {
+        scan(curr.props.children);
       }
     }
   };
-  scan(children);
+  scan(nodes);
   return map;
 }
 
@@ -51,7 +73,8 @@ export function Select({
   children,
   className,
 }) {
-  const [selectedValue, setSelectedValue] = useState(value !== undefined ? value : defaultValue);
+  const [internalValue, setInternalValue] = useState(value !== undefined ? value : defaultValue);
+  const selectedValue = value !== undefined ? value : internalValue;
   const [registeredLabels, setRegisteredLabels] = useState({});
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
@@ -60,16 +83,11 @@ export function Select({
   const itemLabelsMap = useMemo(() => ({ ...scannedLabels, ...registeredLabels }), [scannedLabels, registeredLabels]);
 
   const registerItem = (val, text) => {
-    if (val !== undefined && text) {
-      setRegisteredLabels((prev) => (prev[String(val)] === text ? prev : { ...prev, [String(val)]: text }));
+    const valStr = normalizeValue(val);
+    if (valStr !== '' && text) {
+      setRegisteredLabels((prev) => (prev[valStr] === text ? prev : { ...prev, [valStr]: text }));
     }
   };
-
-  useEffect(() => {
-    if (value !== undefined) {
-      setSelectedValue(value);
-    }
-  }, [value]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -86,7 +104,7 @@ export function Select({
   }, [isOpen]);
 
   const handleSelect = (val, label) => {
-    setSelectedValue(val);
+    setInternalValue(val);
     if (label) {
       registerItem(val, label);
     }
@@ -94,11 +112,15 @@ export function Select({
     setIsOpen(false);
   };
 
+  const strVal = normalizeValue(selectedValue);
   const currentDisplayLabel =
-    itemLabelsMap[String(selectedValue)] ||
-    (selectedValue === '__general__' ? 'General' : '') ||
-    (selectedValue === '__walk_in__' ? 'General / Walk-in Supplier' : '') ||
-    (selectedValue === '__none__' ? 'General / Walk-in Supplier' : '');
+    strVal !== ''
+      ? itemLabelsMap[strVal] ||
+        (typeof selectedValue === 'object' ? (selectedValue.name || selectedValue.label || '') : '') ||
+        (strVal === '__general__' ? 'General' : '') ||
+        (strVal === '__walk_in__' ? 'General / Walk-in Supplier' : '') ||
+        (strVal === '__none__' ? 'None / Generic' : '')
+      : '';
 
   return (
     <SelectContext.Provider
@@ -144,16 +166,18 @@ export function SelectTrigger({
     lg: 'h-12 px-4 text-sm rounded-2xl',
   };
 
-  const isHexId = typeof value === 'string' && /^[0-9a-fA-F]{24}$/.test(value);
-  const resolvedText = selectedLabel || (!isHexId && value ? String(value) : '');
+  const normVal = normalizeValue(value);
+  const isHexId = /^[0-9a-fA-F]{24}$/.test(normVal);
+  const resolvedText = selectedLabel || (!isHexId && normVal !== '' ? normVal : '');
 
   const displayContent =
-    children ||
-    (resolvedText ? (
+    children !== undefined && children !== null ? (
+      children
+    ) : resolvedText ? (
       resolvedText
     ) : (
       <span className="text-slate-400 dark:text-zinc-500 font-normal">{placeholder}</span>
-    ));
+    );
 
   return (
     <button
@@ -187,14 +211,15 @@ export function SelectTrigger({
 
 export function SelectValue({ placeholder = 'Select...', children }) {
   const { value, selectedLabel } = useContext(SelectContext);
-  const isHexId = typeof value === 'string' && /^[0-9a-fA-F]{24}$/.test(value);
-  const resolvedText = selectedLabel || (!isHexId && value ? String(value) : '');
+  const normVal = normalizeValue(value);
+  const isHexId = /^[0-9a-fA-F]{24}$/.test(normVal);
+  const resolvedText = selectedLabel || (!isHexId && normVal !== '' ? normVal : '');
 
   if (children) return children;
   if (resolvedText) {
     return resolvedText;
   }
-  return <span className="text-slate-400 dark:text-zinc-500">{placeholder}</span>;
+  return <span className="text-slate-400 dark:text-zinc-500 font-normal">{placeholder}</span>;
 }
 
 export function SelectContent({
@@ -242,8 +267,10 @@ export function SelectItem({
   ...props
 }) {
   const { selectedValue, handleSelect, registerItem } = useContext(SelectContext);
-  const isSelected = String(selectedValue) === String(value);
-  const itemText = extractText(children) || (typeof children === 'string' ? children : String(value));
+  const normalizedVal = normalizeValue(value);
+  const normalizedSelected = normalizeValue(selectedValue);
+  const isSelected = normalizedVal !== '' && normalizedSelected !== '' && normalizedVal === normalizedSelected;
+  const itemText = extractText(children) || (typeof children === 'string' ? children : normalizedVal);
 
   useEffect(() => {
     if (value !== undefined && itemText) {
