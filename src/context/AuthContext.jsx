@@ -152,13 +152,21 @@ export function AuthProvider({ children }) {
 
   // Subscribe to Firebase Auth State Changes
   useEffect(() => {
+    // Safety fallback: if Firebase or network takes more than 3.5s, unblock the UI so user is never stuck on spinner
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+      setIsProfileChecked(true);
+    }, 3500);
+
     if (!auth) {
+      clearTimeout(safetyTimer);
       setLoading(false);
       setIsProfileChecked(true);
       return;
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      clearTimeout(safetyTimer);
       setCurrentUser(user);
       if (user && user.emailVerified) {
         await syncBackendProfile();
@@ -174,7 +182,10 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, []);
 
   /**

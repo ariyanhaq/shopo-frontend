@@ -15,12 +15,16 @@ if (typeof window !== 'undefined' && window.location.protocol === 'https:' && ra
 const BASE_URL = rawApiUrl ? `${rawApiUrl}/api/v1` : '/api/v1';
 
 /**
- * Universal request wrapper attaching Firebase ID Token
+ * Universal request wrapper attaching Firebase ID Token with safety timeout
  */
 async function request(endpoint, options = {}) {
+  const { timeout = 8000, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   const headers = {
     'Content-Type': 'application/json',
-    ...(options.headers || {}),
+    ...(fetchOptions.headers || {}),
   };
 
   // Inject Firebase ID Token if user is logged in
@@ -34,21 +38,33 @@ async function request(endpoint, options = {}) {
   }
 
   const url = `${BASE_URL}${endpoint}`;
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(url, {
+      ...fetchOptions,
+      headers,
+      signal: controller.signal,
+    });
 
-  const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
 
-  if (!response.ok) {
-    const error = new Error(data.message || `Request failed with status ${response.status}`);
-    error.status = response.status;
-    error.data = data;
-    throw error;
+    if (!response.ok) {
+      const error = new Error(data.message || `Request failed with status ${response.status}`);
+      error.status = response.status;
+      error.data = data;
+      throw error;
+    }
+
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      const timeoutErr = new Error(`Request timed out after ${timeout / 1000}s: ${endpoint}`);
+      timeoutErr.code = 'TIMEOUT';
+      throw timeoutErr;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return data;
 }
 
 export const api = {
