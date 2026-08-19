@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendTarget =
   process.env.VITE_BACKEND_URL ||
   process.env.VITE_API_URL ||
-  'http://pftboyjzu9xpthebqljyvgu1.129.121.121.8.sslip.io';
+  'https://shopo-api.vidflix.live';
 
 // https://vite.dev/config/
 export default defineConfig({

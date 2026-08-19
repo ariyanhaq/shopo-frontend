@@ -2,10 +2,10 @@
   command = "npm run build"
   publish = "dist"
 
-# Proxy /api requests directly to the Coolify VPS Backend
+# Proxy /api requests directly to the VPS Backend
 [[redirects]]
   from = "/api/*"
-  to = "http://pftboyjzu9xpthebqljyvgu1.129.121.121.8.sslip.io/api/:splat"
+  to = "https://shopo-api.vidflix.live/api/:splat"
   status = 200
   force = true
 
