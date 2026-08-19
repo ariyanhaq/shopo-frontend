@@ -1,0 +1,19 @@
+:80 {
+    root * /app/dist
+    encode gzip
+
+    # Proxy API calls directly to the Backend
+    handle /api/* {
+        reverse_proxy http://pftboyjzu9xpthebqljyvgu1.129.121.121.8.sslip.io {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Single Page Application (SPA) routing fallback
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
+}
