@@ -2367,7 +2367,7 @@ export default function Products() {
                 let effectiveExtraPaid = 0;
 
                 if (costDiff > 0) {
-                  const extraType = editForm.extra_payment_type || 'extra_due';
+                  const extraType = editForm.extra_payment_type || 'extra_full';
                   if (extraType === 'extra_full') {
                     effectiveExtraPaid = costDiff;
                     effectiveTotalPaid = Math.min(newTotalCost, alreadyPaid + costDiff);
@@ -2385,7 +2385,23 @@ export default function Products() {
                     effectiveExtraPaid = 0;
                     effectiveTotalPaid = Math.min(newTotalCost, alreadyPaid);
                   }
+                } else if (costDiff < 0) {
+                  // Stock / Cost was REDUCED
+                  if (editForm.payment_type === 'due') {
+                    effectiveTotalPaid = 0;
+                  } else if (editForm.payment_type === 'full' || editForm.payment_type === 'pay_full') {
+                    effectiveTotalPaid = newTotalCost;
+                  } else if (editForm.payment_type === 'partial') {
+                    const parsed = parseFloat(editForm.paid_amount);
+                    effectiveTotalPaid = !isNaN(parsed)
+                      ? Math.min(newTotalCost, Math.max(0, parsed))
+                      : Math.min(newTotalCost, alreadyPaid);
+                  } else {
+                    // keep_existing: capped at newTotalCost
+                    effectiveTotalPaid = Math.min(newTotalCost, alreadyPaid);
+                  }
                 } else {
+                  // Stock / Cost was UNCHANGED
                   if (editForm.payment_type === 'due') {
                     effectiveTotalPaid = 0;
                   } else if (editForm.payment_type === 'full' || editForm.payment_type === 'pay_full') {
@@ -2441,7 +2457,7 @@ export default function Products() {
                     </div>
 
                     {/* CASE 1: Stock was INCREASED (costDiff > 0) */}
-                    {costDiff > 0 ? (
+                    {costDiff > 0 && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-xs">
                           <span className="font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
@@ -2458,7 +2474,7 @@ export default function Products() {
                             type="button"
                             onClick={() => setEditForm((prev) => ({ ...prev, extra_payment_type: 'extra_full' }))}
                             className={`py-2 px-2 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
-                              (editForm.extra_payment_type || 'extra_due') === 'extra_full'
+                              (editForm.extra_payment_type || 'extra_full') === 'extra_full'
                                 ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
                                 : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
                             }`}
@@ -2490,7 +2506,7 @@ export default function Products() {
                             type="button"
                             onClick={() => setEditForm((prev) => ({ ...prev, extra_payment_type: 'extra_due' }))}
                             className={`py-2 px-2 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
-                              (editForm.extra_payment_type || 'extra_due') === 'extra_due'
+                              editForm.extra_payment_type === 'extra_due'
                                 ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
                                 : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
                             }`}
@@ -2546,12 +2562,42 @@ export default function Products() {
                           </div>
                         )}
                       </div>
-                    ) : (
-                      /* CASE 2: Stock was UNCHANGED or REDUCED */
-                      <div className="space-y-1.5">
-                        <label className="block font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
-                          {lang === 'bn' ? 'পেমেন্ট সমন্বয়:' : 'Payment Option:'}
-                        </label>
+                    )}
+
+                    {/* CASE 2: Stock was REDUCED (costDiff < 0) */}
+                    {costDiff < 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
+                            {lang === 'bn' ? 'স্টক ও খরচ হ্রাস:' : 'Stock & Bill Reduction:'}
+                          </span>
+                          <span className="font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md text-[11px]">
+                            {stockDiff} {editForm.unit} (-৳{Math.abs(costDiff).toLocaleString()})
+                          </span>
+                        </div>
+
+                        {/* Status Note */}
+                        {alreadyPaid >= newTotalCost ? (
+                          <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[11px] flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            <span>
+                              {lang === 'bn'
+                                ? `স্টক কমানোয় মোট বিল কমে ৳${newTotalCost.toLocaleString()} হয়েছে এবং পূর্বের পেমেন্টেই তা সম্পূর্ণ পরিশোধিত (৳০ বাকি)।`
+                                : `Stock reduced. The new total bill of ৳${newTotalCost.toLocaleString()} is fully covered by previous payment (৳0 due).`}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] flex items-center gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span>
+                              {lang === 'bn'
+                                ? `স্টক কমানোয় বকেয়া ৳${prevDue.toLocaleString()} থেকে কমে ৳${Math.max(0, newTotalCost - alreadyPaid).toLocaleString()} হয়েছে।`
+                                : `Stock reduced. Outstanding due automatically decreased from ৳${prevDue.toLocaleString()} → ৳${Math.max(0, newTotalCost - alreadyPaid).toLocaleString()}.`}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Segmented Buttons for Reduced Stock */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                           <button
                             type="button"
@@ -2559,7 +2605,7 @@ export default function Products() {
                               setEditForm((prev) => ({
                                 ...prev,
                                 payment_type: 'keep_existing',
-                                paid_amount: String(alreadyPaid),
+                                paid_amount: String(Math.min(newTotalCost, alreadyPaid)),
                               }))
                             }
                             className={`py-2 px-1 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
@@ -2568,8 +2614,10 @@ export default function Products() {
                                 : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
                             }`}
                           >
-                            <span>{isOriginallyFullyPaid ? (lang === 'bn' ? 'পরিশোধিত' : 'Keep Paid') : (lang === 'bn' ? 'বাকি বহাল' : 'Keep Due')}</span>
-                            <span className="text-[10px] font-mono font-normal opacity-80">৳{alreadyPaid.toLocaleString()}</span>
+                            <span>{alreadyPaid >= newTotalCost ? (lang === 'bn' ? 'পরিশোধ বহাল' : 'Keep Paid') : (lang === 'bn' ? 'পূর্বের পরিশোধ বহাল' : 'Keep Paid')}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">
+                              ৳{Math.min(newTotalCost, alreadyPaid).toLocaleString()}
+                            </span>
                           </button>
 
                           <button
@@ -2588,7 +2636,7 @@ export default function Products() {
                             }`}
                           >
                             <span>{lang === 'bn' ? 'সম্পূর্ণ পরিশোধ' : 'Pay Full'}</span>
-                            <span className="text-[10px] font-mono font-normal opacity-80">100%</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">100% (৳{newTotalCost.toLocaleString()})</span>
                           </button>
 
                           <button
@@ -2630,7 +2678,109 @@ export default function Products() {
                           </button>
                         </div>
 
-                        {/* Partial custom input when unchanged/reduced */}
+                        {/* Partial custom input when reduced */}
+                        {editForm.payment_type === 'partial' && (
+                          <div className="p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 animate-in fade-in duration-150">
+                            <label className="text-slate-600 dark:text-zinc-400 text-[11px]">
+                              {lang === 'bn' ? 'মোট কত টাকা পরিশোধ রাখবেন (৳):' : 'Total Paid Amount to Record (৳):'}
+                            </label>
+                            <input
+                              type="number"
+                              placeholder="0.00"
+                              value={editForm.paid_amount}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, payment_type: 'partial', paid_amount: e.target.value }))}
+                              className="w-full px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-[#00df89]"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* CASE 3: Stock was UNCHANGED (costDiff === 0) */}
+                    {costDiff === 0 && (
+                      <div className="space-y-1.5">
+                        <label className="block font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
+                          {lang === 'bn' ? 'পেমেন্ট সমন্বয়:' : 'Payment Option:'}
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                payment_type: 'keep_existing',
+                                paid_amount: String(alreadyPaid),
+                              }))
+                            }
+                            className={`py-2 px-1 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              (editForm.payment_type || 'keep_existing') === 'keep_existing'
+                                ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{isOriginallyFullyPaid ? (lang === 'bn' ? 'পরিশোধিত' : 'Keep Paid') : (lang === 'bn' ? 'বাকি বহাল' : 'Keep Due')}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">৳{alreadyPaid.toLocaleString()}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                payment_type: 'full',
+                                paid_amount: String(newTotalCost),
+                              }))
+                            }
+                            className={`py-2 px-1 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              editForm.payment_type === 'full'
+                                ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{lang === 'bn' ? 'সম্পূর্ণ পরিশোধ' : 'Pay Full'}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">100% (৳{newTotalCost.toLocaleString()})</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                payment_type: 'partial',
+                                paid_amount: prev.paid_amount || String(Math.round(newTotalCost * 0.5)),
+                              }))
+                            }
+                            className={`py-2 px-1 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              editForm.payment_type === 'partial'
+                                ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{lang === 'bn' ? 'আংশিক' : 'Partial'}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">{lang === 'bn' ? 'কাস্টম' : 'Custom'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                payment_type: 'due',
+                                paid_amount: '0',
+                              }))
+                            }
+                            className={`py-2 px-1 rounded-xl text-xs font-medium border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                              editForm.payment_type === 'due'
+                                ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500 font-bold shadow-xs'
+                                : 'bg-white dark:bg-[#09090b] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
+                            }`}
+                          >
+                            <span>{lang === 'bn' ? 'সম্পূর্ণ বাকি' : 'Full Due'}</span>
+                            <span className="text-[10px] font-mono font-normal opacity-80">0%</span>
+                          </button>
+                        </div>
+
+                        {/* Partial custom input when unchanged */}
                         {editForm.payment_type === 'partial' && (
                           <div className="p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 animate-in fade-in duration-150">
                             <label className="text-slate-600 dark:text-zinc-400 text-[11px]">
