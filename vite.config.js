@@ -6,6 +6,11 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const backendTarget =
+  process.env.VITE_BACKEND_URL ||
+  process.env.VITE_API_URL ||
+  'http://pftboyjzu9xpthebqljyvgu1.129.121.121.8.sslip.io';
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -15,9 +20,22 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_BACKEND_URL || process.env.VITE_API_URL || 'http://pftboyjzu9xpthebqljyvgu1.129.121.121.8.sslip.io',
+        target: backendTarget,
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
+  preview: {
+    host: true,
+    port: 3000,
+    allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
