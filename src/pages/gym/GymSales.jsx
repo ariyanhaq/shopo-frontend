@@ -5,7 +5,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
+import { useAuth } from '@/context/AuthContext';
 import api from '@/services/api';
+import { printSaleReceipt } from '@/utils/invoicePrinter';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +19,7 @@ import {
 export default function GymSales() {
   const navigate = useNavigate();
   const { lang } = useLanguage();
+  const { mongoShop } = useAuth();
 
   const [sales, setSales] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -130,6 +133,7 @@ export default function GymSales() {
                   <th className="p-3.5">Date</th>
                   <th className="p-3.5">Method</th>
                   <th className="p-3.5 text-right">Total Amount (৳)</th>
+                  <th className="p-3.5 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
@@ -148,6 +152,17 @@ export default function GymSales() {
                     </td>
                     <td className="p-3.5 text-right font-medium text-[#00a86b] dark:text-[#00df89]">
                       ৳ {(s.total || 0).toLocaleString()}
+                    </td>
+                    <td className="p-3.5 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => printSaleReceipt({ order: s, shop: mongoShop, lang })}
+                        className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-[#00df89] cursor-pointer"
+                        title={lang === 'bn' ? 'ক্যাশ মেমো প্রিন্ট করুন' : 'Print Cash Memo'}
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                      </Button>
                     </td>
                   </tr>
                 ))}

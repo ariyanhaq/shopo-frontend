@@ -8,6 +8,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
+import { printDueReceipt, printCustomerStatement } from '@/utils/invoicePrinter';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -917,7 +918,16 @@ export default function Customers() {
               <Button variant="outline" size="sm" onClick={handleCloseHistory}>
                 Close
               </Button>
-              <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
+              <Button
+                size="sm"
+                onClick={() => printCustomerStatement({
+                  customer: customerHistoryModal.customer,
+                  sales: customerHistoryModal.sales,
+                  shop: mongoShop,
+                  lang
+                })}
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
+              >
                 <Printer className="w-3.5 h-3.5" /> Print Statement
               </Button>
             </div>
@@ -1406,7 +1416,25 @@ export default function Customers() {
               <Button variant="outline" size="sm" onClick={() => setCustomerVoucher(null)}>
                 {lang === 'bn' ? 'বন্ধ করুন' : 'Close'}
               </Button>
-              <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
+              <Button
+                size="sm"
+                onClick={() => printDueReceipt({
+                  voucher: {
+                    invoice_number: customerVoucher.settled_sales?.map(s => s.invoice_number).filter(Boolean).join(', ') || 'Due Collection',
+                    date: customerVoucher.date,
+                    customer_name: customerVoucher.customer_name,
+                    customer_phone: customerVoucher.customer_phone,
+                    payment_method: customerVoucher.payment_method,
+                    note: customerVoucher.note,
+                    collected_amount: customerVoucher.collected_amount,
+                    remaining_sale_due: 0,
+                    customer_total_due: customerVoucher.remaining_customer_due,
+                  },
+                  shop: mongoShop,
+                  lang
+                })}
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
+              >
                 <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'রশিদ প্রিন্ট করুন' : 'Print Receipt'}
               </Button>
             </div>

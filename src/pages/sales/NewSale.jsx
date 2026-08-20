@@ -8,6 +8,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
+import { printSaleReceipt } from '@/utils/invoicePrinter';
 import { Card, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1212,8 +1213,31 @@ export default function NewSale() {
               <Button variant="outline" size="sm" onClick={handleResetSale}>
                 New Sale
               </Button>
-              <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
-                <Printer className="w-3.5 h-3.5" /> Print Memo
+              <Button
+                size="sm"
+                onClick={() => printSaleReceipt({
+                  order: {
+                    invoice_number: completedOrder.id,
+                    date: completedOrder.date,
+                    customer_name: completedOrder.customer,
+                    customer_phone: completedOrder.phone !== 'N/A' ? completedOrder.phone : '',
+                    payment_method: completedOrder.method,
+                    items: completedOrder.items?.map(it => ({ name: it.name, unit_price: it.price, quantity: it.qty, subtotal: (it.price * it.qty) })),
+                    subtotal: completedOrder.subtotal,
+                    discount: completedOrder.discount,
+                    total: completedOrder.total,
+                    paid_amount: completedOrder.paidAmount,
+                    due_amount: completedOrder.currentBillDue,
+                    customer_id: { total_due: completedOrder.totalDue },
+                    tendered_amount: completedOrder.cashReceived,
+                    change_amount: completedOrder.changeToReturn,
+                  },
+                  shop: mongoShop,
+                  lang
+                })}
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'ক্যাশ মেমো প্রিন্ট' : 'Print Memo'}
               </Button>
             </div>
           </Card>

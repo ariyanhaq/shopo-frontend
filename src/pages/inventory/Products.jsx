@@ -660,9 +660,18 @@ export default function Products() {
     e.preventDefault();
     if (!editForm.name || !editForm.sellPrice) return;
 
+    const finalCatId = (editForm.category_id && editForm.category_id !== '__general__')
+      ? editForm.category_id
+      : (categories.find((c) => c.name?.toLowerCase() === 'general')?._id || null);
+
     const finalBrandId = (editForm.brand_id && editForm.brand_id !== '__none__')
       ? editForm.brand_id
       : null;
+
+    const finalSupplierId = (editForm.supplier_id && editForm.supplier_id !== '__none__')
+      ? editForm.supplier_id
+      : null;
+
     const selectedBrand = brands.find((b) => b._id === editForm.brand_id);
 
     const initialStock = parseInt(editForm.stock, 10) || 0;
@@ -673,7 +682,7 @@ export default function Products() {
     const alreadyPaid = Number(editForm.already_paid) || 0;
 
     let calculatedPaid = newTotalCost;
-    if (editForm.supplier_id) {
+    if (finalSupplierId) {
       if (costDiff > 0) {
         // Stock / Cost was INCREASED: evaluate extra payment choices
         if (editForm.extra_payment_type === 'extra_full') {
@@ -712,10 +721,10 @@ export default function Products() {
         name: editForm.name.trim(),
         image_url: editForm.image_url || '',
         images: editForm.image_url ? [editForm.image_url] : [],
-        category_id: editForm.category_id || null,
+        category_id: finalCatId,
         brand_id: finalBrandId,
         brand: selectedBrand?.name || '',
-        supplier_id: editForm.supplier_id || undefined,
+        supplier_id: finalSupplierId,
         sku: editForm.sku ? editForm.sku.trim() : undefined,
         barcode: editForm.barcode ? editForm.barcode.trim() : undefined,
         cost_price: costPrice,

@@ -8,6 +8,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
+import { printSaleReceipt, printDueReceipt } from '@/utils/invoicePrinter';
 import { Card, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,8 +24,19 @@ import ConfirmDialog from '@/components/common/ConfirmDialog';
 import {
   ShoppingCart, DollarSign, Plus, Search, Filter, Calendar,
   FileText, Printer, CheckCircle2, Clock, X, Loader2, Tag,
-  Coins, Percent, Edit2, Trash2, AlertTriangle, Sparkles
+  Coins, Percent, Edit2, Trash2, AlertTriangle, Sparkles, Eye, ShoppingBag
 } from 'lucide-react';
+
+const safeMoney = (val, fallback = 0) => {
+  const n = Number(val);
+  return isNaN(n) ? fallback.toLocaleString() : n.toLocaleString();
+};
+
+const safeDate = (val) => {
+  if (!val) return 'N/A';
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? String(val) : d.toLocaleString();
+};
 
 export default function Orders() {
   const navigate = useNavigate();
@@ -402,14 +414,14 @@ export default function Orders() {
                         {order.items?.map(it => `${it.name} (${it.quantity})`).join(', ') || '1 item'}
                       </td>
                       <td className="p-3.5 text-rose-500 font-medium whitespace-nowrap">
-                        {order.discount > 0 ? (
-                          <span>- ৳ {order.discount.toLocaleString()} {order.discount_type === 'percentage' ? `(${order.discount_value}%)` : ''}</span>
+                        {Number(order.discount || 0) > 0 ? (
+                          <span>- ৳ {safeMoney(order.discount)} {order.discount_type === 'percentage' ? `(${order.discount_value}%)` : ''}</span>
                         ) : (
                           <span className="text-slate-400">None</span>
                         )}
                       </td>
                       <td className="p-3.5 text-slate-500 whitespace-nowrap">
-                        {new Date(order.created_at).toLocaleString()}
+                        {safeDate(order.created_at || order.date)}
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
                         <div className="flex flex-col items-start gap-1">
@@ -428,7 +440,7 @@ export default function Orders() {
                               variant="warning"
                               className="!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30 text-[10px] font-bold px-2 py-0.5 whitespace-nowrap"
                             >
-                              Due: ৳{order.due_amount.toLocaleString()}
+                              Due: ৳{safeMoney(order.due_amount)}
                             </Badge>
                           ) : (
                             <Badge
@@ -441,7 +453,7 @@ export default function Orders() {
                         </div>
                       </td>
                       <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89] whitespace-nowrap">
-                        ৳ {(order.total || 0).toLocaleString()}
+                        ৳ {safeMoney(order.total)}
                       </td>
                       <td className="p-3.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1 flex-nowrap">
@@ -460,8 +472,17 @@ export default function Orders() {
                             variant="ghost"
                             size="sm"
                             onClick={() => setSelectedOrder(order)}
-                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-[#00df89] shrink-0"
-                            title="View Receipt Memo"
+                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-blue-500 shrink-0 cursor-pointer"
+                            title={lang === 'bn' ? 'মেমো বিবরণ দেখুন' : 'View Receipt Memo'}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => printSaleReceipt({ order, shop: mongoShop, lang })}
+                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-[#00df89] shrink-0 cursor-pointer"
+                            title={lang === 'bn' ? 'ক্যাশ মেমো প্রিন্ট করুন' : 'Print Receipt Memo'}
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </Button>
@@ -625,9 +646,9 @@ export default function Orders() {
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">Cash Memo / Receipt</h2>
-                <p className="text-xs text-slate-400 font-mono">{selectedOrder.invoice_number}</p>
+                <p className="text-xs text-slate-400 font-mono">{selectedOrder.invoice_number || 'N/A'}</p>
               </div>
-              <button onClick={() => setSelectedOrder(null)} className="text-slate-400 p-1 cursor-pointer">
+              <button onClick={() => setSelectedOrder(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -635,14 +656,14 @@ export default function Orders() {
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-3 text-xs">
               <div className="text-center pb-2 border-b border-slate-200 dark:border-zinc-800">
                 <h3 className="font-bold text-sm text-slate-900 dark:text-white">{mongoShop?.name || 'Shopo Store'}</h3>
-                <p className="text-[11px] text-slate-400">{new Date(selectedOrder.created_at).toLocaleString()}</p>
+                <p className="text-[11px] text-slate-400">{safeDate(selectedOrder.created_at || selectedOrder.date)}</p>
               </div>
 
               <div className="space-y-1 text-[11px]">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Customer:</span>
                   <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                    {selectedOrder.customer_id?.name || 'Walk-in Customer'}
+                    {selectedOrder.customer_id?.name || selectedOrder.customer_name || (lang === 'bn' ? 'খুচরা ক্রেতা' : 'Walk-in Customer')}
                   </span>
                 </div>
                 {selectedOrder.customer_id?.phone && (
@@ -653,7 +674,7 @@ export default function Orders() {
                 )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">Payment Method:</span>
-                  <span className="font-semibold capitalize">{selectedOrder.payment_method}</span>
+                  <span className="font-semibold uppercase">{selectedOrder.payment_method || 'Cash'}</span>
                 </div>
               </div>
 
@@ -662,16 +683,20 @@ export default function Orders() {
                 <div className="font-semibold text-slate-700 dark:text-zinc-300 text-[11px]">
                   {lang === 'bn' ? 'ক্রয়কৃত পণ্যের তালিকা:' : 'Purchased Items:'}
                 </div>
-                <div className="divide-y divide-slate-100 dark:divide-zinc-800/80 bg-slate-50 dark:bg-[#09090b] rounded-xl border border-slate-200/90 dark:border-zinc-800/80 p-2 space-y-1.5">
-                  {selectedOrder.items?.map((it, i) => {
-                    const itemImg = it.image_url || it.product_id?.image_url || (it.product_id?.images && it.product_id.images[0]);
+                <div className="divide-y divide-slate-100 dark:divide-zinc-800/80 bg-slate-50 dark:bg-[#09090b] rounded-xl border border-slate-200/90 dark:border-zinc-800/80 p-2 space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                  {Array.isArray(selectedOrder.items) && selectedOrder.items.map((it, i) => {
+                    const itemImg = it?.image_url || (typeof it?.product_id === 'object' && (it.product_id?.image_url || (Array.isArray(it.product_id?.images) && it.product_id.images[0])));
+                    const itName = it?.name || it?.product_name || 'Item';
+                    const itPrice = Number(it?.unit_price || it?.price || 0);
+                    const itQty = Number(it?.quantity || it?.qty || 1);
+                    const itSubtotal = Number(it?.subtotal !== undefined ? it.subtotal : (itPrice * itQty));
                     return (
                       <div key={i} className="pt-1.5 first:pt-0 flex items-center justify-between gap-2.5 text-[11px]">
                         <div className="flex items-center gap-2 min-w-0">
                           {itemImg ? (
                             <img
                               src={itemImg}
-                              alt={it.name}
+                              alt={itName}
                               className="w-8 h-8 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 shrink-0"
                               onError={(e) => {
                                 e.target.onerror = null;
@@ -684,14 +709,14 @@ export default function Orders() {
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="font-semibold text-slate-900 dark:text-zinc-100 truncate">{it.name}</div>
+                            <div className="font-semibold text-slate-900 dark:text-zinc-100 truncate">{itName}</div>
                             <div className="text-[10px] text-slate-400">
-                              ৳{(it.unit_price || 0).toLocaleString()} × {it.quantity}
+                              ৳{safeMoney(itPrice)} × {itQty}
                             </div>
                           </div>
                         </div>
                         <span className="font-bold text-slate-900 dark:text-white shrink-0">
-                          ৳ {(it.subtotal || it.unit_price * it.quantity).toLocaleString()}
+                          ৳ {safeMoney(itSubtotal)}
                         </span>
                       </div>
                     );
@@ -703,56 +728,56 @@ export default function Orders() {
               <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1 text-xs">
                 <div className="flex justify-between text-slate-500">
                   <span>Subtotal:</span>
-                  <span>৳ {(selectedOrder.subtotal || selectedOrder.total).toLocaleString()}</span>
+                  <span>৳ {safeMoney(selectedOrder.subtotal !== undefined ? selectedOrder.subtotal : selectedOrder.total)}</span>
                 </div>
-                {(selectedOrder.discount || 0) > 0 && (
+                {Number(selectedOrder.discount || 0) > 0 && (
                   <div className="flex justify-between text-rose-500">
                     <span>
                       Discount {selectedOrder.discount_type === 'percentage' ? `(${selectedOrder.discount_value}%)` : '(Flat)'}:
                     </span>
-                    <span className="font-bold">- ৳ {selectedOrder.discount.toLocaleString()}</span>
+                    <span className="font-bold">- ৳ {safeMoney(selectedOrder.discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-800">
                   <span>Total Bill Amount:</span>
-                  <span className="text-[#00a86b] dark:text-[#00df89]">৳ {(selectedOrder.total || 0).toLocaleString()}</span>
+                  <span className="text-[#00a86b] dark:text-[#00df89]">৳ {safeMoney(selectedOrder.total)}</span>
                 </div>
 
                 <div className="flex justify-between text-slate-700 dark:text-zinc-300 pt-1">
                   <span>Amount Paid:</span>
                   <span className="font-semibold text-[#00a86b] dark:text-[#00df89]">
-                    ৳ {(selectedOrder.paid_amount !== undefined ? selectedOrder.paid_amount : selectedOrder.total).toLocaleString()}
+                    ৳ {safeMoney(selectedOrder.paid_amount !== undefined ? selectedOrder.paid_amount : selectedOrder.total)}
                   </span>
                 </div>
 
                 {/* Due Breakdown in Detailed Memo */}
-                {(selectedOrder.due_amount > 0 || (selectedOrder.customer_id?.total_due || 0) > 0) && (
+                {(Number(selectedOrder.due_amount || 0) > 0 || Number(selectedOrder.customer_id?.total_due || 0) > 0) && (
                   <div className="pt-1.5 mt-1 border-t border-dashed border-slate-200 dark:border-zinc-700 space-y-0.5 text-[11px]">
-                    {selectedOrder.due_amount > 0 && (
+                    {Number(selectedOrder.due_amount || 0) > 0 && (
                       <div className="flex justify-between text-amber-600 font-bold">
                         <span>{lang === 'bn' ? 'এই মেমোর বকেয়া:' : 'This Bill Due:'}</span>
-                        <span>৳ {selectedOrder.due_amount.toLocaleString()}</span>
+                        <span>৳ {safeMoney(selectedOrder.due_amount)}</span>
                       </div>
                     )}
-                    {(selectedOrder.customer_id?.total_due || 0) > 0 && (
+                    {Number(selectedOrder.customer_id?.total_due || 0) > 0 && (
                       <div className="flex justify-between text-slate-500 font-medium">
                         <span>{lang === 'bn' ? 'কাস্টমারের মোট বকেয়া:' : 'Customer Total Outstanding Due:'}</span>
-                        <span className="text-amber-600 font-semibold">৳ {selectedOrder.customer_id.total_due.toLocaleString()}</span>
+                        <span className="text-amber-600 font-semibold">৳ {safeMoney(selectedOrder.customer_id.total_due)}</span>
                       </div>
                     )}
                   </div>
                 )}
 
                 {/* Tendered & Change Breakdown */}
-                {selectedOrder.payment_method?.toLowerCase() === 'cash' && (selectedOrder.tendered_amount || 0) > 0 && (selectedOrder.due_amount || 0) === 0 && (
+                {selectedOrder.payment_method?.toLowerCase() === 'cash' && Number(selectedOrder.tendered_amount || 0) > 0 && Number(selectedOrder.due_amount || 0) === 0 && (
                   <>
                     <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
                       <span>{lang === 'bn' ? 'কাস্টমার দিয়েছেন:' : 'Cash Given by Customer:'}</span>
-                      <span className="font-semibold">৳ {selectedOrder.tendered_amount.toLocaleString()}</span>
+                      <span className="font-semibold">৳ {safeMoney(selectedOrder.tendered_amount)}</span>
                     </div>
                     <div className="flex justify-between text-emerald-600 dark:text-[#00df89] font-bold">
                       <span>{lang === 'bn' ? 'ফেরত দেওয়া হয়েছে:' : 'Change Returned:'}</span>
-                      <span>৳ {(selectedOrder.change_amount || 0).toLocaleString()}</span>
+                      <span>৳ {safeMoney(selectedOrder.change_amount)}</span>
                     </div>
                   </>
                 )}
@@ -763,7 +788,7 @@ export default function Orders() {
               <Button variant="outline" size="sm" onClick={() => setSelectedOrder(null)}>
                 {lang === 'bn' ? 'বন্ধ করুন' : 'Close'}
               </Button>
-              {selectedOrder.due_amount > 0 && (
+              {Number(selectedOrder.due_amount || 0) > 0 && (
                 <Button
                   size="sm"
                   onClick={() => {
@@ -776,7 +801,11 @@ export default function Orders() {
                   <Coins className="w-3.5 h-3.5" /> {lang === 'bn' ? 'বকেয়া গ্রহণ করুন' : 'Collect Due'}
                 </Button>
               )}
-              <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
+              <Button
+                size="sm"
+                onClick={() => printSaleReceipt({ order: selectedOrder, shop: mongoShop, lang })}
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
+              >
                 <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'প্রিন্ট রশিদ' : 'Print Receipt'}
               </Button>
             </div>
@@ -830,15 +859,15 @@ export default function Orders() {
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200 dark:border-zinc-800 text-center">
                 <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800">
                   <div className="text-[10px] text-slate-400">{lang === 'bn' ? 'মোট বিল' : 'Total Bill'}</div>
-                  <div className="font-bold text-slate-900 dark:text-white">৳ {collectingOrder.total.toLocaleString()}</div>
+                  <div className="font-bold text-slate-900 dark:text-white">৳ {safeMoney(collectingOrder.total)}</div>
                 </div>
                 <div className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800">
                   <div className="text-[10px] text-slate-400">{lang === 'bn' ? 'পরিশোধিত' : 'Paid so far'}</div>
-                  <div className="font-bold text-emerald-600">৳ {(collectingOrder.paid_amount || 0).toLocaleString()}</div>
+                  <div className="font-bold text-emerald-600">৳ {safeMoney(collectingOrder.paid_amount)}</div>
                 </div>
                 <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
                   <div className="text-[10px] text-amber-600 font-semibold">{lang === 'bn' ? 'বকেয়া' : 'Bill Due'}</div>
-                  <div className="font-bold text-amber-600">৳ {collectingOrder.due_amount.toLocaleString()}</div>
+                  <div className="font-bold text-amber-600">৳ {safeMoney(collectingOrder.due_amount)}</div>
                 </div>
               </div>
             </div>
@@ -1012,21 +1041,21 @@ export default function Orders() {
                   <div className="flex justify-between items-center text-sm font-bold text-slate-900 dark:text-white pt-1">
                     <span>{lang === 'bn' ? 'গৃহীত টাকা:' : 'Amount Received:'}</span>
                     <span className="text-[#00a86b] dark:text-[#00df89] text-base">
-                      ৳ {collectedVoucher.collected_amount.toLocaleString()}
+                      ৳ {safeMoney(collectedVoucher.collected_amount)}
                     </span>
                   </div>
 
                   <div className="flex justify-between text-slate-600 dark:text-zinc-400 pt-1">
                     <span>{lang === 'bn' ? 'বকেয়া অবশিষ্ট:' : 'Remaining Bill Due:'}</span>
-                    <span className={`font-semibold ${collectedVoucher.remaining_sale_due > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600'}`}>
-                      ৳ {collectedVoucher.remaining_sale_due.toLocaleString()}
+                    <span className={`font-semibold ${Number(collectedVoucher.remaining_sale_due || 0) > 0 ? 'text-amber-600 font-bold' : 'text-emerald-600'}`}>
+                      ৳ {safeMoney(collectedVoucher.remaining_sale_due)}
                     </span>
                   </div>
 
-                  {collectedVoucher.customer_total_due > 0 && (
+                  {Number(collectedVoucher.customer_total_due || 0) > 0 && (
                     <div className="flex justify-between text-slate-500 text-[11px]">
                       <span>{lang === 'bn' ? 'কাস্টমারের মোট বকেয়া:' : 'Customer Total Due:'}</span>
-                      <span className="font-semibold text-amber-600">৳ {collectedVoucher.customer_total_due.toLocaleString()}</span>
+                      <span className="font-semibold text-amber-600">৳ {safeMoney(collectedVoucher.customer_total_due)}</span>
                     </div>
                   )}
                 </div>
@@ -1037,7 +1066,11 @@ export default function Orders() {
               <Button variant="outline" size="sm" onClick={() => setCollectedVoucher(null)}>
                 {lang === 'bn' ? 'বন্ধ করুন' : 'Close'}
               </Button>
-              <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
+              <Button
+                size="sm"
+                onClick={() => printDueReceipt({ voucher: collectedVoucher, shop: mongoShop, lang })}
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
+              >
                 <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'রশিদ প্রিন্ট করুন' : 'Print Money Receipt'}
               </Button>
             </div>

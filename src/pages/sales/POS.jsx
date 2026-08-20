@@ -8,6 +8,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
+import { printSaleReceipt } from '@/utils/invoicePrinter';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -814,7 +815,30 @@ export default function POS() {
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
               <Button variant="outline" size="sm" onClick={() => setReceipt(null)}>Close</Button>
-              <Button size="sm" onClick={() => window.print()} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1">
+              <Button
+                size="sm"
+                onClick={() => printSaleReceipt({
+                  order: {
+                    invoice_number: receipt.invoice,
+                    date: receipt.date,
+                    customer_name: receipt.customerName,
+                    customer_phone: receipt.customerPhone,
+                    payment_method: receipt.paymentMethod,
+                    items: receipt.items?.map(it => ({ name: it.name, unit_price: it.price, quantity: it.qty, subtotal: (it.price * it.qty) })),
+                    subtotal: receipt.subtotal,
+                    discount: receipt.discount,
+                    total: receipt.total,
+                    paid_amount: receipt.paidAmount,
+                    due_amount: receipt.currentBillDue,
+                    customer_id: { total_due: receipt.totalDue },
+                    tendered_amount: receipt.cashReceived,
+                    change_amount: receipt.changeToReturn,
+                  },
+                  shop: mongoShop,
+                  lang
+                })}
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
+              >
                 <Printer className="w-3.5 h-3.5" /> Print
               </Button>
             </div>

@@ -7,6 +7,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useShop } from '@/context/ShopContext';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/services/api';
+import { printPurchaseReceipt } from '@/utils/invoicePrinter';
 import {
   ShoppingBag, Plus, Search, Calendar, DollarSign,
   Receipt, CheckCircle2, AlertCircle, Loader2, X,
@@ -116,9 +117,6 @@ export default function Purchases() {
   // Delete State
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  // Print Invoice State
-  const [printInvoiceData, setPrintInvoiceData] = useState(null);
 
   // Inline Supplier State inside Purchase Modal
   const [showInlineSupplier, setShowInlineSupplier] = useState(false);
@@ -826,10 +824,8 @@ export default function Purchases() {
 
   // Trigger Print Receipt
   const handlePrintReceipt = (purchase) => {
-    setPrintInvoiceData(purchase);
-    setTimeout(() => {
-      window.print();
-    }, 250);
+    if (!purchase) return;
+    printPurchaseReceipt({ purchase, shop: mongoShop, lang });
   };
 
   return (
@@ -2290,123 +2286,6 @@ export default function Purchases() {
         onConfirm={handleConfirmDeleteBrand}
         onCancel={() => setDeleteBrandModal({ isOpen: false, id: null, name: '', isLoading: false })}
       />
-
-      {/* ---------------------------------------------------- */}
-      {/* PRINTABLE RECEIPT TEMPLATE (VISIBLE ONLY ON PRINT)    */}
-      {/* ---------------------------------------------------- */}
-      {printInvoiceData && (
-        <div id="print-purchase-receipt" className="hidden print:block fixed inset-0 bg-white text-black p-8 z-[99999]">
-          <style>{`
-            @media print {
-              body * { visibility: hidden !important; }
-              #print-purchase-receipt, #print-purchase-receipt * { visibility: visible !important; }
-              #print-purchase-receipt { position: absolute; left: 0; top: 0; width: 100%; height: auto; display: block !important; padding: 20px; font-family: sans-serif; }
-            }
-          `}</style>
-
-          {/* Shop Header */}
-          <div className="text-center border-b-2 border-black pb-4 mb-4">
-            <h1 className="text-2xl font-black uppercase tracking-wider">{currentShopName}</h1>
-            {currentShopAddress && <p className="text-xs text-gray-700">{currentShopAddress}</p>}
-            {currentShopPhone && <p className="text-xs text-gray-700">Phone: {currentShopPhone}</p>}
-            <h2 className="text-sm font-bold mt-2 uppercase tracking-widest bg-gray-200 inline-block px-3 py-1 rounded">
-              Purchase Invoice & Stock Receipt
-            </h2>
-          </div>
-
-          {/* Invoice & Supplier Meta */}
-          <div className="grid grid-cols-2 text-xs mb-4 pb-2 border-b border-gray-300">
-            <div>
-              <p><span className="font-bold">Invoice No:</span> #{printInvoiceData.purchase_number}</p>
-              <p><span className="font-bold">Date:</span> {new Date(printInvoiceData.created_at).toLocaleDateString()} {new Date(printInvoiceData.created_at).toLocaleTimeString()}</p>
-              <p><span className="font-bold">Payment Method:</span> <span className="uppercase">{printInvoiceData.payment_method || 'Cash'}</span></p>
-            </div>
-            <div className="text-right">
-              <p><span className="font-bold">Supplier:</span> {printInvoiceData.supplier_name}</p>
-              {printInvoiceData.supplier_phone && <p><span className="font-bold">Phone:</span> {printInvoiceData.supplier_phone}</p>}
-              <p><span className="font-bold">Status:</span> <span className="uppercase font-black">{printInvoiceData.payment_status}</span></p>
-            </div>
-          </div>
-
-          {/* Itemized Table */}
-          <table className="w-full text-xs text-left border-collapse mb-4">
-            <thead>
-              <tr className="border-b-2 border-black">
-                <th className="py-2 text-left">SL</th>
-                <th className="py-2 text-left">Product Item</th>
-                <th className="py-2 text-center">Qty</th>
-                <th className="py-2 text-right">Unit Rate (৳)</th>
-                <th className="py-2 text-right">Total (৳)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {printInvoiceData.items?.map((it, i) => (
-                <tr key={i}>
-                  <td className="py-2">{i + 1}</td>
-                  <td className="py-2 font-semibold">{it.product_name}</td>
-                  <td className="py-2 text-center">{it.quantity}</td>
-                  <td className="py-2 text-right font-mono">৳{(it.unit_cost || 0).toLocaleString()}</td>
-                  <td className="py-2 text-right font-mono font-bold">৳{(it.total_cost || (it.quantity * it.unit_cost) || 0).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Calculation Breakdown */}
-          <div className="flex justify-end mb-8">
-            <div className="w-64 space-y-1.5 text-xs border-t-2 border-black pt-2">
-              <div className="flex justify-between">
-                <span>Subtotal Gross:</span>
-                <span className="font-mono">৳{(printInvoiceData.total_amount || 0).toLocaleString()}</span>
-              </div>
-              {printInvoiceData.discount > 0 && (
-                <div className="flex justify-between">
-                  <span>Discount:</span>
-                  <span className="font-mono">-৳{(printInvoiceData.discount || 0).toLocaleString()}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-black text-sm border-t border-gray-300 pt-1">
-                <span>Net Payable:</span>
-                <span className="font-mono">৳{(printInvoiceData.net_amount || 0).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between font-semibold">
-                <span>Paid Amount:</span>
-                <span className="font-mono">৳{(printInvoiceData.paid_amount || 0).toLocaleString()}</span>
-              </div>
-              {(printInvoiceData.due_amount || 0) > 0 && (
-                <div className="flex justify-between font-bold text-red-600 border-t border-dashed border-gray-300 pt-1">
-                  <span>Due Balance:</span>
-                  <span className="font-mono">৳{(printInvoiceData.due_amount).toLocaleString()}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Notes if any */}
-          {printInvoiceData.notes && (
-            <div className="text-xs mb-8 p-2 border border-gray-200 rounded">
-              <span className="font-bold">Remarks:</span> {printInvoiceData.notes}
-            </div>
-          )}
-
-          {/* Signatures */}
-          <div className="grid grid-cols-2 gap-8 pt-12 text-xs text-center border-t border-gray-200">
-            <div>
-              <div className="border-t border-black w-36 mx-auto mb-1"></div>
-              <p>Supplier Signature</p>
-            </div>
-            <div>
-              <div className="border-t border-black w-36 mx-auto mb-1"></div>
-              <p>Authorized Receiver</p>
-            </div>
-          </div>
-
-          {/* Footer Notice */}
-          <div className="text-center text-[10px] text-gray-500 mt-8">
-            <p>Thank you for partnering with us. Powered by Shopo Business Suite.</p>
-          </div>
-        </div>
-      )}
 
       {/* Pay Due Modal */}
       {payDueModal.isOpen && payDueModal.supplier && (
