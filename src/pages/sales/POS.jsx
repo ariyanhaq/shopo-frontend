@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Store, Search, Plus, Minus, Trash2, CheckCircle2,
   Printer, ArrowLeft, RefreshCw, Loader2, Sparkles, Package,
-  Percent, Coins, X, User, UserCheck, Phone
+  Percent, Coins, X, User, UserCheck, Phone, Layers
 } from 'lucide-react';
 
 export default function POS() {
@@ -29,18 +29,23 @@ export default function POS() {
   const [search, setSearch] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
-  const [matchedCustomer, setMatchedCustomer] = useState(null);
-  const [customerSuggestions, setCustomerSuggestions] = useState([]);
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
-  const [discountType, setDiscountType] = useState('flat'); // 'flat' or 'percentage'
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [discountType, setDiscountType] = useState('flat'); // 'flat' | 'percentage'
   const [discountValue, setDiscountValue] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('Cash'); // 'Cash', 'bKash', 'Nagad', 'Card', 'Due'
   const [cashGiven, setCashGiven] = useState('');
   const [duePaidAmount, setDuePaidAmount] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [receipt, setReceipt] = useState(null);
+
+  // Variant Picker Modal for products with multiple variations
+  const [variantPickerProduct, setVariantPickerProduct] = useState(null);
+
+  // Auto-fill & Search Customer State
+  const [customerSuggestions, setCustomerSuggestions] = useState([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [matchedCustomer, setMatchedCustomer] = useState(null);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
 
   // Debounced Customer Lookup by Phone
   useEffect(() => {
@@ -144,12 +149,19 @@ export default function POS() {
   }, [products, search]);
 
   const addToCart = (prod) => {
-    const exists = cart.find(c => c.id === prod._id);
+    if (prod.has_variants && Array.isArray(prod.variants) && prod.variants.length > 0) {
+      setVariantPickerProduct(prod);
+      return;
+    }
+    const cartKey = String(prod._id);
+    const exists = cart.find(c => c.cart_id === cartKey || c.id === cartKey);
     if (exists) {
-      setCart(cart.map(c => c.id === prod._id ? { ...c, qty: c.qty + 1 } : c));
+      setCart(cart.map(c => (c.cart_id === cartKey || c.id === cartKey) ? { ...c, qty: c.qty + 1 } : c));
     } else {
       setCart([...cart, {
-        id: prod._id,
+        cart_id: cartKey,
+        id: cartKey,
+        product_id: prod._id,
         name: prod.name,
         price: prod.selling_price,
         qty: 1,
@@ -158,9 +170,31 @@ export default function POS() {
     }
   };
 
+  const addVariantToCart = (parentProd, variant) => {
+    const cartKey = `${parentProd._id}_${variant._id}`;
+    const exists = cart.find(c => c.cart_id === cartKey || c.id === cartKey);
+    if (exists) {
+      setCart(cart.map(c => (c.cart_id === cartKey || c.id === cartKey) ? { ...c, qty: c.qty + 1 } : c));
+    } else {
+      setCart([...cart, {
+        cart_id: cartKey,
+        id: cartKey,
+        product_id: parentProd._id,
+        variant_id: variant._id,
+        variant_name: variant.name,
+        name: `${parentProd.name} (${variant.name})`,
+        price: variant.selling_price || parentProd.selling_price,
+        qty: 1,
+        unit: parentProd.unit || 'pcs',
+      }]);
+    }
+    setVariantPickerProduct(null);
+    toast.success(lang === 'bn' ? `'${variant.name}' কার্টে যুক্ত হয়েছে!` : `Added '${variant.name}' to bill!`);
+  };
+
   const updateQty = (id, delta) => {
     setCart(cart.map(c => {
-      if (c.id === id) {
+      if (c.cart_id === id || c.id === id) {
         const n = c.qty + delta;
         return n > 0 ? { ...c, qty: n } : null;
       }
@@ -258,7 +292,12 @@ export default function POS() {
         customer_id: matchedCustomer?._id || undefined,
         customer_name: customerName.trim() || undefined,
         customer_phone: customerPhone.trim() || undefined,
-        items: cart.map(c => ({ product_id: c.id, quantity: c.qty })),
+        items: cart.map(c => ({
+          product_id: c.product_id || c.id,
+          variant_id: c.variant_id || undefined,
+          variant_name: c.variant_name || undefined,
+          quantity: c.qty
+        })),
         discount_type: discountType,
         discount_value: parseFloat(discountValue) || 0,
         discount: discountAmount,
@@ -402,9 +441,28 @@ export default function POS() {
                     </div>
                   </div>
 
-                  <div className="pt-2.5 mt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+                  <div className="pt-2.5 mt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-1">
                     <span className="text-sm sm:text-base font-bold text-[#00a86b] dark:text-[#00df89]">৳ {p.selling_price.toLocaleString()}</span>
-                    <span className="text-xs font-medium text-slate-400">{p.stock_quantity} left</span>
+                    {p.has_variants && Array.isArray(p.variants) && p.variants.length > 0 ? (
+                      (() => {
+                        const totalVarStock = p.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0);
+                        return (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className={`text-[11px] font-semibold ${totalVarStock <= 0 ? 'text-rose-500 font-bold' : 'text-slate-500 dark:text-zinc-400'}`}>
+                              {totalVarStock} {p.unit ? (p.unit === 'piece' ? 'pcs' : p.unit) : 'left'}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30 flex items-center gap-1">
+                              <Layers className="w-2.5 h-2.5" />
+                              <span>{p.variants.length} Variants</span>
+                            </span>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <span className={`text-xs font-semibold ${(p.stock_quantity || 0) <= 0 ? 'text-rose-500 font-bold' : 'text-slate-400 dark:text-zinc-400'}`}>
+                        {p.stock_quantity || 0} {p.unit ? (p.unit === 'piece' ? 'pcs' : p.unit) : 'left'}
+                      </span>
+                    )}
                   </div>
                 </Card>
               ))}
@@ -751,9 +809,17 @@ export default function POS() {
 
             <div className="space-y-1.5 py-2 border-b border-dashed border-slate-200 dark:border-zinc-700">
               {receipt.items.map((it, idx) => (
-                <div key={idx} className="flex justify-between text-[11px]">
-                  <span>{it.name} x{it.qty}</span>
-                  <span className="font-semibold">৳ {(it.price * it.qty).toLocaleString()}</span>
+                <div key={idx} className="flex justify-between text-[11px] items-start">
+                  <div>
+                    <span className="font-semibold text-slate-900 dark:text-white">{it.name}</span>
+                    {it.variant_name && (
+                      <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-[#00df89] border border-emerald-500/20 inline-block">
+                        🎨 {it.variant_name}
+                      </span>
+                    )}
+                    <div className="text-[10px] text-slate-400">৳ {it.price} × {it.qty}</div>
+                  </div>
+                  <span className="font-semibold text-slate-900 dark:text-white">৳ {(it.price * it.qty).toLocaleString()}</span>
                 </div>
               ))}
             </div>
@@ -824,7 +890,14 @@ export default function POS() {
                     customer_name: receipt.customerName,
                     customer_phone: receipt.customerPhone,
                     payment_method: receipt.paymentMethod,
-                    items: receipt.items?.map(it => ({ name: it.name, unit_price: it.price, quantity: it.qty, subtotal: (it.price * it.qty) })),
+                    items: receipt.items?.map(it => ({
+                      name: it.name,
+                      variant_name: it.variant_name,
+                      sku: it.sku,
+                      unit_price: it.price,
+                      quantity: it.qty,
+                      subtotal: (it.price * it.qty)
+                    })),
                     subtotal: receipt.subtotal,
                     discount: receipt.discount,
                     total: receipt.total,
@@ -840,6 +913,90 @@ export default function POS() {
                 className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" /> Print
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* VARIANT PICKER MODAL                                 */}
+      {/* ---------------------------------------------------- */}
+      {variantPickerProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <Card className="max-w-md w-full p-5 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-[#00df89] flex items-center justify-center">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                      {variantPickerProduct.name}
+                    </h3>
+                    {(() => {
+                      const totalModalStock = (variantPickerProduct.variants && variantPickerProduct.variants.length > 0)
+                        ? variantPickerProduct.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0)
+                        : (Number(variantPickerProduct.stock_quantity) || 0);
+                      return (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-[#00df89] border border-emerald-500/20">
+                          {totalModalStock} {variantPickerProduct.unit ? (variantPickerProduct.unit === 'piece' ? 'pcs' : variantPickerProduct.unit) : 'pcs'} {lang === 'bn' ? 'স্টক' : 'in stock'}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    {lang === 'bn' ? 'কার্টে যুক্ত করতে ভ্যারিয়েশন বেছে নিন:' : 'Select variation to add to bill:'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVariantPickerProduct(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {variantPickerProduct.variants?.map((v) => (
+                <div
+                  key={v._id}
+                  onClick={() => addVariantToCart(variantPickerProduct, v)}
+                  className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800/80 hover:border-[#00df89] hover:bg-emerald-50/20 dark:hover:bg-emerald-950/20 transition-all flex items-center justify-between cursor-pointer group"
+                >
+                  <div>
+                    <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-[#00df89] transition-colors">
+                      {v.name}
+                    </h4>
+                    <span className="text-[11px] text-slate-400 font-mono">{v.sku || variantPickerProduct.sku || 'SKU'}</span>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="font-bold text-sm text-[#00a86b] dark:text-[#00df89]">
+                      ৳ {(v.selling_price || variantPickerProduct.selling_price).toLocaleString()}
+                    </div>
+                    <Badge
+                      variant={v.stock_quantity <= 0 ? 'destructive' : v.stock_quantity <= 5 ? 'warning' : 'default'}
+                      className="text-[10px] font-mono mt-0.5"
+                    >
+                      {v.stock_quantity} left
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVariantPickerProduct(null)}
+                className="text-xs"
+              >
+                Cancel
               </Button>
             </div>
           </Card>

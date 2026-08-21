@@ -17,7 +17,7 @@ import {
   ShoppingCart, Search, Plus, Minus, Trash2, CheckCircle2,
   DollarSign, ArrowLeft, Printer, FileText, Smartphone, CreditCard,
   Banknote, X, Sparkles, User, Phone, Check, RefreshCw, AlertCircle,
-  Loader2, Package, Percent, Coins, ArrowRight, Store
+  Loader2, Package, Percent, Coins, ArrowRight, Store, Layers
 } from 'lucide-react';
 
 export default function NewSale() {
@@ -29,6 +29,9 @@ export default function NewSale() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [availableProducts, setAvailableProducts] = useState([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+
+  // Variant Picker Modal State
+  const [variantPickerProduct, setVariantPickerProduct] = useState(null);
   const [isProcessingSale, setIsProcessingSale] = useState(false);
 
   // Cart State
@@ -144,6 +147,9 @@ export default function NewSale() {
         stock: p.stock_quantity ?? 0,
         unit: p.unit || 'Pcs',
         price: p.selling_price ?? 0,
+        has_variants: Boolean(p.has_variants),
+        variation_options: p.variation_options || [],
+        variants: p.variants || [],
       }));
       setAvailableProducts(mapped);
     } catch (err) {
@@ -182,18 +188,26 @@ export default function NewSale() {
 
   // Add Item to Cart
   const handleAddToCart = (product) => {
-    const existing = cart.find((item) => item.id === product.id);
+    if (product.has_variants && Array.isArray(product.variants) && product.variants.length > 0) {
+      setVariantPickerProduct(product);
+      return;
+    }
+
+    const cartKey = String(product.id);
+    const existing = cart.find((item) => item.cart_id === cartKey || item.id === cartKey);
     if (existing) {
       setCart(
         cart.map((item) =>
-          item.id === product.id ? { ...item, qty: item.qty + 1 } : item
+          (item.cart_id === cartKey || item.id === cartKey) ? { ...item, qty: item.qty + 1 } : item
         )
       );
     } else {
       setCart([
         ...cart,
         {
-          id: product.id,
+          cart_id: cartKey,
+          id: cartKey,
+          product_id: product.id,
           name: product.name,
           sku: product.sku,
           price: product.price,
@@ -204,12 +218,43 @@ export default function NewSale() {
     }
   };
 
+  // Add Specific Variant to Cart
+  const handleAddVariantToCart = (parentProd, variant) => {
+    const cartKey = `${parentProd.id}_${variant._id}`;
+    const existing = cart.find((item) => item.cart_id === cartKey || item.id === cartKey);
+    if (existing) {
+      setCart(
+        cart.map((item) =>
+          (item.cart_id === cartKey || item.id === cartKey) ? { ...item, qty: item.qty + 1 } : item
+        )
+      );
+    } else {
+      setCart([
+        ...cart,
+        {
+          cart_id: cartKey,
+          id: cartKey,
+          product_id: parentProd.id,
+          variant_id: variant._id,
+          variant_name: variant.name,
+          name: `${parentProd.name} (${variant.name})`,
+          sku: variant.sku || parentProd.sku,
+          price: variant.selling_price || parentProd.price,
+          qty: 1,
+          unit: parentProd.unit,
+        },
+      ]);
+    }
+    setVariantPickerProduct(null);
+    toast.success(lang === 'bn' ? `'${variant.name}' কার্টে যুক্ত হয়েছে!` : `Added '${variant.name}' to cart!`);
+  };
+
   // Update Item Quantity in Cart
   const handleUpdateQty = (id, delta) => {
     setCart(
       cart
         .map((item) => {
-          if (item.id === id) {
+          if (item.cart_id === id || item.id === id) {
             const newQty = item.qty + delta;
             return newQty > 0 ? { ...item, qty: newQty } : null;
           }
@@ -221,7 +266,7 @@ export default function NewSale() {
 
   // Remove Item
   const handleRemoveFromCart = (id) => {
-    setCart(cart.filter((item) => item.id !== id));
+    setCart(cart.filter((item) => item.cart_id !== id && item.id !== id));
   };
 
   // Calculations
@@ -320,7 +365,9 @@ export default function NewSale() {
       const payload = {
         customer_id: matchedCustomer?._id || undefined,
         items: cart.map((item) => ({
-          product_id: item.id,
+          product_id: item.product_id || item.id,
+          variant_id: item.variant_id || undefined,
+          variant_name: item.variant_name || undefined,
           quantity: item.qty,
         })),
         discount_type: discountType,
@@ -540,13 +587,30 @@ export default function NewSale() {
                       </div>
                     </div>
 
-                    <div className="pt-2.5 mt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+                    <div className="pt-2.5 mt-3 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between gap-1">
                       <span className="text-sm sm:text-base font-bold text-[#00a86b] dark:text-[#00df89]">
                         ৳ {product.price.toLocaleString()}
                       </span>
-                      <span className="text-xs text-slate-400 font-medium">
-                        {product.stock} {product.unit} left
-                      </span>
+                      {product.has_variants && Array.isArray(product.variants) && product.variants.length > 0 ? (
+                        (() => {
+                          const totalVarStock = product.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0);
+                          return (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className={`text-[11px] font-semibold ${totalVarStock <= 0 ? 'text-rose-500 font-bold' : 'text-slate-500 dark:text-zinc-400'}`}>
+                                {totalVarStock} {product.unit ? (product.unit === 'piece' ? 'pcs' : product.unit) : 'left'}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30 flex items-center gap-1">
+                                <Layers className="w-2.5 h-2.5" />
+                                <span>{product.variants.length} Variants</span>
+                              </span>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <span className={`text-xs font-semibold ${(product.stock || 0) <= 0 ? 'text-rose-500 font-bold' : 'text-slate-400 dark:text-zinc-400'}`}>
+                          {product.stock} {product.unit ? (product.unit === 'piece' ? 'pcs' : product.unit) : 'left'}
+                        </span>
+                      )}
                     </div>
                   </Card>
                 );
@@ -1140,8 +1204,16 @@ export default function NewSale() {
               {/* Items Table */}
               <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1.5">
                 {completedOrder.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-[11px]">
-                    <span className="truncate pr-2">{item.name} x {item.qty}</span>
+                  <div key={idx} className="flex justify-between text-[11px] items-start">
+                    <div>
+                      <span className="font-semibold text-slate-900 dark:text-white">{item.name}</span>
+                      {item.variant_name && (
+                        <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-[#00df89] border border-emerald-500/20 inline-block">
+                          🎨 {item.variant_name}
+                        </span>
+                      )}
+                      <div className="text-[10px] text-slate-400">৳ {item.price} × {item.qty}</div>
+                    </div>
                     <span className="font-semibold shrink-0">৳ {(item.price * item.qty).toLocaleString()}</span>
                   </div>
                 ))}
@@ -1183,7 +1255,7 @@ export default function NewSale() {
                     {completedOrder.previousDue > 0 && (
                       <div className="flex justify-between text-slate-500">
                         <span>{lang === 'bn' ? 'পূর্বের বকেয়া:' : 'Previous Customer Due:'}</span>
-                        <span className="font-semibold text-amber-600">৳ {completedOrder.previousDue.toLocaleString()}</span>
+                        <span>৳ {completedOrder.previousDue.toLocaleString()}</span>
                       </div>
                     )}
                     <div className="flex justify-between font-bold text-xs text-amber-600 dark:text-amber-400 pt-1 border-t border-slate-200 dark:border-zinc-800">
@@ -1222,7 +1294,14 @@ export default function NewSale() {
                     customer_name: completedOrder.customer,
                     customer_phone: completedOrder.phone !== 'N/A' ? completedOrder.phone : '',
                     payment_method: completedOrder.method,
-                    items: completedOrder.items?.map(it => ({ name: it.name, unit_price: it.price, quantity: it.qty, subtotal: (it.price * it.qty) })),
+                    items: completedOrder.items?.map(it => ({
+                      name: it.name,
+                      variant_name: it.variant_name,
+                      sku: it.sku,
+                      unit_price: it.price,
+                      quantity: it.qty,
+                      subtotal: (it.price * it.qty)
+                    })),
                     subtotal: completedOrder.subtotal,
                     discount: completedOrder.discount,
                     total: completedOrder.total,
@@ -1238,6 +1317,90 @@ export default function NewSale() {
                 className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'ক্যাশ মেমো প্রিন্ট' : 'Print Memo'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* VARIANT PICKER MODAL                                 */}
+      {/* ---------------------------------------------------- */}
+      {variantPickerProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <Card className="max-w-md w-full p-5 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-[#00df89] flex items-center justify-center">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                      {variantPickerProduct.name}
+                    </h3>
+                    {(() => {
+                      const totalModalStock = (variantPickerProduct.variants && variantPickerProduct.variants.length > 0)
+                        ? variantPickerProduct.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0)
+                        : (Number(variantPickerProduct.stock || variantPickerProduct.stock_quantity) || 0);
+                      return (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-[#00df89] border border-emerald-500/20">
+                          {totalModalStock} {variantPickerProduct.unit ? (variantPickerProduct.unit === 'piece' ? 'pcs' : variantPickerProduct.unit) : 'pcs'} {lang === 'bn' ? 'স্টক' : 'in stock'}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    {lang === 'bn' ? 'কার্টে যুক্ত করতে ভ্যারিয়েশন বেছে নিন:' : 'Select variation to add to memo:'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVariantPickerProduct(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {variantPickerProduct.variants?.map((v) => (
+                <div
+                  key={v._id}
+                  onClick={() => handleAddVariantToCart(variantPickerProduct, v)}
+                  className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800/80 hover:border-[#00df89] hover:bg-emerald-50/20 dark:hover:bg-emerald-950/20 transition-all flex items-center justify-between cursor-pointer group"
+                >
+                  <div>
+                    <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-[#00df89] transition-colors">
+                      {v.name}
+                    </h4>
+                    <span className="text-[11px] text-slate-400 font-mono">{v.sku || variantPickerProduct.sku || 'SKU'}</span>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="font-bold text-sm text-[#00a86b] dark:text-[#00df89]">
+                      ৳ {(v.selling_price || variantPickerProduct.price).toLocaleString()}
+                    </div>
+                    <Badge
+                      variant={v.stock_quantity <= 0 ? 'destructive' : v.stock_quantity <= 5 ? 'warning' : 'default'}
+                      className="text-[10px] font-mono mt-0.5"
+                    >
+                      {v.stock_quantity} left
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVariantPickerProduct(null)}
+                className="text-xs"
+              >
+                Cancel
               </Button>
             </div>
           </Card>

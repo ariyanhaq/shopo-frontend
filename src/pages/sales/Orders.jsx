@@ -686,7 +686,18 @@ export default function Orders() {
                 <div className="divide-y divide-slate-100 dark:divide-zinc-800/80 bg-slate-50 dark:bg-[#09090b] rounded-xl border border-slate-200/90 dark:border-zinc-800/80 p-2 space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
                   {Array.isArray(selectedOrder.items) && selectedOrder.items.map((it, i) => {
                     const itemImg = it?.image_url || (typeof it?.product_id === 'object' && (it.product_id?.image_url || (Array.isArray(it.product_id?.images) && it.product_id.images[0])));
-                    const itName = it?.name || it?.product_name || 'Item';
+                    const rawName = it?.name || it?.product_name || 'Item';
+                    let itVariantName = it?.variant_name || (typeof it?.variant === 'object' ? it?.variant?.name : it?.variant) || '';
+                    let itBaseName = rawName;
+                    if (!itVariantName && rawName.includes('(') && rawName.includes(')')) {
+                      const match = rawName.match(/^(.*?)\s*\((.*?)\)$/);
+                      if (match) {
+                        itBaseName = match[1].trim();
+                        itVariantName = match[2].trim();
+                      }
+                    } else if (itVariantName && itBaseName.includes(`(${itVariantName})`)) {
+                      itBaseName = itBaseName.replace(`(${itVariantName})`, '').trim();
+                    }
                     const itPrice = Number(it?.unit_price || it?.price || 0);
                     const itQty = Number(it?.quantity || it?.qty || 1);
                     const itSubtotal = Number(it?.subtotal !== undefined ? it.subtotal : (itPrice * itQty));
@@ -696,7 +707,7 @@ export default function Orders() {
                           {itemImg ? (
                             <img
                               src={itemImg}
-                              alt={itName}
+                              alt={rawName}
                               className="w-8 h-8 rounded-lg object-cover bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 shrink-0"
                               onError={(e) => {
                                 e.target.onerror = null;
@@ -709,7 +720,14 @@ export default function Orders() {
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="font-semibold text-slate-900 dark:text-zinc-100 truncate">{itName}</div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-slate-900 dark:text-zinc-100 truncate">{itBaseName}</span>
+                              {itVariantName && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-[#00df89] border border-emerald-500/20">
+                                  🎨 {itVariantName}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[10px] text-slate-400">
                               ৳{safeMoney(itPrice)} × {itQty}
                             </div>

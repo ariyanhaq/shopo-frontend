@@ -50,6 +50,29 @@ const formatDate = (val) => {
 };
 
 /**
+ * Extract clean base name, variant name, and SKU for receipt line items
+ */
+const extractItemVariantInfo = (item) => {
+  const rawName = item.name || item.product_name || 'Item';
+  let variantName = item.variant_name || (typeof item.variant === 'object' ? item.variant?.name : item.variant) || '';
+  let baseName = rawName;
+
+  if (!variantName && rawName.includes('(') && rawName.includes(')')) {
+    const match = rawName.match(/^(.*?)\s*\((.*?)\)$/);
+    if (match) {
+      baseName = match[1].trim();
+      variantName = match[2].trim();
+    }
+  } else if (variantName && baseName.includes(`(${variantName})`)) {
+    baseName = baseName.replace(`(${variantName})`, '').trim();
+  }
+
+  const sku = item.sku || (typeof item.variant === 'object' ? item.variant?.sku : '') || '';
+
+  return { baseName, variantName, sku };
+};
+
+/**
  * Print a Sales Cash Memo / POS Receipt
  */
 export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
@@ -168,14 +191,22 @@ export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
     </thead>
     <tbody>
       ${items.map((it) => {
-        const name = it.name || it.product_name || 'Item';
+        const { baseName, variantName, sku } = extractItemVariantInfo(it);
         const price = Number(it.unit_price || it.price || 0);
         const qty = Number(it.quantity || it.qty || 1);
         const lineTotal = Number(it.subtotal || (price * qty));
         return `
           <tr>
             <td>
-              <div class="font-bold">${name}</div>
+              <div class="font-bold">${baseName}</div>
+              ${variantName ? `
+                <div style="font-size: 9.5px; font-weight: 700; color: #111; margin-top: 1.5px;">
+                  <span style="display: inline-block; padding: 0.5px 5px; border: 1px solid #777; border-radius: 3px; background: #f3f4f6;">
+                    ${variantName}
+                  </span>
+                </div>
+              ` : ''}
+              ${sku ? `<div style="font-size: 8.5px; color: #555; font-family: 'Hind Siliguri', 'Inter', sans-serif; margin-top: 1px;">SKU: ${sku}</div>` : ''}
             </td>
             <td class="text-right">${price.toLocaleString()} × ${qty}</td>
             <td class="text-right font-bold">৳${lineTotal.toLocaleString()}</td>
@@ -355,14 +386,22 @@ export const printPurchaseReceipt = ({ purchase, shop, lang = 'en' }) => {
     </thead>
     <tbody>
       ${items.map((it) => {
-        const name = it.product_name || it.name || 'Product';
+        const { baseName, variantName, sku } = extractItemVariantInfo(it);
         const cost = Number(it.unit_cost || 0);
         const qty = Number(it.quantity || 1);
         const lineTotal = Number(it.total_cost || (cost * qty));
         return `
           <tr>
             <td>
-              <div class="font-bold">${name}</div>
+              <div class="font-bold">${baseName}</div>
+              ${variantName ? `
+                <div style="font-size: 9.5px; font-weight: 700; color: #111; margin-top: 1.5px;">
+                  <span style="display: inline-block; padding: 0.5px 5px; border: 1px solid #777; border-radius: 3px; background: #f3f4f6;">
+                    ${variantName}
+                  </span>
+                </div>
+              ` : ''}
+              ${sku ? `<div style="font-size: 8.5px; color: #555; font-family: 'Hind Siliguri', 'Inter', sans-serif; margin-top: 1px;">SKU: ${sku}</div>` : ''}
             </td>
             <td class="text-right">৳${cost.toLocaleString()} × ${qty}</td>
             <td class="text-right font-bold">৳${lineTotal.toLocaleString()}</td>

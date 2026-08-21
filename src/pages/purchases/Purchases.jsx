@@ -12,7 +12,8 @@ import {
   ShoppingBag, Plus, Search, Calendar, DollarSign,
   Receipt, CheckCircle2, AlertCircle, Loader2, X,
   Building2, ArrowUpDown, ChevronRight, Filter, Eye,
-  Printer, CreditCard, Trash2, PlusCircle, Edit2, Wallet
+  Printer, CreditCard, Trash2, PlusCircle, Edit2, Wallet,
+  Layers, Boxes, Sliders, Sparkles, Barcode
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,8 @@ import {
   SelectItem
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import { BarcodeLabelModal } from '@/components/inventory/BarcodeLabelModal';
+import { generateUniqueBarcode } from '@/utils/barcodePrinter';
 import toast from 'react-hot-toast';
 
 export default function Purchases() {
@@ -54,6 +57,8 @@ export default function Purchases() {
   const [editingPurchase, setEditingPurchase] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [barcodeModalProducts, setBarcodeModalProducts] = useState([]);
 
   // Pay Due Modal State
   const [payDueModal, setPayDueModal] = useState({
@@ -72,12 +77,18 @@ export default function Purchases() {
     rowIndex: null,
     mode: 'create', // 'create' | 'edit'
     name: '',
+    barcode: generateUniqueBarcode('20'),
     cost_price: '',
     selling_price: '',
     unit: 'piece',
     category_id: '',
     brand_id: '',
     isSubmitting: false,
+    has_variants: false,
+    variation_options: [
+      { name: 'Color', values: ['Red', 'Blue', 'Black'] },
+    ],
+    variants: [],
   });
 
   // Confirm Delete Dialog State for Products in dropdowns
@@ -280,6 +291,14 @@ export default function Purchases() {
     });
   }, [purchases, statusFilter, searchQuery]);
 
+  // Preset attribute suggestions for Quick Product Modal
+  const attributePresets = [
+    { name: 'Color', values: ['Red', 'Blue', 'Black', 'White', 'Green'] },
+    { name: 'Size', values: ['S', 'M', 'L', 'XL', 'XXL'] },
+    { name: 'Pages / Type', values: ['100 Pages', '200 Pages', '300 Pages'] },
+    { name: 'Storage / RAM', values: ['64GB', '128GB', '256GB'] },
+  ];
+
   // Open Quick Add Product Modal
   const handleOpenQuickAddProduct = (rowIndex, mode = 'create') => {
     setQuickProductModal({
@@ -293,7 +312,158 @@ export default function Purchases() {
       category_id: '',
       brand_id: '',
       isSubmitting: false,
+      has_variants: false,
+      variation_options: [
+        { name: 'Color', values: ['Red', 'Blue', 'Black'] },
+      ],
+      variants: [],
     });
+  };
+
+  // Generate Cartesian Combinations for Quick Product Modal
+  const generateQuickProductCombinations = () => {
+    const validOptions = (quickProductModal.variation_options || []).filter((opt) => opt.name.trim() && opt.values.length > 0);
+    if (validOptions.length === 0) {
+      toast.error(lang === 'bn' ? 'অনুগ্রহ করে অন্তত একটি বৈশিষ্ট্য ও মান লিখুন।' : 'Please add at least one attribute and value.');
+      return;
+    }
+
+    const cartesian = (arrays) => {
+      return arrays.reduce((acc, curr) => {
+        return acc.flatMap((a) => curr.map((b) => [...a, b]));
+      }, [[]]);
+    };
+
+    const valuesArrays = validOptions.map((opt) => opt.values);
+    const combinations = cartesian(valuesArrays);
+
+    const baseCost = parseFloat(quickProductModal.cost_price) || 0;
+    const baseSell = parseFloat(quickProductModal.selling_price) || baseCost;
+    const basePrefix = quickProductModal.name ? quickProductModal.name.slice(0, 3).toUpperCase() : 'SKU';
+
+    const newVariants = combinations.map((combo, idx) => {
+      const variantAttrs = combo.map((val, optIdx) => ({
+        name: validOptions[optIdx].name,
+        value: val,
+      }));
+      const comboName = combo.join(' / ');
+      const variantSku = `${basePrefix}-${Math.floor(1000 + Math.random() * 9000)}-V${idx + 1}`;
+
+      return {
+        id: `var_${Date.now()}_${idx}`,
+        name: comboName,
+        attributes: variantAttrs,
+        sku: variantSku,
+        barcode: generateUniqueBarcode('21'),
+        cost_price: baseCost,
+        selling_price: baseSell,
+        stock_quantity: 0,
+        low_stock_threshold: 5,
+      };
+    });
+
+    setQuickProductModal((prev) => ({ ...prev, variants: newVariants }));
+    toast.success(lang === 'bn' ? `${newVariants.length} টি ভ্যারিয়েশন তৈরি হয়েছে!` : `Generated ${newVariants.length} variations!`);
+  };
+
+  const handleAddQuickProductAttrGroup = (preset) => {
+    if (preset) {
+      setQuickProductModal(prev => ({
+        ...prev,
+        variation_options: [...(prev.variation_options || []), { name: preset.name, values: [...preset.values] }]
+      }));
+    } else {
+      setQuickProductModal(prev => ({
+        ...prev,
+        variation_options: [...(prev.variation_options || []), { name: `Attribute ${(prev.variation_options?.length || 0) + 1}`, values: [] }]
+      }));
+    }
+  };
+
+  const handleRemoveQuickProductAttrGroup = (index) => {
+    setQuickProductModal(prev => ({
+      ...prev,
+      variation_options: (prev.variation_options || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleAddQuickProductOptionValue = (optIndex, val) => {
+    if (!val || !val.trim()) return;
+    setQuickProductModal(prev => {
+      const updated = [...(prev.variation_options || [])];
+      if (!updated[optIndex].values.includes(val.trim())) {
+        updated[optIndex].values.push(val.trim());
+      }
+      return { ...prev, variation_options: updated };
+    });
+  };
+
+  const handleRemoveQuickProductOptionValue = (optIndex, valIndex) => {
+    setQuickProductModal(prev => {
+      const updated = [...(prev.variation_options || [])];
+      updated[optIndex].values = updated[optIndex].values.filter((_, i) => i !== valIndex);
+      return { ...prev, variation_options: updated };
+    });
+  };
+
+  const handleUpdateQuickProductVariant = (vIdx, field, value) => {
+    setQuickProductModal(prev => {
+      const updated = [...(prev.variants || [])];
+      updated[vIdx] = { ...updated[vIdx], [field]: value };
+      return { ...prev, variants: updated };
+    });
+  };
+
+  const handleRemoveQuickProductVariant = (vIdx) => {
+    setQuickProductModal(prev => ({
+      ...prev,
+      variants: (prev.variants || []).filter((_, i) => i !== vIdx)
+    }));
+  };
+
+  const handleBulkFillQuickProductVariants = (field, value) => {
+    setQuickProductModal(prev => {
+      const updated = (prev.variants || []).map(v => ({ ...v, [field]: value }));
+      return { ...prev, variants: updated };
+    });
+    toast.success(lang === 'bn' ? 'সকল ভ্যারিয়েশনে প্রয়োগ করা হয়েছে' : 'Applied to all variations');
+  };
+
+  // Add all variants of a product to purchase form
+  const handleAddAllVariantsToPurchase = (productId, mode = 'create') => {
+    const product = products.find((p) => String(p._id) === String(productId));
+    if (!product || !product.has_variants || !Array.isArray(product.variants) || product.variants.length === 0) return;
+
+    const newItems = product.variants.map((v) => ({
+      product_id: product._id,
+      variant_id: v._id,
+      variant_name: v.name,
+      product_name: product.name,
+      quantity: 1,
+      unit_cost: v.cost_price || product.cost_price || 0,
+      selling_price: v.selling_price || product.selling_price || 0,
+      total_cost: (v.cost_price || product.cost_price || 0) * 1,
+    }));
+
+    if (mode === 'create') {
+      setPurchaseForm((prev) => {
+        const filtered = prev.items.filter((it) => it.product_id);
+        return {
+          ...prev,
+          items: filtered.length > 0 ? [...filtered, ...newItems] : newItems,
+        };
+      });
+      toast.success(lang === 'bn' ? `${product.variants.length} টি ভ্যারিয়েশন যুক্ত হয়েছে!` : `Added all ${product.variants.length} variations!`);
+    } else {
+      setEditForm((prev) => {
+        const filtered = prev.items.filter((it) => it.product_id);
+        return {
+          ...prev,
+          items: filtered.length > 0 ? [...filtered, ...newItems] : newItems,
+        };
+      });
+      toast.success(lang === 'bn' ? `${product.variants.length} টি ভ্যারিয়েশন যুক্ত হয়েছে!` : `Added all ${product.variants.length} variations!`);
+    }
   };
 
   // Submit Quick Add Product
@@ -307,6 +477,7 @@ export default function Purchases() {
     const cost = parseFloat(quickProductModal.cost_price) || 0;
     const sell = parseFloat(quickProductModal.selling_price) || cost;
     const selectedBrand = brands.find((b) => b._id === quickProductModal.brand_id);
+    const hasVars = Boolean(quickProductModal.has_variants);
 
     setQuickProductModal((prev) => ({ ...prev, isSubmitting: true }));
     try {
@@ -319,6 +490,20 @@ export default function Purchases() {
         brand_id: quickProductModal.brand_id || undefined,
         brand: selectedBrand?.name || '',
         stock_quantity: 0,
+        has_variants: hasVars,
+        variation_options: hasVars ? (quickProductModal.variation_options || []) : [],
+        variants: hasVars
+          ? (quickProductModal.variants || []).map((v) => ({
+              name: v.name,
+              attributes: v.attributes || [],
+              sku: v.sku ? v.sku.trim() : undefined,
+              barcode: v.barcode ? v.barcode.trim() : undefined,
+              cost_price: parseFloat(v.cost_price) || cost,
+              selling_price: parseFloat(v.selling_price) || sell,
+              stock_quantity: 0,
+              low_stock_threshold: 5,
+            }))
+          : [],
       });
 
       const newProd = res?.data;
@@ -336,26 +521,57 @@ export default function Purchases() {
       // Automatically select in the row
       const targetId = newProd?._id || newProd?.id;
       if (targetId && quickProductModal.rowIndex !== null) {
-        if (quickProductModal.mode === 'create') {
-          const updated = [...purchaseForm.items];
-          const itm = { ...updated[quickProductModal.rowIndex] };
-          itm.product_id = targetId;
-          itm.product_name = newProd.name;
-          itm.unit_cost = cost;
-          itm.selling_price = sell;
-          itm.total_cost = (itm.quantity || 1) * cost;
-          updated[quickProductModal.rowIndex] = itm;
-          setPurchaseForm((prev) => ({ ...prev, items: updated }));
+        if (hasVars && Array.isArray(newProd.variants) && newProd.variants.length > 0) {
+          const variantRows = newProd.variants.map((v) => ({
+            product_id: targetId,
+            variant_id: v._id,
+            variant_name: v.name,
+            product_name: newProd.name,
+            quantity: 1,
+            unit_cost: v.cost_price || cost,
+            selling_price: v.selling_price || sell,
+            total_cost: (v.cost_price || cost) * 1,
+          }));
+
+          if (quickProductModal.mode === 'create') {
+            setPurchaseForm((prev) => {
+              const updated = [...prev.items];
+              updated.splice(quickProductModal.rowIndex, 1, ...variantRows);
+              return { ...prev, items: updated };
+            });
+          } else {
+            setEditForm((prev) => {
+              const updated = [...prev.items];
+              updated.splice(quickProductModal.rowIndex, 1, ...variantRows);
+              return { ...prev, items: updated };
+            });
+          }
         } else {
-          const updated = [...editForm.items];
-          const itm = { ...updated[quickProductModal.rowIndex] };
-          itm.product_id = targetId;
-          itm.product_name = newProd.name;
-          itm.unit_cost = cost;
-          itm.selling_price = sell;
-          itm.total_cost = (itm.quantity || 1) * cost;
-          updated[quickProductModal.rowIndex] = itm;
-          setEditForm((prev) => ({ ...prev, items: updated }));
+          if (quickProductModal.mode === 'create') {
+            const updated = [...purchaseForm.items];
+            const itm = { ...updated[quickProductModal.rowIndex] };
+            itm.product_id = targetId;
+            itm.product_name = newProd.name;
+            itm.variant_id = '';
+            itm.variant_name = '';
+            itm.unit_cost = cost;
+            itm.selling_price = sell;
+            itm.total_cost = (itm.quantity || 1) * cost;
+            updated[quickProductModal.rowIndex] = itm;
+            setPurchaseForm((prev) => ({ ...prev, items: updated }));
+          } else {
+            const updated = [...editForm.items];
+            const itm = { ...updated[quickProductModal.rowIndex] };
+            itm.product_id = targetId;
+            itm.product_name = newProd.name;
+            itm.variant_id = '';
+            itm.variant_name = '';
+            itm.unit_cost = cost;
+            itm.selling_price = sell;
+            itm.total_cost = (itm.quantity || 1) * cost;
+            updated[quickProductModal.rowIndex] = itm;
+            setEditForm((prev) => ({ ...prev, items: updated }));
+          }
         }
       }
 
@@ -489,7 +705,6 @@ export default function Purchases() {
       setDeleteBrandModal((prev) => ({ ...prev, isLoading: false }));
     }
   };
-
   // Handle Form Item Changes (Create)
   const handleItemChange = (index, field, value) => {
     if (field === 'product_id' && value === '__add_new__') {
@@ -501,17 +716,39 @@ export default function Purchases() {
     const item = { ...updated[index], [field]: value };
 
     if (field === 'product_id') {
-      const found = products.find((p) => p._id === value);
+      const found = products.find((p) => String(p._id) === String(value));
       if (found) {
         item.product_name = found.name;
-        item.unit_cost = found.cost_price || 0;
-        item.selling_price = found.selling_price || 0;
-        item.total_cost = (item.quantity || 1) * (found.cost_price || 0);
+        const firstVariant = found.has_variants && Array.isArray(found.variants) && found.variants.length > 0
+          ? found.variants[0]
+          : null;
+        item.variant_id = firstVariant ? firstVariant._id : '';
+        item.variant_name = firstVariant ? firstVariant.name : '';
+        item.unit_cost = firstVariant ? (firstVariant.cost_price || found.cost_price || 0) : (found.cost_price || 0);
+        item.selling_price = firstVariant ? (firstVariant.selling_price || found.selling_price || 0) : (found.selling_price || 0);
+        item.total_cost = (item.quantity || 1) * item.unit_cost;
       } else {
         item.product_name = '';
+        item.variant_id = '';
+        item.variant_name = '';
         item.unit_cost = 0;
         item.selling_price = 0;
         item.total_cost = 0;
+      }
+    } else if (field === 'variant_id') {
+      const found = products.find((p) => String(p._id) === String(item.product_id));
+      if (found && Array.isArray(found.variants)) {
+        const v = found.variants.find((vr) => String(vr._id) === String(value));
+        if (v) {
+          item.variant_id = v._id;
+          item.variant_name = v.name;
+          item.unit_cost = v.cost_price || found.cost_price || 0;
+          item.selling_price = v.selling_price || found.selling_price || 0;
+          item.total_cost = (item.quantity || 1) * item.unit_cost;
+        } else {
+          item.variant_id = '';
+          item.variant_name = '';
+        }
       }
     } else if (field === 'quantity' || field === 'unit_cost') {
       const q = field === 'quantity' ? Number(value) || 0 : Number(item.quantity) || 0;
@@ -529,7 +766,7 @@ export default function Purchases() {
       ...prev,
       items: [
         ...prev.items,
-        { product_id: '', product_name: '', quantity: 1, unit_cost: 0, selling_price: 0, total_cost: 0 }
+        { product_id: '', variant_id: '', variant_name: '', product_name: '', quantity: 1, unit_cost: 0, selling_price: 0, total_cost: 0 }
       ]
     }));
   };
@@ -579,17 +816,39 @@ export default function Purchases() {
     const item = { ...updated[index], [field]: value };
 
     if (field === 'product_id') {
-      const found = products.find((p) => p._id === value);
+      const found = products.find((p) => String(p._id) === String(value));
       if (found) {
         item.product_name = found.name;
-        item.unit_cost = found.cost_price || 0;
-        item.selling_price = found.selling_price || 0;
-        item.total_cost = (item.quantity || 1) * (found.cost_price || 0);
+        const firstVariant = found.has_variants && Array.isArray(found.variants) && found.variants.length > 0
+          ? found.variants[0]
+          : null;
+        item.variant_id = firstVariant ? firstVariant._id : '';
+        item.variant_name = firstVariant ? firstVariant.name : '';
+        item.unit_cost = firstVariant ? (firstVariant.cost_price || found.cost_price || 0) : (found.cost_price || 0);
+        item.selling_price = firstVariant ? (firstVariant.selling_price || found.selling_price || 0) : (found.selling_price || 0);
+        item.total_cost = (item.quantity || 1) * item.unit_cost;
       } else {
         item.product_name = '';
+        item.variant_id = '';
+        item.variant_name = '';
         item.unit_cost = 0;
         item.selling_price = 0;
         item.total_cost = 0;
+      }
+    } else if (field === 'variant_id') {
+      const found = products.find((p) => String(p._id) === String(item.product_id));
+      if (found && Array.isArray(found.variants)) {
+        const v = found.variants.find((vr) => String(vr._id) === String(value));
+        if (v) {
+          item.variant_id = v._id;
+          item.variant_name = v.name;
+          item.unit_cost = v.cost_price || found.cost_price || 0;
+          item.selling_price = v.selling_price || found.selling_price || 0;
+          item.total_cost = (item.quantity || 1) * item.unit_cost;
+        } else {
+          item.variant_id = '';
+          item.variant_name = '';
+        }
       }
     } else if (field === 'quantity' || field === 'unit_cost') {
       const q = field === 'quantity' ? Number(value) || 0 : Number(item.quantity) || 0;
@@ -758,9 +1017,54 @@ export default function Purchases() {
         notes: purchaseForm.notes,
       });
 
-      toast.success(lang === 'bn' ? 'পণ্য সফলভাবে ক্রয় ও স্টক যোগ হয়েছে!' : 'Purchase recorded & inventory stock updated!');
+      // Prepare purchased items for instant 1-click barcode printing
+      const purchasedPrintItems = validItems.map((it) => {
+        const prod = products.find((p) => String(p._id || p.id) === String(it.product_id));
+        let variantBarcode = '';
+        if (prod?.has_variants && Array.isArray(prod.variants)) {
+          const v = prod.variants.find((vr) => String(vr._id || vr.id) === String(it.variant_id) || vr.name === it.variant_name);
+          variantBarcode = v?.barcode || v?.sku;
+        }
+        return {
+          id: it.variant_id ? `${it.product_id}_${it.variant_id}` : `${it.product_id}`,
+          productId: it.product_id,
+          variantId: it.variant_id || null,
+          name: it.product_name ? it.product_name.replace(/\s*\([^)]*\)/g, '') : (prod?.name || 'Product'),
+          variant_name: it.variant_name || '',
+          barcode: variantBarcode || it.barcode || prod?.barcode || prod?.sku || generateUniqueBarcode('20'),
+          selling_price: it.selling_price || prod?.selling_price || 0,
+          unit: prod?.unit || 'pcs',
+          stock: it.quantity,
+          copies: Math.max(1, parseInt(it.quantity, 10) || 1),
+        };
+      });
+
       setIsPurchaseModalOpen(false);
       fetchPurchasesData();
+
+      toast.success(
+        (t) => (
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-bold text-xs">{lang === 'bn' ? 'পণ্য ক্রয় ও স্টক যোগ সম্পন্ন!' : 'Purchase recorded successfully!'}</p>
+              <p className="text-[11px] text-slate-500">{lang === 'bn' ? 'ক্রয়কৃত স্টকের বারকোড স্টিকার প্রিন্ট করুন' : 'Print barcode stickers for this batch?'}</p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                toast.dismiss(t.id);
+                setBarcodeModalProducts(purchasedPrintItems);
+                setIsBarcodeModalOpen(true);
+              }}
+              className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-bold h-7 px-2.5 cursor-pointer shrink-0"
+            >
+              <Printer className="w-3.5 h-3.5 mr-1" />
+              {lang === 'bn' ? 'প্রিন্ট' : 'Print'}
+            </Button>
+          </div>
+        ),
+        { duration: 7000 }
+      );
     } catch (err) {
       toast.error(err.message || 'Failed to record purchase');
     } finally {
@@ -828,6 +1132,36 @@ export default function Purchases() {
     printPurchaseReceipt({ purchase, shop: mongoShop, lang });
   };
 
+  // Trigger Print Barcode Labels for a Purchase
+  const handlePrintPurchaseLabels = (purchase) => {
+    if (!purchase?.items || purchase.items.length === 0) {
+      toast.error(lang === 'bn' ? 'ইনভয়েসে কোনো পণ্য নেই' : 'No items found in this purchase');
+      return;
+    }
+    const items = purchase.items.map((it) => {
+      const prod = products.find((p) => String(p._id || p.id) === String(it.product_id));
+      let variantBarcode = '';
+      if (prod?.has_variants && Array.isArray(prod.variants)) {
+        const v = prod.variants.find((vr) => String(vr._id || vr.id) === String(it.variant_id) || vr.name === it.variant_name);
+        variantBarcode = v?.barcode || v?.sku;
+      }
+      return {
+        id: it.variant_id ? `${it.product_id}_${it.variant_id}` : `${it.product_id}`,
+        productId: it.product_id,
+        variantId: it.variant_id || null,
+        name: it.product_name ? it.product_name.replace(/\s*\([^)]*\)/g, '') : (prod?.name || 'Product'),
+        variant_name: it.variant_name || '',
+        barcode: variantBarcode || it.barcode || prod?.barcode || prod?.sku || String(it.product_id || '').slice(-8).toUpperCase(),
+        selling_price: it.selling_price || prod?.selling_price || 0,
+        unit: prod?.unit || 'pcs',
+        stock: it.quantity,
+        copies: Math.max(1, parseInt(it.quantity, 10) || 1),
+      };
+    });
+    setBarcodeModalProducts(items);
+    setIsBarcodeModalOpen(true);
+  };
+
   return (
     <div className="space-y-6 font-sans pb-12">
       
@@ -847,7 +1181,20 @@ export default function Purchases() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setBarcodeModalProducts(products);
+              setIsBarcodeModalOpen(true);
+            }}
+            className="text-xs sm:text-sm h-10 px-3.5 gap-2 cursor-pointer border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs hover:border-[#00df89]"
+          >
+            <Printer className="w-4 h-4 text-[#00df89]" />
+            <span>{lang === 'bn' ? 'বারকোড লেবেল প্রিন্ট' : 'Print Barcode Labels'}</span>
+          </Button>
+
           <Button
             onClick={handleOpenNewPurchase}
             className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
@@ -1098,6 +1445,16 @@ export default function Purchases() {
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
 
+                        {/* Print Barcode Labels */}
+                        <button
+                          type="button"
+                          onClick={() => handlePrintPurchaseLabels(p)}
+                          title={lang === 'bn' ? 'বারকোড লেবেল প্রিন্ট করুন' : 'Print Barcode Labels for this purchase'}
+                          className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-600 dark:text-purple-400 flex items-center justify-center transition-colors cursor-pointer border border-purple-500/20"
+                        >
+                          <Barcode className="w-3.5 h-3.5" />
+                        </button>
+
                         {/* Print Receipt */}
                         <button
                           type="button"
@@ -1290,11 +1647,76 @@ export default function Purchases() {
                                 onDelete={() => promptDeleteProduct(prod._id, prod.name)}
                                 deleteTitle={lang === 'bn' ? 'পণ্য মুছুন' : 'Delete product'}
                               >
-                                {prod.name} (Stock: {prod.stock_quantity || 0})
+                                {prod.name} {prod.has_variants ? `(${prod.variants?.length || 0} Variants)` : `(Stock: ${prod.stock_quantity || 0})`}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
+
+                        {/* Variant selector dropdown if product has variants */}
+                        {(() => {
+                          const p = products.find((pr) => String(pr._id) === String(item.product_id));
+                          if (p && p.has_variants && Array.isArray(p.variants) && p.variants.length > 0) {
+                            return (
+                              <div className="mt-1.5 space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-bold text-emerald-700 dark:text-[#00df89] flex items-center gap-1">
+                                    <Layers className="w-3 h-3" />
+                                    {lang === 'bn' ? 'ভ্যারিয়েশন:' : 'Variation:'}
+                                  </span>
+                                  {p.variants.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddAllVariantsToPurchase(p._id, 'create')}
+                                      className="text-[10px] font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                                    >
+                                      <Plus className="w-2.5 h-2.5" />
+                                      {lang === 'bn' ? `সবগুলো (${p.variants.length}) যোগ করুন` : `+ Add all (${p.variants.length})`}
+                                    </button>
+                                  )}
+                                </div>
+                                <Select
+                                  value={item.variant_id || '__none__'}
+                                  onValueChange={(val) => {
+                                    if (val === '__add_new_variant__') {
+                                      const newName = window.prompt(lang === 'bn' ? 'নতুন ভ্যারিয়েশনের নাম লিখুন (যেমন: Red, XL, 100ml):' : 'Enter new variation name (e.g. Red, XL, 100ml):');
+                                      if (newName && newName.trim()) {
+                                        const trimmed = newName.trim();
+                                        const updated = [...purchaseForm.items];
+                                        updated[idx] = {
+                                          ...updated[idx],
+                                          variant_id: '',
+                                          variant_name: trimmed,
+                                          product_name: `${p.name} (${trimmed})`,
+                                        };
+                                        setPurchaseForm((prev) => ({ ...prev, items: updated }));
+                                        toast.success(lang === 'bn' ? `নতুন ভ্যারিয়েশন "${trimmed}" যোগ হয়েছে!` : `New variation "${trimmed}" added!`);
+                                      }
+                                      return;
+                                    }
+                                    handleItemChange(idx, 'variant_id', val === '__none__' ? '' : val);
+                                  }}
+                                >
+                                  <SelectTrigger className="w-full h-7 text-[11px] bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 font-semibold">
+                                    <SelectValue placeholder={lang === 'bn' ? 'ভ্যারিয়েশন বাছুন...' : 'Choose variant...'} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">{lang === 'bn' ? 'মূল পণ্য' : 'Base Product'}</SelectItem>
+                                    {p.variants.map((v) => (
+                                      <SelectItem key={v._id || v.id} value={v._id || v.id}>
+                                        {v.name} (Stock: {v.stock_quantity || 0}) — ৳{v.cost_price || p.cost_price}
+                                      </SelectItem>
+                                    ))}
+                                    <SelectItem value="__add_new_variant__" className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                      {lang === 'bn' ? '+ নতুন ভ্যারিয়েশন তৈরি করুন' : '+ Create New Variation'}
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
 
                       {/* Quantity */}
@@ -1595,11 +2017,76 @@ export default function Purchases() {
                                 onDelete={() => promptDeleteProduct(prod._id, prod.name)}
                                 deleteTitle={lang === 'bn' ? 'পণ্য মুছুন' : 'Delete product'}
                               >
-                                {prod.name} (Stock: {prod.stock_quantity || 0})
+                                {prod.name} {prod.has_variants ? `(${prod.variants?.length || 0} Variants)` : `(Stock: ${prod.stock_quantity || 0})`}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
+
+                        {/* Variant selector dropdown if product has variants */}
+                        {(() => {
+                          const p = products.find((pr) => String(pr._id) === String(item.product_id));
+                          if (p && p.has_variants && Array.isArray(p.variants) && p.variants.length > 0) {
+                            return (
+                              <div className="mt-1.5 space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-bold text-emerald-700 dark:text-[#00df89] flex items-center gap-1">
+                                    <Layers className="w-3 h-3" />
+                                    {lang === 'bn' ? 'ভ্যারিয়েশন:' : 'Variation:'}
+                                  </span>
+                                  {p.variants.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddAllVariantsToPurchase(p._id, 'edit')}
+                                      className="text-[10px] font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                                    >
+                                      <Plus className="w-2.5 h-2.5" />
+                                      {lang === 'bn' ? `সবগুলো (${p.variants.length}) যোগ করুন` : `+ Add all (${p.variants.length})`}
+                                    </button>
+                                  )}
+                                </div>
+                                <Select
+                                  value={item.variant_id || '__none__'}
+                                  onValueChange={(val) => {
+                                    if (val === '__add_new_variant__') {
+                                      const newName = window.prompt(lang === 'bn' ? 'নতুন ভ্যারিয়েশনের নাম লিখুন (যেমন: Red, XL, 100ml):' : 'Enter new variation name (e.g. Red, XL, 100ml):');
+                                      if (newName && newName.trim()) {
+                                        const trimmed = newName.trim();
+                                        const updated = [...editForm.items];
+                                        updated[idx] = {
+                                          ...updated[idx],
+                                          variant_id: '',
+                                          variant_name: trimmed,
+                                          product_name: `${p.name} (${trimmed})`,
+                                        };
+                                        setEditForm((prev) => ({ ...prev, items: updated }));
+                                        toast.success(lang === 'bn' ? `নতুন ভ্যারিয়েশন "${trimmed}" যোগ হয়েছে!` : `New variation "${trimmed}" added!`);
+                                      }
+                                      return;
+                                    }
+                                    handleEditItemChange(idx, 'variant_id', val === '__none__' ? '' : val);
+                                  }}
+                                >
+                                  <SelectTrigger className="w-full h-7 text-[11px] bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 font-semibold">
+                                    <SelectValue placeholder={lang === 'bn' ? 'ভ্যারিয়েশন বাছুন...' : 'Choose variant...'} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">{lang === 'bn' ? 'মূল পণ্য' : 'Base Product'}</SelectItem>
+                                    {p.variants.map((v) => (
+                                      <SelectItem key={v._id || v.id} value={v._id || v.id}>
+                                        {v.name} (Stock: {v.stock_quantity || 0}) — ৳{v.cost_price || p.cost_price}
+                                      </SelectItem>
+                                    ))}
+                                    <SelectItem value="__add_new_variant__" className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                      {lang === 'bn' ? '+ নতুন ভ্যারিয়েশন তৈরি করুন' : '+ Create New Variation'}
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
 
                       {/* Quantity */}
@@ -1835,7 +2322,14 @@ export default function Purchases() {
                   {selectedInvoice.items?.map((it, idx) => (
                     <div key={idx} className="py-2 flex items-center justify-between text-xs">
                       <div>
-                        <p className="font-bold text-slate-900 dark:text-white">{it.product_name}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-bold text-slate-900 dark:text-white">{it.product_name}</p>
+                          {it.variant_name && (
+                            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-[#00df89] border border-emerald-500/20">
+                              🎨 {it.variant_name}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-slate-400">
                           {it.quantity} &times; ৳{(it.unit_cost || 0).toLocaleString()}
                         </p>
@@ -1957,8 +2451,8 @@ export default function Purchases() {
       {/* Quick Add Product Modal */}
       {quickProductModal.isOpen && (
         <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+          <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 shrink-0">
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-[#00df89]" />
                 <span>{lang === 'bn' ? 'নতুন পণ্য তৈরি করুন' : 'Add New Product'}</span>
@@ -1972,7 +2466,7 @@ export default function Purchases() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateQuickProduct} className="space-y-3.5 text-xs">
+            <form onSubmit={handleCreateQuickProduct} className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3.5 text-xs py-1">
               {/* Product Name */}
               <div>
                 <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
@@ -1981,7 +2475,7 @@ export default function Purchases() {
                 <input
                   type="text"
                   required
-                  placeholder={lang === 'bn' ? 'যেমন: কলম, খাতা, শ্যাম্পু...' : 'e.g. Pen, Notebook, Shampoo...'}
+                  placeholder={lang === 'bn' ? 'যেমন: কলম, খাতা, টি-শার্ট...' : 'e.g. Notebook, T-Shirt, Coffee Mug...'}
                   value={quickProductModal.name}
                   onChange={(e) => setQuickProductModal((prev) => ({ ...prev, name: e.target.value }))}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
@@ -2217,8 +2711,237 @@ export default function Purchases() {
                 </div>
               </div>
 
+              {/* Product Variations Toggle in Quick Add Modal */}
+              <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/30 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-[#00df89]" />
+                    <div>
+                      <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                        {lang === 'bn' ? 'পণ্যের ভ্যারিয়েশন (রং, সাইজ ইত্যাদি)' : 'Product Variations'}
+                      </h4>
+                      <p className="text-[10px] text-slate-500">
+                        {lang === 'bn' ? 'আলাদা রং বা সাইজ অনুযায়ী কাস্টম মূল্য' : 'Custom pricing per color/size'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextVal = !quickProductModal.has_variants;
+                      setQuickProductModal((prev) => ({
+                        ...prev,
+                        has_variants: nextVal,
+                      }));
+                      if (nextVal && (quickProductModal.variants || []).length === 0) {
+                        generateQuickProductCombinations();
+                      }
+                    }}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      quickProductModal.has_variants ? 'bg-[#00df89]' : 'bg-slate-300 dark:bg-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                        quickProductModal.has_variants ? 'translate-x-4 bg-[#011812]' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* If Variations Enabled */}
+                {quickProductModal.has_variants && (
+                  <div className="space-y-2.5 pt-2 border-t border-emerald-500/20">
+                    {/* Attributes Definition */}
+                    <div className="space-y-2 bg-white/70 dark:bg-[#09090b]/80 p-2.5 rounded-xl border border-slate-200/80 dark:border-zinc-800">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[11px] text-slate-800 dark:text-zinc-200 flex items-center gap-1">
+                          <Sliders className="w-3 h-3 text-[#00df89]" />
+                          {lang === 'bn' ? '১. বৈশিষ্ট্যসমূহ (Attributes):' : '1. Attributes & Values:'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddQuickProductAttrGroup()}
+                          className="text-[10px] font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Plus className="w-2.5 h-2.5" />
+                          {lang === 'bn' ? '+ বৈশিষ্ট্য যোগ' : '+ Add Attribute'}
+                        </button>
+                      </div>
+
+                      {/* Attribute Presets */}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="text-[10px] text-slate-400">Presets:</span>
+                        {attributePresets.map((preset) => (
+                          <button
+                            key={preset.name}
+                            type="button"
+                            onClick={() => handleAddQuickProductAttrGroup(preset)}
+                            className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 dark:bg-zinc-800 hover:bg-emerald-500/15 hover:text-emerald-600 dark:hover:text-[#00df89] border border-slate-200/60 dark:border-zinc-700 transition-colors cursor-pointer"
+                          >
+                            + {preset.name}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Attribute Rows */}
+                      <div className="space-y-1.5">
+                        {(quickProductModal.variation_options || []).map((opt, optIdx) => (
+                          <div key={optIdx} className="p-2 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800 space-y-1 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <input
+                                type="text"
+                                placeholder="Attribute Name"
+                                value={opt.name}
+                                onChange={(e) => {
+                                  const updated = [...(quickProductModal.variation_options || [])];
+                                  updated[optIdx] = { ...updated[optIdx], name: e.target.value };
+                                  setQuickProductModal({ ...quickProductModal, variation_options: updated });
+                                }}
+                                className="px-2 py-0.5 rounded bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs font-semibold w-32 outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveQuickProductAttrGroup(optIdx)}
+                                className="p-1 text-slate-400 hover:text-rose-500 rounded cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            {/* Tags Input */}
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-1 min-h-5">
+                                {opt.values.map((val, valIdx) => (
+                                  <span
+                                    key={valIdx}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30"
+                                  >
+                                    {val}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveQuickProductOptionValue(optIdx, valIdx)}
+                                      className="hover:text-rose-500 cursor-pointer"
+                                    >
+                                      <X className="w-2.5 h-2.5" />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                              <input
+                                type="text"
+                                placeholder={lang === 'bn' ? 'মান লিখে Enter চাপুন (e.g. Red, Blue, XL)...' : 'Type value and press Enter...'}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ',') {
+                                    e.preventDefault();
+                                    handleAddQuickProductOptionValue(optIdx, e.currentTarget.value);
+                                    e.currentTarget.value = '';
+                                  }
+                                }}
+                                className="w-full px-2 py-1 rounded bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-1 focus:ring-[#00df89]"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={generateQuickProductCombinations}
+                        className="w-full bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-bold py-1 h-7 cursor-pointer shadow-xs gap-1"
+                      >
+                        <Boxes className="w-3.5 h-3.5" />
+                        <span>{lang === 'bn' ? 'ভ্যারিয়েশন কম্বিনেশন তৈরি করুন' : 'Generate Variants Matrix'}</span>
+                      </Button>
+                    </div>
+
+                    {/* 2. Variants Matrix Table */}
+                    {(quickProductModal.variants || []).length > 0 && (
+                      <div className="space-y-1.5">
+                        {/* Bulk Fast Fill */}
+                        <div className="p-2 rounded-xl bg-slate-100 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 space-y-1">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                            {lang === 'bn' ? 'সবগুলোতে একসাথে মূল্য বসান:' : 'Fast Bulk Fill Prices:'}
+                          </span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              placeholder="Cost Price (৳)"
+                              onBlur={(e) => {
+                                if (e.target.value) handleBulkFillQuickProductVariants('cost_price', parseFloat(e.target.value) || 0);
+                              }}
+                              className="px-2 py-1 rounded bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs font-mono"
+                            />
+                            <input
+                              type="number"
+                              placeholder="Selling Price (৳)"
+                              onBlur={(e) => {
+                                if (e.target.value) handleBulkFillQuickProductVariants('selling_price', parseFloat(e.target.value) || 0);
+                              }}
+                              className="px-2 py-1 rounded bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Variants List */}
+                        <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                          {quickProductModal.variants.map((v, vIdx) => (
+                            <div key={v.id || vIdx} className="p-2 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1 text-xs">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="Variant Name"
+                                  value={v.name}
+                                  onChange={(e) => handleUpdateQuickProductVariant(vIdx, 'name', e.target.value)}
+                                  className="flex-1 px-2 py-1 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="SKU"
+                                  value={v.sku || ''}
+                                  onChange={(e) => handleUpdateQuickProductVariant(vIdx, 'sku', e.target.value)}
+                                  className="w-24 px-2 py-1 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveQuickProductVariant(vIdx)}
+                                  className="p-1 text-slate-400 hover:text-rose-500 rounded cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[10px] text-slate-500">Cost (৳)</label>
+                                  <input
+                                    type="number"
+                                    value={v.cost_price}
+                                    onChange={(e) => handleUpdateQuickProductVariant(vIdx, 'cost_price', e.target.value)}
+                                    className="w-full px-2 py-1 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-slate-500">Selling (৳)</label>
+                                  <input
+                                    type="number"
+                                    value={v.selling_price}
+                                    onChange={(e) => handleUpdateQuickProductVariant(vIdx, 'selling_price', e.target.value)}
+                                    className="w-full px-2 py-1 rounded bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold text-[#00a86b] dark:text-[#00df89]"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-zinc-800">
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-zinc-800 shrink-0">
                 <Button
                   type="button"
                   variant="outline"
@@ -2479,6 +3202,19 @@ export default function Purchases() {
           </Card>
         </div>
       )}
+
+      {/* Barcode & Product Label Printing Studio */}
+      <BarcodeLabelModal
+        isOpen={isBarcodeModalOpen}
+        onClose={() => {
+          setIsBarcodeModalOpen(false);
+          setBarcodeModalProducts([]);
+        }}
+        initialProducts={barcodeModalProducts}
+        allProducts={products}
+        shopInfo={mongoShop || activeShop || { name: 'Shopo Store' }}
+        lang={lang}
+      />
     </div>
   );
 }

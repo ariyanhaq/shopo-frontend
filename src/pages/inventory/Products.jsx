@@ -23,12 +23,15 @@ import {
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import ProductImageUploader from '@/components/common/ProductImageUploader';
+import { BarcodeLabelModal } from '@/components/inventory/BarcodeLabelModal';
+import { generateUniqueBarcode } from '@/utils/barcodePrinter';
 import {
-  Package, DollarSign, Plus, Search, Filter, AlertTriangle,
+  Package, PackagePlus, DollarSign, Plus, Search, Filter, AlertTriangle,
   Download, Edit2, Trash2, CheckCircle2, Clock, X, Barcode,
   Layers, ArrowUpRight, ShieldCheck, Tag, ChevronRight, Loader2,
   Sparkles, FolderPlus, ArrowUpDown, ArrowUp, ArrowDown, ImageIcon,
-  Building2, ShoppingBag, Boxes, HelpCircle, Wallet
+  Building2, ShoppingBag, Boxes, HelpCircle, Wallet, Sliders, SlidersHorizontal,
+  Printer, RefreshCw
 } from 'lucide-react';
 
 export default function Products() {
@@ -52,6 +55,8 @@ export default function Products() {
   const [isRestockModalOpen, setIsRestockModalOpen] = useState(false);
   const [isQuickEditPickerOpen, setIsQuickEditPickerOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [barcodeModalProducts, setBarcodeModalProducts] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -93,7 +98,7 @@ export default function Products() {
     brand_id: '',
     supplier_id: '',
     sku: '',
-    barcode: '',
+    barcode: generateUniqueBarcode('20'),
     stock: '',
     buyPrice: '',
     sellPrice: '',
@@ -102,11 +107,281 @@ export default function Products() {
     payment_method: 'cash',
     unit: 'Pcs',
     lowStockThreshold: 5,
+    has_variants: false,
+    variation_options: [],
+    variants: [],
   });
+
+  // Preset attribute suggestions
+  const attributePresets = [
+    { name: 'Color', values: ['Red', 'Blue', 'Black', 'White', 'Green'] },
+    { name: 'Size', values: ['S', 'M', 'L', 'XL', 'XXL'] },
+    { name: 'Pages / Type', values: ['100 Pages', '200 Pages', '300 Pages'] },
+    { name: 'Storage / RAM', values: ['64GB', '128GB', '256GB'] },
+  ];
+
+  // Generate Combinations for Add Product
+  const generateNewProductCombinations = () => {
+    const validOptions = (newProduct.variation_options || []).filter((opt) => opt.name.trim() && opt.values.length > 0);
+    if (validOptions.length === 0) {
+      toast.error(lang === 'bn' ? 'অনুগ্রহ করে অন্তত একটি বৈশিষ্ট্য ও মান লিখুন।' : 'Please add at least one attribute and value.');
+      return;
+    }
+
+    const cartesian = (arrays) => {
+      return arrays.reduce((acc, curr) => {
+        return acc.flatMap((a) => curr.map((b) => [...a, b]));
+      }, [[]]);
+    };
+
+    const valuesArrays = validOptions.map((opt) => opt.values);
+    const combinations = cartesian(valuesArrays);
+
+    const baseCost = newProduct.buyPrice !== '' ? (parseFloat(newProduct.buyPrice) || 0) : 0;
+    const baseSell = newProduct.sellPrice !== '' ? (parseFloat(newProduct.sellPrice) || 0) : 0;
+    const totalStock = parseInt(newProduct.stock, 10) || 0;
+    const count = combinations.length;
+    const perVariant = count > 0 ? Math.floor(totalStock / count) : 0;
+    const remainder = count > 0 ? (totalStock % count) : 0;
+    const alertLevel = parseInt(newProduct.lowStockThreshold, 10) || 5;
+    const basePrefix = newProduct.name ? newProduct.name.slice(0, 3).toUpperCase() : 'SKU';
+
+    const newVariants = combinations.map((combo, idx) => {
+      const variantAttrs = combo.map((val, optIdx) => ({
+        name: validOptions[optIdx].name,
+        value: val,
+      }));
+      const comboName = combo.join(' / ');
+      const variantSku = `${basePrefix}-${Math.floor(1000 + Math.random() * 9000)}-V${idx + 1}`;
+
+      return {
+        id: `var_${Date.now()}_${idx}`,
+        name: comboName,
+        attributes: variantAttrs,
+        sku: variantSku,
+        barcode: generateUniqueBarcode('21'),
+        cost_price: baseCost,
+        selling_price: baseSell,
+        stock_quantity: perVariant + (idx < remainder ? 1 : 0),
+        low_stock_threshold: alertLevel,
+      };
+    });
+
+    setNewProduct(prev => ({ ...prev, variants: newVariants }));
+    toast.success(lang === 'bn' ? `${newVariants.length} টি ভ্যারিয়েশন তৈরি হয়েছে!` : `Generated ${newVariants.length} variations!`);
+  };
+
+  const handleAddNewProductAttrGroup = (preset) => {
+    if (preset) {
+      setNewProduct(prev => ({
+        ...prev,
+        variation_options: [...(prev.variation_options || []), { name: preset.name, values: [] }]
+      }));
+    } else {
+      setNewProduct(prev => ({
+        ...prev,
+        variation_options: [...(prev.variation_options || []), { name: '', values: [] }]
+      }));
+    }
+  };
+
+  const handleRemoveNewProductAttrGroup = (index) => {
+    setNewProduct(prev => ({
+      ...prev,
+      variation_options: (prev.variation_options || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleAddNewProductOptionValue = (optIndex, val) => {
+    if (!val || !val.trim()) return;
+    setNewProduct(prev => {
+      const updated = [...(prev.variation_options || [])];
+      if (!updated[optIndex].values.includes(val.trim())) {
+        updated[optIndex].values.push(val.trim());
+      }
+      return { ...prev, variation_options: updated };
+    });
+  };
+
+  const handleRemoveNewProductOptionValue = (optIndex, valIndex) => {
+    setNewProduct(prev => {
+      const updated = [...(prev.variation_options || [])];
+      updated[optIndex].values = updated[optIndex].values.filter((_, i) => i !== valIndex);
+      return { ...prev, variation_options: updated };
+    });
+  };
+
+  const handleUpdateNewProductVariant = (vIdx, field, value) => {
+    setNewProduct(prev => {
+      const updated = [...(prev.variants || [])];
+      updated[vIdx] = { ...updated[vIdx], [field]: value };
+      let nextStock = prev.stock;
+      if (field === 'stock_quantity') {
+        const total = updated.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0);
+        nextStock = total.toString();
+      }
+      return { ...prev, variants: updated, stock: nextStock };
+    });
+  };
+
+  const handleRemoveNewProductVariant = (vIdx) => {
+    setNewProduct(prev => {
+      const updated = (prev.variants || []).filter((_, i) => i !== vIdx);
+      const total = updated.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0);
+      return {
+        ...prev,
+        variants: updated,
+        stock: prev.has_variants && updated.length > 0 ? total.toString() : prev.stock,
+      };
+    });
+  };
+
+  const handleBulkFillNewProductVariants = (field, value) => {
+    setNewProduct(prev => {
+      const updated = (prev.variants || []).map(v => ({ ...v, [field]: value }));
+      let nextStock = prev.stock;
+      if (field === 'stock_quantity') {
+        const total = updated.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0);
+        nextStock = total.toString();
+      }
+      return { ...prev, variants: updated, stock: nextStock };
+    });
+    toast.success(lang === 'bn' ? 'সকল ভ্যারিয়েশনে প্রয়োগ করা হয়েছে' : 'Applied to all variations');
+  };
+
+  const handleNewProductBuyPriceChange = (val) => {
+    setNewProduct(prev => {
+      const parsed = parseFloat(val) || 0;
+      const updatedVariants = prev.has_variants && Array.isArray(prev.variants)
+        ? prev.variants.map(v => ({ ...v, cost_price: val === '' ? '' : parsed }))
+        : prev.variants;
+      return {
+        ...prev,
+        buyPrice: val,
+        variants: updatedVariants,
+      };
+    });
+  };
+
+  const handleNewProductSellPriceChange = (val) => {
+    setNewProduct(prev => {
+      const parsed = parseFloat(val) || 0;
+      const updatedVariants = prev.has_variants && Array.isArray(prev.variants)
+        ? prev.variants.map(v => ({ ...v, selling_price: val === '' ? '' : parsed }))
+        : prev.variants;
+      return {
+        ...prev,
+        sellPrice: val,
+        variants: updatedVariants,
+      };
+    });
+  };
+
+  const handleNewProductStockChange = (val) => {
+    setNewProduct(prev => {
+      const totalStock = parseInt(val, 10) || 0;
+      let updatedVariants = prev.variants;
+      if (prev.has_variants && Array.isArray(prev.variants) && prev.variants.length > 0) {
+        const count = prev.variants.length;
+        const perVariant = Math.floor(totalStock / count);
+        const remainder = totalStock % count;
+        updatedVariants = prev.variants.map((v, idx) => ({
+          ...v,
+          stock_quantity: val === '' ? '' : (perVariant + (idx < remainder ? 1 : 0)),
+        }));
+      }
+      return {
+        ...prev,
+        stock: val,
+        variants: updatedVariants,
+      };
+    });
+  };
+
+  const handleNewProductLowStockChange = (val) => {
+    setNewProduct(prev => {
+      const alertVal = parseInt(val, 10) || 0;
+      const updatedVariants = prev.has_variants && Array.isArray(prev.variants)
+        ? prev.variants.map(v => ({ ...v, low_stock_threshold: val === '' ? '' : alertVal }))
+        : prev.variants;
+      return {
+        ...prev,
+        lowStockThreshold: val,
+        variants: updatedVariants,
+      };
+    });
+  };
+
+  const handleEditProductBuyPriceChange = (val) => {
+    setEditForm(prev => {
+      const parsed = parseFloat(val) || 0;
+      const updatedVariants = prev.has_variants && Array.isArray(prev.variants)
+        ? prev.variants.map(v => ({ ...v, cost_price: val === '' ? '' : parsed }))
+        : prev.variants;
+      return {
+        ...prev,
+        buyPrice: val,
+        variants: updatedVariants,
+      };
+    });
+  };
+
+  const handleEditProductSellPriceChange = (val) => {
+    setEditForm(prev => {
+      const parsed = parseFloat(val) || 0;
+      const updatedVariants = prev.has_variants && Array.isArray(prev.variants)
+        ? prev.variants.map(v => ({ ...v, selling_price: val === '' ? '' : parsed }))
+        : prev.variants;
+      return {
+        ...prev,
+        sellPrice: val,
+        variants: updatedVariants,
+      };
+    });
+  };
+
+  const handleEditProductStockChange = (val) => {
+    setEditForm(prev => {
+      const totalStock = parseInt(val, 10) || 0;
+      let updatedVariants = prev.variants;
+      if (prev.has_variants && Array.isArray(prev.variants) && prev.variants.length > 0) {
+        const count = prev.variants.length;
+        const perVariant = Math.floor(totalStock / count);
+        const remainder = totalStock % count;
+        updatedVariants = prev.variants.map((v, idx) => ({
+          ...v,
+          stock_quantity: val === '' ? '' : (perVariant + (idx < remainder ? 1 : 0)),
+        }));
+      }
+      return {
+        ...prev,
+        stock: val,
+        variants: updatedVariants,
+      };
+    });
+  };
+
+  const handleEditProductLowStockChange = (val) => {
+    setEditForm(prev => {
+      const alertVal = parseInt(val, 10) || 0;
+      const updatedVariants = prev.has_variants && Array.isArray(prev.variants)
+        ? prev.variants.map(v => ({ ...v, low_stock_threshold: val === '' ? '' : alertVal }))
+        : prev.variants;
+      return {
+        ...prev,
+        lowStockThreshold: val,
+        variants: updatedVariants,
+      };
+    });
+  };
 
   // Restock / Add Stock to Existing Product Form State
   const [restockForm, setRestockForm] = useState({
     product_id: '',
+    variant_id: '',
+    variant_name: '',
+    restock_mode: 'matrix', // 'matrix' (all variants table) or 'single'
+    variant_items: [], // [{ variant_id, variant_name, current_stock, quantity, unit_cost, selling_price }]
     supplier_id: '',
     quantity: 1,
     unit_cost: 0,
@@ -115,6 +390,60 @@ export default function Products() {
     payment_method: 'cash',
     notes: '',
   });
+
+  // Fast Bulk Fill for Restock Variants Matrix
+  const [restockBulkCost, setRestockBulkCost] = useState('');
+  const [restockBulkQty, setRestockBulkQty] = useState('');
+  const [showAddNewVariantInRestock, setShowAddNewVariantInRestock] = useState(false);
+  const [newRestockVariantName, setNewRestockVariantName] = useState('');
+  const [newRestockVariantCost, setNewRestockVariantCost] = useState('');
+  const [newRestockVariantSell, setNewRestockVariantSell] = useState('');
+  const [newRestockVariantQty, setNewRestockVariantQty] = useState('10');
+
+  const applyRestockBulkField = (field, value) => {
+    const num = parseFloat(value);
+    if (isNaN(num)) return;
+    setRestockForm((prev) => ({
+      ...prev,
+      variant_items: prev.variant_items.map((item) => ({
+        ...item,
+        [field]: num,
+      })),
+    }));
+    toast.success(lang === 'bn' ? 'সকল ভ্যারিয়েশনে প্রয়োগ করা হয়েছে' : 'Applied to all variations');
+  };
+
+  const handleAddNewVariantToRestock = () => {
+    if (!newRestockVariantName.trim()) {
+      toast.error(lang === 'bn' ? 'ভ্যারিয়েশনের নাম লিখুন।' : 'Please enter variant name.');
+      return;
+    }
+    const selectedProd = productList.find((p) => p.id === restockForm.product_id);
+    const cost = parseFloat(newRestockVariantCost) || (selectedProd ? selectedProd.buyPrice : 0);
+    const sell = parseFloat(newRestockVariantSell) || (selectedProd ? selectedProd.sellPrice : 0);
+    const qty = parseInt(newRestockVariantQty, 10) || 1;
+
+    setRestockForm((prev) => ({
+      ...prev,
+      variant_items: [
+        ...prev.variant_items,
+        {
+          variant_id: '',
+          variant_name: newRestockVariantName.trim(),
+          current_stock: 0,
+          quantity: qty,
+          unit_cost: cost,
+          selling_price: sell,
+        },
+      ],
+    }));
+
+    setNewRestockVariantName('');
+    setNewRestockVariantCost('');
+    setNewRestockVariantSell('');
+    setShowAddNewVariantInRestock(false);
+    toast.success(lang === 'bn' ? 'নতুন ভ্যারিয়েশন রিস্টক তালিকায় যোগ হয়েছে!' : 'New variation added to restock list!');
+  };
 
   // Edit Product Form State
   const [editForm, setEditForm] = useState({
@@ -131,7 +460,13 @@ export default function Products() {
     sellPrice: '',
     unit: 'Pcs',
     lowStockThreshold: 5,
+    has_variants: false,
+    variation_options: [],
+    variants: [],
   });
+
+  // Selected Product for quick variant viewing modal
+  const [selectedVariantProduct, setSelectedVariantProduct] = useState(null);
 
   const fetchDbProducts = async () => {
     setIsLoading(true);
@@ -177,8 +512,12 @@ export default function Products() {
         const matchingBrand = fetchedBrands.find((b) => String(b._id) === String(brandId));
         const brandName = brandObj?.name || matchingBrand?.name || p.brand || '';
 
+        const hasVars = Boolean(p.has_variants) && Array.isArray(p.variants) && p.variants.length > 0;
+        const trueStock = hasVars ? p.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0) : (p.stock_quantity ?? 0);
+
         return {
-          id: p._id,
+          id: p._id || p.id,
+          _id: p._id || p.id,
           name: p.name,
           image_url: p.image_url || (Array.isArray(p.images) && p.images[0]) || '',
           sku: p.sku || 'N/A',
@@ -188,12 +527,15 @@ export default function Products() {
           category: catName,
           brand_id: matchingBrand ? matchingBrand._id : brandId,
           brand: brandName,
-          stock: p.stock_quantity ?? 0,
+          stock: trueStock,
           unit: p.unit || 'Pcs',
           buyPrice: p.cost_price ?? 0,
           sellPrice: p.selling_price ?? 0,
           lowStockThreshold: p.low_stock_threshold ?? 5,
-          status: p.stock_quantity <= 0 ? 'out_of_stock' : p.stock_quantity <= (p.low_stock_threshold || 5) ? 'low_stock' : 'in_stock',
+          has_variants: Boolean(p.has_variants),
+          variation_options: Array.isArray(p.variation_options) ? p.variation_options : [],
+          variants: Array.isArray(p.variants) ? p.variants : [],
+          status: trueStock <= 0 ? 'out_of_stock' : trueStock <= (p.low_stock_threshold || 5) ? 'low_stock' : 'in_stock',
           purchase_info: p.purchase_info || null,
           created_at: p.created_at || '',
         };
@@ -450,10 +792,17 @@ export default function Products() {
         : undefined;
       const selectedBrand = brands.find((b) => b._id === newProduct.brand_id);
 
-      const initialStock = parseInt(newProduct.stock, 10) || 0;
+      const hasVars = Boolean(newProduct.has_variants);
       const costPrice = parseFloat(newProduct.buyPrice) || 0;
       const sellPrice = parseFloat(newProduct.sellPrice) || 0;
-      const totalCost = initialStock * costPrice;
+
+      const initialStock = hasVars
+        ? (newProduct.variants || []).reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0)
+        : (parseInt(newProduct.stock, 10) || 0);
+
+      const totalCost = hasVars
+        ? (newProduct.variants || []).reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0) * (parseFloat(v.cost_price) || costPrice), 0)
+        : (initialStock * costPrice);
 
       let calculatedPaid = 0;
       if (newProduct.supplier_id) {
@@ -476,7 +825,7 @@ export default function Products() {
         calculatedPaid = totalCost;
       }
 
-      await api.products.create({
+      const res = await api.products.create({
         name: newProduct.name.trim(),
         image_url: newProduct.image_url || undefined,
         images: newProduct.image_url ? [newProduct.image_url] : [],
@@ -493,7 +842,44 @@ export default function Products() {
         payment_method: newProduct.payment_method || 'cash',
         unit: newProduct.unit || 'Pcs',
         low_stock_threshold: parseInt(newProduct.lowStockThreshold, 10) || 5,
+        has_variants: hasVars,
+        variation_options: hasVars ? (newProduct.variation_options || []) : [],
+        variants: hasVars
+          ? (newProduct.variants || []).map((v) => ({
+              name: v.name,
+              attributes: v.attributes || [],
+              sku: v.sku ? v.sku.trim() : undefined,
+              barcode: v.barcode ? v.barcode.trim() : undefined,
+              cost_price: parseFloat(v.cost_price) || costPrice,
+              selling_price: parseFloat(v.selling_price) || sellPrice,
+              stock_quantity: parseInt(v.stock_quantity, 10) || 0,
+              low_stock_threshold: parseInt(v.low_stock_threshold, 10) || 5,
+            }))
+          : [],
       });
+
+      const createdProd = res?.data || res;
+
+      // Prepare item for 1-click label printing
+      const itemToPrint = {
+        id: createdProd?._id || createdProd?.id || String(Date.now()),
+        name: newProduct.name.trim(),
+        has_variants: hasVars,
+        barcode: newProduct.barcode || createdProd?.barcode,
+        selling_price: sellPrice,
+        sellPrice: sellPrice,
+        stock: initialStock,
+        unit: newProduct.unit || 'Pcs',
+        variants: hasVars
+          ? (newProduct.variants || []).map((v, i) => ({
+              _id: (createdProd?.variants && createdProd.variants[i]?._id) || `var_${i}`,
+              name: v.name,
+              barcode: v.barcode || (createdProd?.variants && createdProd.variants[i]?.barcode) || generateUniqueBarcode('21'),
+              selling_price: parseFloat(v.selling_price) || sellPrice,
+              stock_quantity: parseInt(v.stock_quantity, 10) || 0,
+            }))
+          : [],
+      };
 
       setIsAddModalOpen(false);
       setNewProduct({
@@ -503,7 +889,7 @@ export default function Products() {
         brand_id: '',
         supplier_id: '',
         sku: '',
-        barcode: '',
+        barcode: generateUniqueBarcode('20'),
         stock: '',
         buyPrice: '',
         sellPrice: '',
@@ -512,9 +898,36 @@ export default function Products() {
         payment_method: 'cash',
         unit: 'Pcs',
         lowStockThreshold: 5,
+        has_variants: false,
+        variation_options: [],
+        variants: [],
       });
-      toast.success(lang === 'bn' ? 'পণ্য সফলভাবে যুক্ত হয়েছে!' : 'Product added successfully!');
+
       fetchDbProducts();
+
+      toast.success(
+        (t) => (
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-bold text-xs">{lang === 'bn' ? 'পণ্য ও বারকোড তৈরি সম্পন্ন!' : 'Product & Barcode created!'}</p>
+              <p className="text-[11px] text-slate-500">{lang === 'bn' ? 'বারকোড লেবেল প্রিন্ট করতে চান?' : 'Print barcode stickers now?'}</p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                toast.dismiss(t.id);
+                setBarcodeModalProducts([itemToPrint]);
+                setIsBarcodeModalOpen(true);
+              }}
+              className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-bold h-7 px-2.5 cursor-pointer shrink-0"
+            >
+              <Printer className="w-3.5 h-3.5 mr-1" />
+              {lang === 'bn' ? 'প্রিন্ট' : 'Print'}
+            </Button>
+          </div>
+        ),
+        { duration: 6000 }
+      );
     } catch (err) {
       toast.error(err.message || 'Failed to save product in database.');
     } finally {
@@ -529,40 +942,89 @@ export default function Products() {
       toast.error(lang === 'bn' ? 'অনুগ্রহ করে পণ্য নির্বাচন করুন।' : 'Please select a product.');
       return;
     }
-    const qty = Number(restockForm.quantity) || 0;
-    if (qty <= 0) {
-      toast.error(lang === 'bn' ? 'পরিমাণ কমপক্ষে ১ হতে হবে।' : 'Quantity must be at least 1.');
-      return;
+
+    const selectedProd = productList.find((p) => p.id === restockForm.product_id);
+    let purchaseItems = [];
+
+    if (
+      selectedProd?.has_variants &&
+      restockForm.restock_mode === 'matrix' &&
+      Array.isArray(restockForm.variant_items) &&
+      restockForm.variant_items.length > 0
+    ) {
+      const activeVariants = restockForm.variant_items.filter((v) => Number(v.quantity) > 0);
+      if (activeVariants.length === 0) {
+        toast.error(lang === 'bn' ? 'কমপক্ষে একটি ভ্যারিয়েশনের জন্য পরিমাণ লিখুন।' : 'Please enter restock quantity for at least one variation.');
+        return;
+      }
+      purchaseItems = activeVariants.map((v) => ({
+        product_id: restockForm.product_id,
+        variant_id: v.variant_id || undefined,
+        variant_name: v.variant_name,
+        product_name: `${selectedProd.name} (${v.variant_name})`,
+        quantity: Number(v.quantity),
+        unit_cost: Number(v.unit_cost) || 0,
+        selling_price: Number(v.selling_price) || Number(selectedProd.sellPrice) || 0,
+        total_cost: Number(v.quantity) * (Number(v.unit_cost) || 0),
+      }));
+    } else {
+      const qty = Number(restockForm.quantity) || 0;
+      if (qty <= 0) {
+        toast.error(lang === 'bn' ? 'পরিমাণ কমপক্ষে ১ হতে باشد।' : 'Quantity must be at least 1.');
+        return;
+      }
+      const unitCost = Number(restockForm.unit_cost) || 0;
+      const totalCost = qty * unitCost;
+      purchaseItems = [
+        {
+          product_id: restockForm.product_id,
+          variant_id: restockForm.variant_id || undefined,
+          variant_name: restockForm.variant_name || undefined,
+          product_name: restockForm.variant_name ? `${selectedProd?.name} (${restockForm.variant_name})` : (selectedProd?.name || 'Product'),
+          quantity: qty,
+          unit_cost: unitCost,
+          selling_price: Number(restockForm.selling_price) || selectedProd?.sellPrice || 0,
+          total_cost: totalCost,
+        },
+      ];
     }
+
+    const totalCost = purchaseItems.reduce((sum, it) => sum + it.total_cost, 0);
+    const paid = restockForm.paid_amount !== '' ? Number(restockForm.paid_amount) : totalCost;
 
     setIsSubmitting(true);
     try {
-      const selectedProd = productList.find((p) => p.id === restockForm.product_id);
-      const unitCost = Number(restockForm.unit_cost) || 0;
-      const totalCost = qty * unitCost;
-      const paid = restockForm.paid_amount !== '' ? Number(restockForm.paid_amount) : totalCost;
-
       await api.purchases.create({
         supplier_id: restockForm.supplier_id || null,
-        items: [
-          {
-            product_id: restockForm.product_id,
-            product_name: selectedProd?.name || 'Product',
-            quantity: qty,
-            unit_cost: unitCost,
-            selling_price: Number(restockForm.selling_price) || selectedProd?.sellPrice || 0,
-            total_cost: totalCost,
-          },
-        ],
+        items: purchaseItems,
         paid_amount: paid,
         payment_method: restockForm.payment_method || 'cash',
         notes: restockForm.notes || '',
       });
 
-      toast.success(lang === 'bn' ? 'পণ্য সফলভাবে রিস্টক ও ক্রয় রেকর্ড সম্পন্ন!' : 'Stock added & purchase recorded successfully!');
+      // Prepare restocked items for 1-click printing
+      const restockedPrintItems = purchaseItems.map((pIt) => ({
+        id: pIt.variant_id ? `${pIt.product_id}_${pIt.variant_id}` : `${pIt.product_id}`,
+        productId: pIt.product_id,
+        variantId: pIt.variant_id || null,
+        name: selectedProd?.name || 'Product',
+        variant_name: pIt.variant_name || '',
+        barcode: selectedProd?.has_variants && pIt.variant_id
+          ? (selectedProd.variants?.find((vr) => String(vr._id || vr.id) === String(pIt.variant_id))?.barcode || selectedProd.barcode)
+          : selectedProd?.barcode,
+        selling_price: pIt.selling_price || selectedProd?.sellPrice || 0,
+        unit: selectedProd?.unit || 'pcs',
+        stock: pIt.quantity,
+        copies: pIt.quantity, // pre-fill copies to exact restocked qty!
+      }));
+
       setIsRestockModalOpen(false);
       setRestockForm({
         product_id: '',
+        variant_id: '',
+        variant_name: '',
+        restock_mode: 'matrix',
+        variant_items: [],
         supplier_id: '',
         quantity: 1,
         unit_cost: 0,
@@ -572,8 +1034,32 @@ export default function Products() {
         notes: '',
       });
       fetchDbProducts();
+
+      toast.success(
+        (t) => (
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-bold text-xs">{lang === 'bn' ? 'স্টক ও ক্রয় রেকর্ড সম্পন্ন!' : 'Stock restocked successfully!'}</p>
+              <p className="text-[11px] text-slate-500">{lang === 'bn' ? 'নতুন স্টকের লেবেল প্রিন্ট করুন' : 'Print labels for new stock?'}</p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                toast.dismiss(t.id);
+                setBarcodeModalProducts(restockedPrintItems);
+                setIsBarcodeModalOpen(true);
+              }}
+              className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-bold h-7 px-2.5 cursor-pointer shrink-0"
+            >
+              <Printer className="w-3.5 h-3.5 mr-1" />
+              {lang === 'bn' ? 'প্রিন্ট' : 'Print'}
+            </Button>
+          </div>
+        ),
+        { duration: 6000 }
+      );
     } catch (err) {
-      toast.error(err.message || 'Failed to record stock purchase.');
+      toast.error(err.message || 'Failed to record purchase restock.');
     } finally {
       setIsSubmitting(false);
     }
@@ -650,6 +1136,9 @@ export default function Products() {
       payment_method: purchaseInfo?.payment_method || 'cash',
       unit: product.unit || 'Pcs',
       lowStockThreshold: product.lowStockThreshold || 5,
+      has_variants: Boolean(product.has_variants),
+      variation_options: Array.isArray(product.variation_options) ? product.variation_options : [],
+      variants: Array.isArray(product.variants) ? JSON.parse(JSON.stringify(product.variants)) : [],
     });
     setShowEditSuppInline(false);
     setIsEditModalOpen(true);
@@ -674,9 +1163,16 @@ export default function Products() {
 
     const selectedBrand = brands.find((b) => b._id === editForm.brand_id);
 
-    const initialStock = parseInt(editForm.stock, 10) || 0;
+    const hasVars = Boolean(editForm.has_variants);
+    const initialStock = hasVars
+      ? editForm.variants.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0)
+      : (parseInt(editForm.stock, 10) || 0);
+
     const costPrice = parseFloat(editForm.buyPrice) || 0;
-    const newTotalCost = initialStock * costPrice;
+    const newTotalCost = hasVars
+      ? editForm.variants.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0) * (parseFloat(v.cost_price) || costPrice), 0)
+      : (initialStock * costPrice);
+
     const prevTotalCost = (editForm.initial_stock || 0) * (editForm.initial_buy_price || 0);
     const costDiff = newTotalCost - prevTotalCost;
     const alreadyPaid = Number(editForm.already_paid) || 0;
@@ -715,6 +1211,20 @@ export default function Products() {
       calculatedPaid = newTotalCost;
     }
 
+    const formattedVariants = hasVars
+      ? editForm.variants.map((v) => ({
+          _id: v._id,
+          name: v.name.trim(),
+          attributes: v.attributes || [],
+          sku: v.sku ? v.sku.trim() : undefined,
+          barcode: v.barcode ? v.barcode.trim() : undefined,
+          cost_price: parseFloat(v.cost_price) || costPrice,
+          selling_price: parseFloat(v.selling_price) || parseFloat(editForm.sellPrice) || 0,
+          stock_quantity: parseInt(v.stock_quantity, 10) || 0,
+          low_stock_threshold: parseInt(v.low_stock_threshold, 10) || 5,
+        }))
+      : [];
+
     setIsSubmitting(true);
     try {
       await api.products.update(editForm.id, {
@@ -730,6 +1240,9 @@ export default function Products() {
         cost_price: costPrice,
         selling_price: parseFloat(editForm.sellPrice) || 0,
         stock_quantity: initialStock,
+        has_variants: hasVars,
+        variation_options: hasVars ? editForm.variation_options : [],
+        variants: formattedVariants,
         paid_amount: calculatedPaid,
         payment_method: editForm.payment_method || 'cash',
         unit: editForm.unit || 'Pcs',
@@ -795,7 +1308,20 @@ export default function Products() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setBarcodeModalProducts(productList);
+              setIsBarcodeModalOpen(true);
+            }}
+            className="text-xs sm:text-sm h-10 px-3.5 gap-2 cursor-pointer border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs hover:border-[#00df89]"
+          >
+            <Printer className="w-4 h-4 text-[#00df89]" />
+            <span>{lang === 'bn' ? 'বারকোড লেবেল প্রিন্ট' : 'Print Barcode Labels'}</span>
+          </Button>
+
           <Button
             onClick={() => setIsActionChoiceModalOpen(true)}
             className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
@@ -1021,7 +1547,23 @@ export default function Products() {
                           <Package className="w-4 h-4" />
                         </div>
                       )}
-                      <span>{p.name}</span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{p.name}</span>
+                        {p.has_variants && Array.isArray(p.variants) && p.variants.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedVariantProduct(p);
+                            }}
+                            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30 hover:bg-[#00df89]/25 flex items-center gap-1 cursor-pointer transition-all"
+                            title="Click to view all variations"
+                          >
+                            <Layers className="w-3 h-3" />
+                            <span>{p.variants.length} {lang === 'bn' ? 'ভ্যারিয়েশন' : 'Variants'}</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3.5 font-mono text-[11px] text-slate-500">{p.sku}</td>
                     <td className="p-3.5 text-slate-600 dark:text-zinc-300">
@@ -1044,6 +1586,18 @@ export default function Products() {
                     </td>
                     <td className="p-3.5 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setBarcodeModalProducts([p]);
+                            setIsBarcodeModalOpen(true);
+                          }}
+                          className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer"
+                          title={lang === 'bn' ? 'বারকোড লেবেল প্রিন্ট করুন' : 'Print Barcode Label'}
+                        >
+                          <Barcode className="w-3.5 h-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1080,114 +1634,105 @@ export default function Products() {
       {/* 1. ACTION CHOICE SELECTOR MODAL                      */}
       {/* ---------------------------------------------------- */}
       {isActionChoiceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-[#00df89] flex items-center justify-center">
-                  <Package className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                    {lang === 'bn' ? 'পণ্য অ্যাকশন বেছে নিন' : 'Choose Product Action'}
-                  </h2>
-                  <p className="text-[11px] text-slate-400 font-medium">
-                    {lang === 'bn' ? 'আপনি কি নতুন পণ্য তৈরি, স্টক যোগ বা বিদ্যমান পণ্য আপডেট করতে চান?' : 'What action would you like to take on inventory?'}
-                  </p>
-                </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="max-w-[370px] w-full bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800/90 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100 dark:border-zinc-800/70">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+                  {lang === 'bn' ? 'ইনভেন্টরি অ্যাকশন' : 'Inventory Actions'}
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                  {lang === 'bn' ? 'স্টক পরিচালনা বা নতুন পণ্য যুক্ত করুন' : 'Select an action to update stock or catalog'}
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsActionChoiceModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0 ml-2"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 pt-1">
-              {/* Option 1: Add New Product */}
+            {/* Menu List */}
+            <div className="p-3.5 space-y-2">
+              {/* Option 1: Create New Product */}
               <button
                 type="button"
                 onClick={() => {
                   setIsActionChoiceModalOpen(false);
                   setIsAddModalOpen(true);
                 }}
-                className="w-full p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 hover:border-[#00df89] dark:hover:border-[#00df89] hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 transition-all text-left flex items-start gap-3.5 cursor-pointer group"
+                className="w-full p-4 rounded-2xl bg-slate-50/70 dark:bg-zinc-900/40 border border-slate-200/60 dark:border-zinc-800/60 hover:border-[#00df89]/60 dark:hover:border-[#00df89]/60 hover:bg-slate-50 dark:hover:bg-zinc-800/60 hover:shadow-xs transition-all text-left flex items-start gap-3.5 group cursor-pointer"
               >
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-[#00df89] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <Sparkles className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-[#00df89]/10 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/20 flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-[#00df89] group-hover:text-[#011812] transition-all mt-0.5">
+                  <PackagePlus className="w-5 h-5" />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-[#00df89] transition-colors">
-                      {lang === 'bn' ? '১. সম্পূর্ণ নতুন পণ্য তৈরি করুন' : '1. Add Brand New Product'}
-                    </h3>
-                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#00a86b] dark:group-hover:text-[#00df89] transition-colors">
+                      {lang === 'bn' ? 'নতুন পণ্য তৈরি' : 'Create New Product'}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-[#00df89] group-hover:translate-x-0.5 transition-all shrink-0 ml-1" />
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                    {lang === 'bn'
-                      ? 'নতুন নাম, বারকোড, ক্যাটাগরি, সাপ্লায়ার ও প্রাথমিক স্টক দিয়ে ক্যাটালগে পণ্য যোগ করুন।'
-                      : 'Create a new product item with pricing, barcode, category, supplier, and initial stock.'}
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                    {lang === 'bn' ? 'একক পণ্য বা কালার ও সাইজ ভ্যারিয়েশন সহ পণ্য যোগ করুন' : 'Add standalone item or multi-variant catalog product'}
                   </p>
                 </div>
               </button>
 
-              {/* Option 2: Add Stock / Restock Existing Product */}
+              {/* Option 2: Restock Stock */}
               <button
                 type="button"
                 onClick={() => {
                   setIsActionChoiceModalOpen(false);
                   setIsRestockModalOpen(true);
                 }}
-                className="w-full p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 hover:border-[#00df89] dark:hover:border-[#00df89] hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 transition-all text-left flex items-start gap-3.5 cursor-pointer group"
+                className="w-full p-4 rounded-2xl bg-slate-50/70 dark:bg-zinc-900/40 border border-slate-200/60 dark:border-zinc-800/60 hover:border-blue-500/60 dark:hover:border-blue-500/60 hover:bg-slate-50 dark:hover:bg-zinc-800/60 hover:shadow-xs transition-all text-left flex items-start gap-3.5 group cursor-pointer"
               >
-                <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <ShoppingBag className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-blue-500 group-hover:text-white transition-all mt-0.5">
+                  <Boxes className="w-5 h-5" />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">
-                      {lang === 'bn' ? '২. বিদ্যমান পণ্যে স্টক যোগ / ক্রয় করুন' : '2. Add Stock / Restock Existing'}
-                    </h3>
-                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      {lang === 'bn' ? 'স্টক রিস্টক / ক্রয়' : 'Restock / Purchase Stock'}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all shrink-0 ml-1" />
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                    {lang === 'bn'
-                      ? 'সাপ্লায়ার থেকে বিদ্যমান পণ্যের নতুন স্টক ক্রয় রেকর্ড করুন (স্বয়ংক্রিয়ভাবে স্টক ও ক্রয় খতিয়ান আপডেট হবে)।'
-                      : 'Receive new batch from supplier, increase stock count, and log purchase in DB ledger.'}
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                    {lang === 'bn' ? 'সাপ্লায়ার থেকে স্টক গ্রহণ ও ক্রয় খতিয়ানে যোগ করুন' : 'Receive batch from supplier and log purchase invoice'}
                   </p>
                 </div>
               </button>
 
-              {/* Option 3: Update Existing Product */}
+              {/* Option 3: Quick Edit */}
               <button
                 type="button"
                 onClick={() => {
                   setIsActionChoiceModalOpen(false);
                   setIsQuickEditPickerOpen(true);
                 }}
-                className="w-full p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 hover:border-[#00df89] dark:hover:border-[#00df89] hover:bg-emerald-50/30 dark:hover:bg-emerald-950/20 transition-all text-left flex items-start gap-3.5 cursor-pointer group"
+                className="w-full p-4 rounded-2xl bg-slate-50/70 dark:bg-zinc-900/40 border border-slate-200/60 dark:border-zinc-800/60 hover:border-amber-500/60 dark:hover:border-amber-500/60 hover:bg-slate-50 dark:hover:bg-zinc-800/60 hover:shadow-xs transition-all text-left flex items-start gap-3.5 group cursor-pointer"
               >
-                <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <Edit2 className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-amber-500 group-hover:text-white transition-all mt-0.5">
+                  <SlidersHorizontal className="w-5 h-5" />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-amber-500 transition-colors">
-                      {lang === 'bn' ? '৩. বিদ্যমান পণ্যের বিবরণ আপডেট করুন' : '3. Quick Update Existing Product'}
-                    </h3>
-                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                    <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                      {lang === 'bn' ? 'পণ্যের বিবরণ এডিট' : 'Edit Existing Product'}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all shrink-0 ml-1" />
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                    {lang === 'bn'
-                      ? 'যেকোনো পণ্যের নাম, বিক্রয়মূল্য, ক্যাটাগরি, বারকোড বা সতর্কতা লেভেল সংশোধন করুন।'
-                      : 'Search and modify details, selling prices, barcode, or category of an existing item.'}
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                    {lang === 'bn' ? 'নাম, বিক্রয়মূল্য, বারকোড বা সতর্কতা লেভেল পরিবর্তন করুন' : 'Update prices, barcodes, categories or thresholds'}
                   </p>
                 </div>
               </button>
             </div>
-          </Card>
+          </div>
         </div>
       )}
 
@@ -1195,21 +1740,38 @@ export default function Products() {
       {/* 2. ADD BRAND NEW PRODUCT MODAL                       */}
       {/* ---------------------------------------------------- */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 shrink-0">
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#00df89]" />
-                <span>{lang === 'bn' ? 'নতুন পণ্য যুক্ত করুন' : 'Add New Product to Inventory'}</span>
-              </h2>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 p-1 cursor-pointer">
-                <X className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="max-w-lg w-full max-h-[90vh] bg-white dark:bg-[#121215] border border-slate-200/90 dark:border-zinc-800 shadow-2xl rounded-3xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-zinc-800/80 bg-slate-50/60 dark:bg-zinc-900/40 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-xs">
+                  <PackagePlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+                    {lang === 'bn' ? 'নতুন পণ্য যুক্ত করুন' : 'Create New Product'}
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    {lang === 'bn' ? 'ক্যাটালগে পণ্যের বিবরণ ও স্টক সংরক্ষণ করুন' : 'Add product details, pricing & stock'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4.5 h-4.5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddProduct} className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3.5 text-xs py-1">
+            {/* Modal Body Form */}
+            <form onSubmit={handleAddProduct} className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4.5 text-sm">
+              
+              {/* Product Name */}
               <div>
-                <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                <label className="block font-bold text-[13px] mb-1.5 text-slate-800 dark:text-zinc-200">
                   {lang === 'bn' ? 'পণ্যের নাম *' : 'Product Name *'}
                 </label>
                 <input
@@ -1218,171 +1780,167 @@ export default function Products() {
                   placeholder={productPlaceholder}
                   value={newProduct.name}
                   onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white font-medium outline-none focus:ring-2 focus:ring-[#00df89] text-sm placeholder:text-slate-400"
                 />
               </div>
 
-              {/* Product Photo via ImgBB */}
-              <ProductImageUploader
-                value={newProduct.image_url}
-                onChange={(url) => setNewProduct({ ...newProduct, image_url: url })}
-                label={lang === 'bn' ? 'পণ্যের ছবি (ImgBB হোস্টিং)' : 'Product Photo (Hosted via ImgBB)'}
-              />
+              {/* Category & Brand (Side by Side) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Category */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="font-bold text-[13px] text-slate-800 dark:text-zinc-200">
+                      {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddCatInline(!showAddCatInline);
+                        setNewCatName('');
+                      }}
+                      className="text-xs font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <FolderPlus className="w-3 h-3" />
+                      <span>{showAddCatInline ? (lang === 'bn' ? 'বাতিল' : 'Cancel') : (lang === 'bn' ? '+ নতুন' : '+ New')}</span>
+                    </button>
+                  </div>
 
-              {/* Category with Inline Creator */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-medium text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAddCatInline(!showAddCatInline);
-                      setNewCatName('');
-                    }}
-                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <FolderPlus className="w-3 h-3" />
-                    <span>{showAddCatInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন ক্যাটাগরি' : '+ Add New Category')}</span>
-                  </button>
+                  {showAddCatInline ? (
+                    <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                      <input
+                        type="text"
+                        placeholder={categoryPlaceholder}
+                        value={newCatName}
+                        onChange={(e) => setNewCatName(e.target.value)}
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm focus:ring-1 focus:ring-[#00df89]"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isCreatingCat || !newCatName.trim()}
+                        onClick={() => handleCreateCategory(false)}
+                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs h-7 px-2.5 cursor-pointer"
+                      >
+                        {isCreatingCat ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select
+                      value={newProduct.category_id || '__general__'}
+                      onValueChange={(val) => {
+                        if (val === '__add_new_cat__') {
+                          setShowAddCatInline(true);
+                        } else {
+                          setNewProduct({ ...newProduct, category_id: val });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b] h-10 text-sm font-medium rounded-xl">
+                        <SelectValue placeholder="General" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem
+                          value="__add_new_cat__"
+                          className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
+                        >
+                          + {lang === 'bn' ? 'নতুন ক্যাটাগরি তৈরি...' : 'Add New Category...'}
+                        </SelectItem>
+                        <SelectItem value="__general__">General</SelectItem>
+                        {categories.filter(c => c.name?.toLowerCase() !== 'general').map((c) => (
+                          <SelectItem
+                            key={c._id}
+                            value={c._id}
+                            onDelete={() => promptDeleteCategory(c._id, c.name)}
+                            deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
+                          >
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
-                {showAddCatInline ? (
-                  <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-                    <input
-                      type="text"
-                      placeholder={categoryPlaceholder}
-                      value={newCatName}
-                      onChange={(e) => setNewCatName(e.target.value)}
-                      className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
-                    />
-                    <Button
+                {/* Brand */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="font-bold text-[13px] text-slate-800 dark:text-zinc-200">
+                      {lang === 'bn' ? 'ব্র্যান্ড' : 'Brand'}
+                    </label>
+                    <button
                       type="button"
-                      size="sm"
-                      disabled={isCreatingCat || !newCatName.trim()}
-                      onClick={() => handleCreateCategory(false)}
-                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 cursor-pointer"
+                      onClick={() => {
+                        setShowAddBrandInline(!showAddBrandInline);
+                        setNewBrandName('');
+                      }}
+                      className="text-xs font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
                     >
-                      {isCreatingCat ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
-                    </Button>
+                      <Tag className="w-3 h-3" />
+                      <span>{showAddBrandInline ? (lang === 'bn' ? 'বাতিল' : 'Cancel') : (lang === 'bn' ? '+ নতুন' : '+ New')}</span>
+                    </button>
                   </div>
-                ) : (
-                  <Select
-                    value={newProduct.category_id || '__general__'}
-                    onValueChange={(val) => {
-                      if (val === '__add_new_cat__') {
-                        setShowAddCatInline(true);
-                      } else {
-                        setNewProduct({ ...newProduct, category_id: val });
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
-                      <SelectValue placeholder="General" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem
-                        value="__add_new_cat__"
-                        className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
-                      >
-                        + {lang === 'bn' ? 'নতুন ক্যাটাগরি তৈরি করুন...' : 'Add New Category...'}
-                      </SelectItem>
-                      <SelectItem value="__general__">General</SelectItem>
-                      {categories.filter(c => c.name?.toLowerCase() !== 'general').map((c) => (
-                        <SelectItem
-                          key={c._id}
-                          value={c._id}
-                          onDelete={() => promptDeleteCategory(c._id, c.name)}
-                          deleteTitle={lang === 'bn' ? 'ক্যাটাগরি মুছুন' : 'Delete category'}
-                        >
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
 
-              {/* Brand with Inline Creator */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-medium text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'ব্র্যান্ড' : 'Brand'}
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAddBrandInline(!showAddBrandInline);
-                      setNewBrandName('');
-                    }}
-                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Tag className="w-3 h-3" />
-                    <span>{showAddBrandInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন ব্র্যান্ড' : '+ Add New Brand')}</span>
-                  </button>
+                  {showAddBrandInline ? (
+                    <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                      <input
+                        type="text"
+                        placeholder={lang === 'bn' ? 'ব্র্যান্ডের নাম...' : 'Brand name...'}
+                        value={newBrandName}
+                        onChange={(e) => setNewBrandName(e.target.value)}
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm focus:ring-1 focus:ring-[#00df89]"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isCreatingBrand || !newBrandName.trim()}
+                        onClick={() => handleCreateBrand(false)}
+                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs h-7 px-2.5 cursor-pointer"
+                      >
+                        {isCreatingBrand ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select
+                      value={newProduct.brand_id || '__none__'}
+                      onValueChange={(val) => {
+                        if (val === '__add_new_brand__') {
+                          setShowAddBrandInline(true);
+                        } else {
+                          setNewProduct({ ...newProduct, brand_id: val === '__none__' ? '' : val });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b] h-10 text-sm font-medium rounded-xl">
+                        <SelectValue placeholder="Brand" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem
+                          value="__add_new_brand__"
+                          className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
+                        >
+                          + {lang === 'bn' ? 'নতুন ব্র্যান্ড তৈরি...' : 'Add New Brand...'}
+                        </SelectItem>
+                        <SelectItem value="__none__">{lang === 'bn' ? 'কোনোটি নয় (None)' : 'None / Generic'}</SelectItem>
+                        {brands.map((b) => (
+                          <SelectItem
+                            key={b._id}
+                            value={b._id}
+                            onDelete={() => promptDeleteBrand(b._id, b.name)}
+                            deleteTitle={lang === 'bn' ? 'ব্র্যান্ড মুছুন' : 'Delete brand'}
+                          >
+                            {b.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
-
-                {showAddBrandInline ? (
-                  <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-                    <input
-                      type="text"
-                      placeholder={lang === 'bn' ? 'ব্র্যান্ডের নাম লিখুন...' : 'Enter brand name...'}
-                      value={newBrandName}
-                      onChange={(e) => setNewBrandName(e.target.value)}
-                      className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={isCreatingBrand || !newBrandName.trim()}
-                      onClick={() => handleCreateBrand(false)}
-                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 cursor-pointer"
-                    >
-                      {isCreatingBrand ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
-                    </Button>
-                  </div>
-                ) : (
-                  <Select
-                    value={newProduct.brand_id || '__none__'}
-                    onValueChange={(val) => {
-                      if (val === '__add_new_brand__') {
-                        setShowAddBrandInline(true);
-                      } else {
-                        setNewProduct({ ...newProduct, brand_id: val === '__none__' ? '' : val });
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
-                      <SelectValue placeholder="Brand" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem
-                        value="__add_new_brand__"
-                        className="text-[#00a86b] dark:text-[#00df89] font-bold border-b border-slate-100 dark:border-zinc-800/80 mb-1"
-                      >
-                        + {lang === 'bn' ? 'নতুন ব্র্যান্ড তৈরি করুন...' : 'Add New Brand...'}
-                      </SelectItem>
-                      <SelectItem value="__none__">{lang === 'bn' ? 'কোনোটি নয় (None)' : 'None / Generic'}</SelectItem>
-                      {brands.map((b) => (
-                        <SelectItem
-                          key={b._id}
-                          value={b._id}
-                          onDelete={() => promptDeleteBrand(b._id, b.name)}
-                          deleteTitle={lang === 'bn' ? 'ব্র্যান্ড মুছুন' : 'Delete brand'}
-                        >
-                          {b.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
               </div>
 
-              {/* Supplier with Inline Creator */}
+              {/* Supplier */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-medium text-slate-700 dark:text-zinc-300">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-bold text-[13px] text-slate-800 dark:text-zinc-200">
                     {lang === 'bn' ? 'সাপ্লায়ার (সরবরাহকারী)' : 'Supplier (Vendor)'}
                   </label>
                   <button
@@ -1391,29 +1949,29 @@ export default function Products() {
                       setShowAddSuppInline(!showAddSuppInline);
                       setNewSuppData({ name: '', phone: '', company_name: '', address: '' });
                     }}
-                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
                   >
                     <Building2 className="w-3 h-3" />
-                    <span>{showAddSuppInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন সাপ্লায়ার' : '+ Add New Supplier')}</span>
+                    <span>{showAddSuppInline ? (lang === 'bn' ? 'বাতিল' : 'Cancel') : (lang === 'bn' ? '+ নতুন সাপ্লায়ার' : '+ New Supplier')}</span>
                   </button>
                 </div>
 
                 {showAddSuppInline ? (
-                  <div className="p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-2">
+                  <div className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-2">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <input
                         type="text"
                         placeholder={lang === 'bn' ? 'সাপ্লায়ার নাম *' : 'Supplier Name *'}
                         value={newSuppData.name}
                         onChange={(e) => setNewSuppData({ ...newSuppData, name: e.target.value })}
-                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm"
                       />
                       <input
                         type="text"
                         placeholder={lang === 'bn' ? 'ফোন নম্বর' : 'Phone'}
                         value={newSuppData.phone}
                         onChange={(e) => setNewSuppData({ ...newSuppData, phone: e.target.value })}
-                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm"
                       />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1422,14 +1980,14 @@ export default function Products() {
                         placeholder={lang === 'bn' ? 'প্রতিষ্ঠান / কোম্পানি' : 'Company'}
                         value={newSuppData.company_name}
                         onChange={(e) => setNewSuppData({ ...newSuppData, company_name: e.target.value })}
-                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm"
                       />
                       <input
                         type="text"
                         placeholder={lang === 'bn' ? 'ঠিকানা' : 'Address'}
                         value={newSuppData.address}
                         onChange={(e) => setNewSuppData({ ...newSuppData, address: e.target.value })}
-                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm"
                       />
                     </div>
                     <div className="flex justify-end">
@@ -1438,9 +1996,9 @@ export default function Products() {
                         size="sm"
                         disabled={isCreatingSupp || !newSuppData.name.trim()}
                         onClick={() => handleCreateSupplier(false)}
-                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 cursor-pointer"
+                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs h-7 px-3 cursor-pointer"
                       >
-                        {isCreatingSupp ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ ও নির্বাচন' : 'Save & Select')}
+                        {isCreatingSupp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (lang === 'bn' ? 'সেভ ও নির্বাচন' : 'Save & Select')}
                       </Button>
                     </div>
                   </div>
@@ -1449,7 +2007,7 @@ export default function Products() {
                     value={newProduct.supplier_id || '__none__'}
                     onValueChange={(val) => setNewProduct({ ...newProduct, supplier_id: val === '__none__' ? '' : val })}
                   >
-                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b]">
+                    <SelectTrigger className="w-full bg-slate-50 dark:bg-[#09090b] h-10 text-sm font-medium rounded-xl">
                       <SelectValue placeholder={lang === 'bn' ? 'সাপ্লায়ার নির্বাচন করুন (ঐচ্ছিক)' : 'Select supplier (Optional)'} />
                     </SelectTrigger>
                     <SelectContent>
@@ -1469,277 +2027,572 @@ export default function Products() {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Pricing & Margins (Grid 2 Cols) */}
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'SKU কোড (ঐচ্ছিক)' : 'SKU (Optional)'}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Auto-generated if empty"
-                    value={newProduct.sku}
-                    onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'বারকোড (ঐচ্ছিক)' : 'Barcode (Optional)'}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Scan or enter barcode"
-                    value={newProduct.barcode}
-                    onChange={(e) => setNewProduct({ ...newProduct, barcode: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                  <label className="block font-bold mb-1.5 text-slate-800 dark:text-zinc-200 text-[13px]">
                     {lang === 'bn' ? 'ক্রয়মূল্য (৳)' : 'Cost Price (৳)'}
                   </label>
                   <input
                     type="number"
+                    placeholder="0"
                     value={newProduct.buyPrice}
-                    onChange={(e) => setNewProduct({ ...newProduct, buyPrice: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                    onChange={(e) => handleNewProductBuyPriceChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm font-semibold focus:ring-1 focus:ring-[#00df89]"
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                  <label className="block font-bold mb-1.5 text-slate-900 dark:text-white text-[13px]">
                     {lang === 'bn' ? 'বিক্রয়মূল্য (৳) *' : 'Selling Price (৳) *'}
                   </label>
                   <input
                     type="number"
                     required
+                    placeholder="0"
                     value={newProduct.sellPrice}
-                    onChange={(e) => setNewProduct({ ...newProduct, sellPrice: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
+                    onChange={(e) => handleNewProductSellPriceChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-emerald-500/50 dark:border-[#00df89]/50 outline-none text-sm font-bold text-emerald-600 dark:text-[#00df89] focus:ring-2 focus:ring-[#00df89]"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              {/* Barcode & SKU (Grid 2 Cols) */}
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="font-bold text-slate-800 dark:text-zinc-200 text-[13px]">
+                      {lang === 'bn' ? 'বারকোড *' : 'Barcode *'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setNewProduct({ ...newProduct, barcode: generateUniqueBarcode('20') })}
+                      className="text-xs font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>{lang === 'bn' ? 'অটো' : 'Auto'}</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Barcode"
+                    value={newProduct.barcode}
+                    onChange={(e) => setNewProduct({ ...newProduct, barcode: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm font-semibold focus:ring-1 focus:ring-[#00df89]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold mb-1.5 text-slate-800 dark:text-zinc-200 text-[13px]">
+                    {lang === 'bn' ? 'SKU কোড (ঐচ্ছিক)' : 'SKU (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Auto-generated"
+                    value={newProduct.sku}
+                    onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm font-semibold focus:ring-1 focus:ring-[#00df89]"
+                  />
+                </div>
+              </div>
+
+              {/* Product Stock, Alert & Unit (Grid 3 Cols - Always Visible) */}
+              <div className="grid grid-cols-3 gap-3 p-3.5 rounded-2xl bg-slate-50/70 dark:bg-zinc-900/40 border border-slate-200/70 dark:border-zinc-800/70">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-zinc-400 text-xs">
                     {lang === 'bn' ? 'প্রাথমিক স্টক' : 'Initial Stock'}
                   </label>
                   <input
                     type="number"
+                    placeholder="0"
                     value={newProduct.stock}
-                    onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                    onChange={(e) => handleNewProductStockChange(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm font-bold text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'সতর্কতা লেভেল' : 'Low Stock Min'}
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-zinc-400 text-xs">
+                    {lang === 'bn' ? 'সতর্কতা লেভেল' : 'Min Alert'}
                   </label>
                   <input
                     type="number"
+                    placeholder="5"
                     value={newProduct.lowStockThreshold}
-                    onChange={(e) => setNewProduct({ ...newProduct, lowStockThreshold: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                    onChange={(e) => handleNewProductLowStockChange(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm font-semibold text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'একক (Unit)' : 'Unit'}
+                  <label className="block font-semibold mb-1 text-slate-600 dark:text-zinc-400 text-xs">
+                    {lang === 'bn' ? 'একক' : 'Unit'}
                   </label>
                   <input
                     type="text"
+                    placeholder="Pcs"
                     value={newProduct.unit}
                     onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm font-medium text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
 
-              {/* Supplier Stock Purchase Payment Option in Add Modal */}
-              {newProduct.supplier_id && (
-                <div className="p-3.5 rounded-2xl bg-amber-500/5 dark:bg-zinc-900/70 border border-amber-500/20 dark:border-zinc-800 space-y-3 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Wallet className="w-4 h-4 text-amber-500" />
-                      <span className="font-bold text-slate-800 dark:text-zinc-200 text-xs">
-                        {lang === 'bn' ? 'সাপ্লায়ার পেমেন্ট অপশন' : 'Supplier Payment Option'}
-                      </span>
+              {/* Product Photo via ImgBB */}
+              <ProductImageUploader
+                value={newProduct.image_url}
+                onChange={(url) => setNewProduct({ ...newProduct, image_url: url })}
+                label={lang === 'bn' ? 'পণ্যের ছবি (ImgBB হোস্টিং)' : 'Product Photo (Hosted via ImgBB)'}
+              />
+
+              {/* VARIATIONS SECTION */}
+              <div className="pt-2 border-t border-slate-100 dark:border-zinc-800/80 space-y-3.5">
+                {/* Toggle Banner */}
+                <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50/70 dark:bg-zinc-900/40 border border-slate-200/80 dark:border-zinc-800/80">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                      newProduct.has_variants
+                        ? 'bg-[#00df89] text-[#011812] shadow-xs'
+                        : 'bg-slate-200/80 dark:bg-zinc-800 text-slate-500'
+                    }`}>
+                      <Layers className="w-5 h-5" />
                     </div>
-                    <span className="text-[11px] font-mono font-bold text-slate-700 dark:text-zinc-300">
-                      {lang === 'bn' ? 'মোট ক্রয় বিল:' : 'Total Cost:'}{' '}
-                      <span className="text-[#00a86b] dark:text-[#00df89]">
-                        ৳{((parseFloat(newProduct.buyPrice) || 0) * (parseInt(newProduct.stock, 10) || 0)).toLocaleString()}
+                    <div>
+                      <span className="font-bold text-sm text-slate-900 dark:text-zinc-100 block">
+                        {lang === 'bn' ? 'পণ্যের ভ্যারিয়েশন (রং, সাইজ ইত্যাদি)' : 'Product Variations'}
                       </span>
-                    </span>
-                  </div>
-
-                  {/* Payment Type Tabs: Full Paid vs Partial vs Full Due */}
-                  <div className="space-y-1">
-                    <label className="block font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
-                      {lang === 'bn' ? 'পেমেন্টের ধরন নির্বাচন করুন:' : 'Select Payment Option:'}
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setNewProduct((prev) => ({
-                            ...prev,
-                            payment_type: 'full',
-                            paid_amount: String((parseFloat(prev.buyPrice) || 0) * (parseInt(prev.stock, 10) || 0)),
-                          }))
-                        }
-                        className={`py-2 px-1 rounded-xl text-xs font-semibold border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
-                          newProduct.payment_type === 'full'
-                            ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] shadow-xs'
-                            : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
-                        }`}
-                      >
-                        <span>{lang === 'bn' ? 'সম্পূর্ণ পরিশোধ' : 'Full Paid'}</span>
-                        <span className="text-[10px] font-normal opacity-80">(100% Paid)</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setNewProduct((prev) => {
-                            const tot = (parseFloat(prev.buyPrice) || 0) * (parseInt(prev.stock, 10) || 0);
-                            return {
-                              ...prev,
-                              payment_type: 'partial',
-                              paid_amount: String(Math.round(tot / 2)),
-                            };
-                          })
-                        }
-                        className={`py-2 px-1 rounded-xl text-xs font-semibold border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
-                          newProduct.payment_type === 'partial'
-                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500 shadow-xs'
-                            : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
-                        }`}
-                      >
-                        <span>{lang === 'bn' ? 'আংশিক পরিশোধ' : 'Partial Paid'}</span>
-                        <span className="text-[10px] font-normal opacity-80">(Partial Due)</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setNewProduct((prev) => ({ ...prev, payment_type: 'due', paid_amount: '0' }))}
-                        className={`py-2 px-1 rounded-xl text-xs font-semibold border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
-                          newProduct.payment_type === 'due'
-                            ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500 shadow-xs'
-                            : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:border-slate-300'
-                        }`}
-                      >
-                        <span>{lang === 'bn' ? 'সম্পূর্ণ বাকি' : 'Full Due'}</span>
-                        <span className="text-[10px] font-normal opacity-80">(0% Paid)</span>
-                      </button>
+                      <span className="text-xs text-slate-500 dark:text-zinc-400 block mt-0.5">
+                        {lang === 'bn' ? 'আলাদা সাইজ, কালার বা বৈশিষ্ট্যের স্টক' : 'Multi-variant sizes, colors or types'}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Partial Input Box */}
-                  {newProduct.payment_type === 'partial' && (
-                    <div className="p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-amber-500/30 space-y-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextVal = !newProduct.has_variants;
+                      setNewProduct(prev => ({
+                        ...prev,
+                        has_variants: nextVal,
+                      }));
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      newProduct.has_variants ? 'bg-[#00df89]' : 'bg-slate-300 dark:bg-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                        newProduct.has_variants ? 'translate-x-5 bg-[#011812]' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* If Variations Enabled */}
+                {newProduct.has_variants && (
+                  <div className="space-y-3 pt-1 animate-in fade-in duration-150">
+                    {/* Step 1: Attribute & Option Builder */}
+                    <div className="p-3.5 rounded-2xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-3">
                       <div className="flex items-center justify-between">
-                        <label className="font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
-                          {lang === 'bn' ? 'কত টাকা দিয়েছেন (৳):' : 'Amount Paid (৳):'}
-                        </label>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <Sliders className="w-4 h-4 text-[#00df89]" />
+                          <span className="font-bold text-xs text-slate-800 dark:text-zinc-200">
+                            {lang === 'bn' ? 'বৈশিষ্ট্য ও অপশনসমূহ:' : 'Attributes & Option Values:'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddNewProductAttrGroup()}
+                          className="text-xs font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>{lang === 'bn' ? '+ বৈশিষ্ট্য যোগ' : '+ Add Attribute'}</span>
+                        </button>
+                      </div>
+
+                      {/* Quick Preset Buttons */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs text-slate-400 font-semibold">Presets:</span>
+                        {attributePresets.map((preset) => (
                           <button
+                            key={preset.name}
                             type="button"
-                            onClick={() => {
-                              const tot = (parseFloat(newProduct.buyPrice) || 0) * (parseInt(newProduct.stock, 10) || 0);
-                              setNewProduct((prev) => ({ ...prev, payment_type: 'partial', paid_amount: String(Math.round(tot * 0.5)) }));
-                            }}
-                            className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 hover:bg-amber-500/10 text-[10px] font-bold text-slate-700 dark:text-zinc-300 cursor-pointer"
+                            onClick={() => handleAddNewProductAttrGroup(preset)}
+                            className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-zinc-800/80 hover:bg-[#00df89]/15 hover:text-[#00a86b] dark:hover:text-[#00df89] text-slate-700 dark:text-zinc-300 border border-slate-200/60 dark:border-zinc-700/60 transition-colors cursor-pointer"
                           >
-                            50%
+                            + {preset.name}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const tot = (parseFloat(newProduct.buyPrice) || 0) * (parseInt(newProduct.stock, 10) || 0);
-                              setNewProduct((prev) => ({ ...prev, payment_type: 'partial', paid_amount: String(Math.round(tot * 0.25)) }));
-                            }}
-                            className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 hover:bg-amber-500/10 text-[10px] font-bold text-slate-700 dark:text-zinc-300 cursor-pointer"
-                          >
-                            25%
-                          </button>
+                        ))}
+                      </div>
+
+                      {/* Empty State vs Attribute Item Inputs */}
+                      {(newProduct.variation_options || []).length === 0 ? (
+                        <div className="py-4 px-3 text-center border border-dashed border-slate-200 dark:border-zinc-800 rounded-2xl space-y-1 bg-slate-50/50 dark:bg-zinc-900/30">
+                          <p className="text-xs text-slate-500 dark:text-zinc-400">
+                            {lang === 'bn' ? 'কোনো বৈশিষ্ট্য যোগ করা হয়নি। উপরের প্রিসেট বা বাটনে চাপুন।' : 'No attributes added yet. Click a preset or Add Attribute.'}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {newProduct.variation_options.map((opt, optIdx) => (
+                            <div key={optIdx} className="p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/70 dark:border-zinc-800 space-y-2 text-sm">
+                              <div className="flex items-center justify-between gap-2">
+                                <input
+                                  type="text"
+                                  placeholder={lang === 'bn' ? 'বৈশিষ্ট্যের নাম (যেমন: Size)' : 'Attribute Name (e.g. Size, Color)'}
+                                  value={opt.name}
+                                  onChange={(e) => {
+                                    const updated = [...(newProduct.variation_options || [])];
+                                    updated[optIdx] = { ...updated[optIdx], name: e.target.value };
+                                    setNewProduct({ ...newProduct, variation_options: updated });
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-sm font-bold w-48 outline-none focus:ring-1 focus:ring-[#00df89]"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveNewProductAttrGroup(optIdx)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              {/* Tags Input */}
+                              <div className="space-y-2">
+                                {opt.values.length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-1.5 min-h-6">
+                                    {opt.values.map((val, valIdx) => (
+                                      <span
+                                        key={valIdx}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30"
+                                      >
+                                        {val}
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveNewProductOptionValue(optIdx, valIdx)}
+                                          className="hover:text-rose-500 cursor-pointer ml-0.5"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <input
+                                  type="text"
+                                  placeholder={lang === 'bn' ? 'মান লিখে Enter চাপুন (যেমন: Red, Blue, L)...' : 'Type value and press Enter...'}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ',') {
+                                      e.preventDefault();
+                                      handleAddNewProductOptionValue(optIdx, e.currentTarget.value);
+                                      e.currentTarget.value = '';
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-sm outline-none focus:ring-1 focus:ring-[#00df89]"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {(newProduct.variation_options || []).length > 0 && (
+                        <Button
+                          type="button"
+                          onClick={generateNewProductCombinations}
+                          className="w-full bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-sm font-bold py-2 h-10 rounded-xl cursor-pointer shadow-xs gap-2"
+                        >
+                          <Boxes className="w-4 h-4" />
+                          <span>{lang === 'bn' ? 'ভ্যারিয়েশন কম্বিনেশন তৈরি করুন' : 'Generate Variants Matrix'}</span>
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Step 2: Variants Matrix List */}
+                    {(newProduct.variants || []).length > 0 && (
+                      <div className="space-y-2.5">
+                        {/* Variants List Items */}
+                        <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                          {newProduct.variants.map((v, vIdx) => (
+                            <div key={v.id || vIdx} className="p-3 rounded-2xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2 text-sm shadow-2xs">
+                              {/* Row 1: Variant Title, SKU, Barcode, Delete */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-bold text-slate-900 dark:text-zinc-100 text-sm truncate max-w-[140px]">
+                                  {v.name}
+                                </span>
+                                
+                                <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
+                                    <input
+                                      type="text"
+                                      placeholder="Barcode"
+                                      value={v.barcode || ''}
+                                      onChange={(e) => handleUpdateNewProductVariant(vIdx, 'barcode', e.target.value)}
+                                      className="w-28 bg-transparent outline-none text-xs font-semibold"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateNewProductVariant(vIdx, 'barcode', generateUniqueBarcode('21'))}
+                                      title="Auto generate barcode"
+                                      className="text-slate-400 hover:text-[#00df89] cursor-pointer ml-0.5"
+                                    >
+                                      <Sparkles className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveNewProductVariant(vIdx)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Cost Price, Selling Price, Stock Qty */}
+                              <div className="grid grid-cols-3 gap-2.5">
+                                <div>
+                                  <label className="text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-0.5 block">Cost (৳)</label>
+                                  <input
+                                    type="number"
+                                    value={v.cost_price}
+                                    onChange={(e) => handleUpdateNewProductVariant(vIdx, 'cost_price', e.target.value)}
+                                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-0.5 block">Selling (৳)</label>
+                                  <input
+                                    type="number"
+                                    value={v.selling_price}
+                                    onChange={(e) => handleUpdateNewProductVariant(vIdx, 'selling_price', e.target.value)}
+                                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-bold text-[#00a86b] dark:text-[#00df89]"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-0.5 block">Stock (Qty)</label>
+                                  <input
+                                    type="number"
+                                    value={v.stock_quantity}
+                                    onChange={(e) => handleUpdateNewProductVariant(vIdx, 'stock_quantity', e.target.value)}
+                                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-bold"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Combined stock summary */}
+                        <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between text-sm font-bold">
+                          <span className="text-slate-800 dark:text-zinc-200">
+                            {lang === 'bn' ? 'মোট সামগ্রিক স্টক:' : 'Total Combined Stock:'}
+                          </span>
+                          <span className="text-emerald-600 dark:text-[#00df89]">
+                            {newProduct.variants.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0)} Pcs
+                          </span>
                         </div>
                       </div>
-                      <input
-                        type="number"
-                        placeholder="0.00"
-                        value={newProduct.paid_amount}
-                        onChange={(e) => setNewProduct((prev) => ({ ...prev, payment_type: 'partial', paid_amount: e.target.value }))}
-                        className="w-full px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold text-slate-900 dark:text-white outline-none"
-                      />
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-500">{lang === 'bn' ? 'সাপ্লায়ার বাকি থাকবে:' : 'Remaining Due:'}</span>
-                        <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
-                          ৳{Math.max(
-                            0,
-                            (parseFloat(newProduct.buyPrice) || 0) * (parseInt(newProduct.stock, 10) || 0) -
-                              (parseFloat(newProduct.paid_amount) || 0)
-                          ).toLocaleString()}
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* SUPPLIER PAYMENT SETTLEMENT (Only if supplier selected) */}
+              {newProduct.supplier_id && (() => {
+                const hasVars = Boolean(newProduct.has_variants);
+                const curStock = hasVars
+                  ? (newProduct.variants || []).reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0)
+                  : (parseInt(newProduct.stock, 10) || 0);
+                const curCost = parseFloat(newProduct.buyPrice) || 0;
+                const totalCost = hasVars
+                  ? (newProduct.variants || []).reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0) * (parseFloat(v.cost_price) || curCost), 0)
+                  : (curStock * curCost);
+
+                return (
+                  <div className="p-4 rounded-2xl bg-amber-500/5 dark:bg-zinc-900/70 border border-amber-500/20 dark:border-zinc-800 space-y-3.5 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="w-4 h-4 text-amber-500" />
+                        <span className="font-bold text-slate-900 dark:text-zinc-100 text-sm">
+                          {lang === 'bn' ? 'সাপ্লায়ার পেমেন্ট সেটেলমেন্ট' : 'Supplier Settlement'}
                         </span>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Due message */}
-                  {newProduct.payment_type === 'due' && (
-                    <div className="px-3 py-1.5 rounded-xl bg-red-500/5 border border-red-500/20 text-red-600 dark:text-red-400 text-[11px] flex items-center justify-between">
-                      <span>{lang === 'bn' ? 'সম্পূর্ণ বিল বাকি রাখা হবে' : 'Full cost will remain as supplier due'}</span>
-                      <span className="font-mono font-bold">
-                        ৳{((parseFloat(newProduct.buyPrice) || 0) * (parseInt(newProduct.stock, 10) || 0)).toLocaleString()}
+                      <span className="text-xs font-bold text-slate-700 dark:text-zinc-300">
+                        {lang === 'bn' ? 'মোট বিল:' : 'Total Cost:'}{' '}
+                        <span className="text-[#00a86b] dark:text-[#00df89] text-sm">
+                          ৳{totalCost.toLocaleString()}
+                        </span>
                       </span>
                     </div>
-                  )}
 
-                  {/* Payment Method Selector (shown if not full due) */}
-                  {newProduct.payment_type !== 'due' && (
+                    {/* Payment Type Tabs */}
                     <div className="space-y-1">
-                      <label className="font-medium text-slate-700 dark:text-zinc-300 text-[11px]">
-                        {lang === 'bn' ? 'পেমেন্ট মাধ্যম (Payment Method)' : 'Payment Method'}
-                      </label>
-                      <Select
-                        value={newProduct.payment_method || 'cash'}
-                        onValueChange={(val) => setNewProduct((prev) => ({ ...prev, payment_method: val }))}
-                      >
-                        <SelectTrigger className="w-full bg-white dark:bg-[#09090b] h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cash">{lang === 'bn' ? 'ক্যাশ / নগদ (Cash)' : 'Cash'}</SelectItem>
-                          <SelectItem value="bkash">{lang === 'bn' ? 'বিকাশ (bKash)' : 'bKash'}</SelectItem>
-                          <SelectItem value="nagad">{lang === 'bn' ? 'নগদ (Nagad)' : 'Nagad'}</SelectItem>
-                          <SelectItem value="rocket">{lang === 'bn' ? 'রকেট (Rocket)' : 'Rocket'}</SelectItem>
-                          <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার (Bank Transfer)' : 'Bank Transfer'}</SelectItem>
-                          <SelectItem value="card">{lang === 'bn' ? 'কার্ড (Card)' : 'Card'}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              )}
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewProduct((prev) => ({
+                              ...prev,
+                              payment_type: 'full',
+                              paid_amount: String(totalCost),
+                            }))
+                          }
+                          className={`py-2 px-1 rounded-xl text-xs font-bold border flex flex-col items-center justify-center transition-all cursor-pointer ${
+                            newProduct.payment_type === 'full'
+                              ? 'bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border-[#00df89] shadow-xs'
+                              : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800'
+                          }`}
+                        >
+                          <span>{lang === 'bn' ? 'সম্পূর্ণ পরিশোধ' : 'Full Paid'}</span>
+                          <span className="text-[10px] font-normal opacity-80">(100%)</span>
+                        </button>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800 shrink-0">
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsAddModalOpen(false)} className="cursor-pointer">
-                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  size="sm"
-                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold cursor-pointer"
-                >
-                  {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (lang === 'bn' ? 'পণ্য সংরক্ষণ করুন' : 'Save Product')}
-                </Button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewProduct((prev) => ({
+                              ...prev,
+                              payment_type: 'partial',
+                              paid_amount: String(Math.round(totalCost * 0.5)),
+                            }))
+                          }
+                          className={`py-2 px-1 rounded-xl text-xs font-bold border flex flex-col items-center justify-center transition-all cursor-pointer ${
+                            newProduct.payment_type === 'partial'
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500 shadow-xs'
+                              : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800'
+                          }`}
+                        >
+                          <span>{lang === 'bn' ? 'আংশিক পরিশোধ' : 'Partial Paid'}</span>
+                          <span className="text-[10px] font-normal opacity-80">(Partial)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setNewProduct((prev) => ({ ...prev, payment_type: 'due', paid_amount: '0' }))}
+                          className={`py-2 px-1 rounded-xl text-xs font-bold border flex flex-col items-center justify-center transition-all cursor-pointer ${
+                            newProduct.payment_type === 'due'
+                              ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500 shadow-xs'
+                              : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800'
+                          }`}
+                        >
+                          <span>{lang === 'bn' ? 'সম্পূর্ণ বাকি' : 'Full Due'}</span>
+                          <span className="text-[10px] font-normal opacity-80">(0%)</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Partial Input Box */}
+                    {newProduct.payment_type === 'partial' && (
+                      <div className="p-3 rounded-xl bg-white dark:bg-[#09090b] border border-amber-500/30 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="font-bold text-slate-700 dark:text-zinc-300 text-xs">
+                            {lang === 'bn' ? 'পরিশোধিত অর্থ (৳):' : 'Amount Paid (৳):'}
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewProduct((prev) => ({ ...prev, payment_type: 'partial', paid_amount: String(Math.round(totalCost * 0.5)) }));
+                              }}
+                              className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-xs font-bold text-slate-700 dark:text-zinc-300 cursor-pointer"
+                            >
+                              50%
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewProduct((prev) => ({ ...prev, payment_type: 'partial', paid_amount: String(Math.round(totalCost * 0.25)) }));
+                              }}
+                              className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-xs font-bold text-slate-700 dark:text-zinc-300 cursor-pointer"
+                            >
+                              25%
+                            </button>
+                          </div>
+                        </div>
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          value={newProduct.paid_amount}
+                          onChange={(e) => setNewProduct((prev) => ({ ...prev, payment_type: 'partial', paid_amount: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-500">{lang === 'bn' ? 'সাপ্লায়ার বাকি থাকবে:' : 'Remaining Due:'}</span>
+                          <span className="font-bold text-amber-600 dark:text-amber-400">
+                            ৳{Math.max(0, totalCost - (parseFloat(newProduct.paid_amount) || 0)).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Due message */}
+                    {newProduct.payment_type === 'due' && (
+                      <div className="px-3.5 py-2 rounded-xl bg-red-500/5 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center justify-between font-medium">
+                        <span>{lang === 'bn' ? 'সম্পূর্ণ বিল বাকি রাখা হবে' : 'Full cost will be recorded as supplier due'}</span>
+                        <span className="font-bold text-sm">
+                          ৳{totalCost.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Payment Method Selector */}
+                    {newProduct.payment_type !== 'due' && (
+                      <div className="space-y-1.5">
+                        <label className="font-bold text-slate-700 dark:text-zinc-300 text-xs">
+                          {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
+                        </label>
+                        <Select
+                          value={newProduct.payment_method || 'cash'}
+                          onValueChange={(val) => setNewProduct((prev) => ({ ...prev, payment_method: val }))}
+                        >
+                          <SelectTrigger className="w-full bg-white dark:bg-[#09090b] h-9 text-xs font-medium rounded-xl">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="cash">{lang === 'bn' ? 'ক্যাশ / নগদ (Cash)' : 'Cash'}</SelectItem>
+                            <SelectItem value="bkash">{lang === 'bn' ? 'বিকাশ (bKash)' : 'bKash'}</SelectItem>
+                            <SelectItem value="nagad">{lang === 'bn' ? 'নগদ (Nagad)' : 'Nagad'}</SelectItem>
+                            <SelectItem value="rocket">{lang === 'bn' ? 'রকেট (Rocket)' : 'Rocket'}</SelectItem>
+                            <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার (Bank Transfer)' : 'Bank Transfer'}</SelectItem>
+                            <SelectItem value="card">{lang === 'bn' ? 'কার্ড (Card)' : 'Card'}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* MODAL FOOTER BUTTONS */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-zinc-800 shrink-0">
+                <span className="text-xs text-slate-400">
+                  {lang === 'bn' ? '* চিহ্নিত ঘর আবশ্যক' : '* Required fields'}
+                </span>
+                <div className="flex items-center gap-2.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="h-10 px-4 rounded-xl cursor-pointer text-sm font-semibold"
+                  >
+                    {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-sm h-10 px-5 rounded-xl cursor-pointer shadow-xs gap-2"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>{lang === 'bn' ? 'পণ্য সংরক্ষণ করুন' : 'Save Product'}</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </form>
-          </Card>
+          </div>
         </div>
       )}
 
@@ -1748,7 +2601,7 @@ export default function Products() {
       {/* ---------------------------------------------------- */}
       {isRestockModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <Card className="max-w-lg w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl max-h-[90vh] flex flex-col">
+          <Card className="max-w-2xl w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 shrink-0">
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <ShoppingBag className="w-4 h-4 text-blue-500" />
@@ -1769,11 +2622,27 @@ export default function Products() {
                   value={restockForm.product_id || '__none__'}
                   onValueChange={(val) => {
                     const found = productList.find(p => p.id === val);
+                    const firstVariant = found?.has_variants && found.variants?.[0] ? found.variants[0] : null;
+                    const vItems = (found?.has_variants && Array.isArray(found.variants))
+                      ? found.variants.map((v) => ({
+                          variant_id: v._id || v.id,
+                          variant_name: v.name,
+                          current_stock: Number(v.stock_quantity) || 0,
+                          quantity: 0,
+                          unit_cost: Number(v.cost_price) || Number(found.buyPrice) || 0,
+                          selling_price: Number(v.selling_price) || Number(found.sellPrice) || 0,
+                        }))
+                      : [];
+
                     setRestockForm({
                       ...restockForm,
                       product_id: val === '__none__' ? '' : val,
-                      unit_cost: found ? found.buyPrice : 0,
-                      selling_price: found ? found.sellPrice : 0,
+                      variant_id: firstVariant ? (firstVariant._id || firstVariant.id) : '',
+                      variant_name: firstVariant ? firstVariant.name : '',
+                      restock_mode: vItems.length > 0 ? 'matrix' : 'single',
+                      variant_items: vItems,
+                      unit_cost: firstVariant ? (firstVariant.cost_price || found.buyPrice) : (found ? found.buyPrice : 0),
+                      selling_price: firstVariant ? (firstVariant.selling_price || found.sellPrice) : (found ? found.sellPrice : 0),
                       supplier_id: found?.supplier_id || restockForm.supplier_id || '',
                     });
                   }}
@@ -1785,12 +2654,420 @@ export default function Products() {
                     <SelectItem value="__none__">{lang === 'bn' ? 'পণ্য বেছে নিন...' : 'Choose product...'}</SelectItem>
                     {productList.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.name} (Stock: {p.stock} {p.unit}) — ৳{p.sellPrice}
+                        {p.name} {p.has_variants ? `(${p.variants?.length || 0} Variants)` : `(Stock: ${p.stock} ${p.unit})`} — ৳{p.sellPrice}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* VARIATION RESTOCK MATRIX / SELECTOR (if product has variants) */}
+              {(() => {
+                const sel = productList.find((p) => p.id === restockForm.product_id);
+                if (!sel || !sel.has_variants || !Array.isArray(sel.variants) || sel.variants.length === 0) {
+                  return null;
+                }
+
+                return (
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-3 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
+                        <Layers className="w-4 h-4 text-[#00df89]" />
+                        <span>{lang === 'bn' ? 'ভ্যারিয়েশন স্টক ও ক্রয় ব্যবস্থাপনা' : 'Variation Restock Management'}</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-[#00df89] border border-emerald-500/20 font-mono">
+                          {sel.variants.length} {lang === 'bn' ? 'টি প্রকারভেদ' : 'variants'}
+                        </span>
+                      </div>
+
+                      {/* Mode Toggle */}
+                      <div className="flex items-center bg-slate-200 dark:bg-zinc-800 p-0.5 rounded-lg text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setRestockForm((prev) => ({ ...prev, restock_mode: 'matrix' }))}
+                          className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                            restockForm.restock_mode === 'matrix'
+                              ? 'bg-white dark:bg-zinc-900 text-[#00a86b] dark:text-[#00df89] shadow-xs'
+                              : 'text-slate-600 dark:text-zinc-400'
+                          }`}
+                        >
+                          {lang === 'bn' ? 'সকল ভ্যারিয়েশন টেবিল' : 'All Variants Table'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRestockForm((prev) => ({ ...prev, restock_mode: 'single' }))}
+                          className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                            restockForm.restock_mode === 'single'
+                              ? 'bg-white dark:bg-zinc-900 text-[#00a86b] dark:text-[#00df89] shadow-xs'
+                              : 'text-slate-600 dark:text-zinc-400'
+                          }`}
+                        >
+                          {lang === 'bn' ? 'নির্দিষ্ট একটি ভ্যারিয়েশন' : 'Single Variant'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {restockForm.restock_mode === 'matrix' ? (
+                      <div className="space-y-2.5">
+                        {/* Bulk Fast Fill Controls */}
+                        <div className="p-2 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 flex items-center justify-between flex-wrap gap-2">
+                          <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-[#00df89]" />
+                            {lang === 'bn' ? 'একসাথে মান সেট করুন:' : 'Bulk Fast Fill:'}
+                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                placeholder={lang === 'bn' ? 'সবার জন্য পরিমাণ' : 'Qty for all'}
+                                value={restockBulkQty}
+                                onChange={(e) => setRestockBulkQty(e.target.value)}
+                                className="w-24 px-2 py-1 rounded-md border border-slate-200 dark:border-zinc-800 text-[11px] bg-slate-50 dark:bg-zinc-900 outline-none"
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => applyRestockBulkField('quantity', restockBulkQty)}
+                                className="h-7 px-2 text-[10px] font-semibold cursor-pointer"
+                              >
+                                {lang === 'bn' ? 'সেট' : 'Set'}
+                              </Button>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                placeholder={lang === 'bn' ? 'সবার ক্রয়মূল্য ৳' : 'Cost for all ৳'}
+                                value={restockBulkCost}
+                                onChange={(e) => setRestockBulkCost(e.target.value)}
+                                className="w-24 px-2 py-1 rounded-md border border-slate-200 dark:border-zinc-800 text-[11px] bg-slate-50 dark:bg-zinc-900 outline-none"
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => applyRestockBulkField('unit_cost', restockBulkCost)}
+                                className="h-7 px-2 text-[10px] font-semibold cursor-pointer"
+                              >
+                                {lang === 'bn' ? 'সেট' : 'Set'}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Variants Matrix Table */}
+                        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#09090b]">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-100 dark:bg-zinc-900/80 text-slate-600 dark:text-zinc-400 font-semibold border-b border-slate-200 dark:border-zinc-800 text-[11px]">
+                              <tr>
+                                <th className="p-2.5">{lang === 'bn' ? 'ভ্যারিয়েশন' : 'Variation'}</th>
+                                <th className="p-2.5">{lang === 'bn' ? 'বর্তমান স্টক' : 'Current Stock'}</th>
+                                <th className="p-2.5 w-28">{lang === 'bn' ? '+ নতুন পরিমাণ' : '+ Qty to Add'}</th>
+                                <th className="p-2.5 w-28">{lang === 'bn' ? 'একক ক্রয়মূল্য (৳)' : 'Unit Cost (৳)'}</th>
+                                <th className="p-2.5 w-28">{lang === 'bn' ? 'বিক্রয়মূল্য (৳)' : 'Sell Price (৳)'}</th>
+                                <th className="p-2.5 text-right">{lang === 'bn' ? 'মোট (৳)' : 'Total (৳)'}</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                              {restockForm.variant_items.map((vItem, vIdx) => {
+                                const lineTotal = (Number(vItem.quantity) || 0) * (Number(vItem.unit_cost) || 0);
+                                return (
+                                  <tr key={vIdx} className="hover:bg-slate-50/80 dark:hover:bg-zinc-900/40 transition-colors">
+                                    <td className="p-2.5 font-bold text-slate-900 dark:text-zinc-100">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full bg-[#00df89]" />
+                                        <span>{vItem.variant_name}</span>
+                                      </div>
+                                    </td>
+                                    <td className="p-2.5">
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300">
+                                        {vItem.current_stock} {sel.unit || 'pcs'}
+                                      </span>
+                                    </td>
+                                    <td className="p-2">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={vItem.quantity}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setRestockForm((prev) => ({
+                                            ...prev,
+                                            variant_items: prev.variant_items.map((it, i) =>
+                                              i === vIdx ? { ...it, quantity: val === '' ? '' : Math.max(0, parseInt(val, 10) || 0) } : it
+                                            ),
+                                          }));
+                                        }}
+                                        className="w-full px-2 py-1 h-7 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-500/30 text-emerald-900 dark:text-emerald-300 font-bold outline-none text-xs text-center"
+                                      />
+                                    </td>
+                                    <td className="p-2">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="any"
+                                        value={vItem.unit_cost}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setRestockForm((prev) => ({
+                                            ...prev,
+                                            variant_items: prev.variant_items.map((it, i) =>
+                                              i === vIdx ? { ...it, unit_cost: val === '' ? '' : parseFloat(val) || 0 } : it
+                                            ),
+                                          }));
+                                        }}
+                                        className="w-full px-2 py-1 h-7 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                                      />
+                                    </td>
+                                    <td className="p-2">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="any"
+                                        value={vItem.selling_price}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setRestockForm((prev) => ({
+                                            ...prev,
+                                            variant_items: prev.variant_items.map((it, i) =>
+                                              i === vIdx ? { ...it, selling_price: val === '' ? '' : parseFloat(val) || 0 } : it
+                                            ),
+                                          }));
+                                        }}
+                                        className="w-full px-2 py-1 h-7 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                                      />
+                                    </td>
+                                    <td className="p-2.5 text-right font-mono font-bold text-slate-900 dark:text-white">
+                                      ৳{lineTotal.toLocaleString()}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Add New Variant to this Product on the fly */}
+                        <div className="pt-1">
+                          {showAddNewVariantInRestock ? (
+                            <div className="p-3 rounded-xl bg-white dark:bg-[#09090b] border border-emerald-500/30 space-y-2.5 animate-in fade-in duration-150">
+                              <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center justify-between">
+                                <span>{lang === 'bn' ? '+ নতুন ভ্যারিয়েশন যোগ করুন' : '+ Add New Variation to Product'}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAddNewVariantInRestock(false)}
+                                  className="text-slate-400 hover:text-slate-600"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                                <div>
+                                  <label className="block text-[10px] text-slate-400 mb-0.5">{lang === 'bn' ? 'নাম / রং / সাইজ *' : 'Name / Color / Size *'}</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Yellow, XXL"
+                                    value={newRestockVariantName}
+                                    onChange={(e) => setNewRestockVariantName(e.target.value)}
+                                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-slate-400 mb-0.5">{lang === 'bn' ? '+ রিস্টক পরিমাণ' : '+ Restock Qty'}</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={newRestockVariantQty}
+                                    onChange={(e) => setNewRestockVariantQty(e.target.value)}
+                                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-slate-400 mb-0.5">{lang === 'bn' ? 'ক্রয়মূল্য ৳' : 'Unit Cost ৳'}</label>
+                                  <input
+                                    type="number"
+                                    placeholder={`৳${sel.buyPrice}`}
+                                    value={newRestockVariantCost}
+                                    onChange={(e) => setNewRestockVariantCost(e.target.value)}
+                                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-slate-400 mb-0.5">{lang === 'bn' ? 'বিক্রয়মূল্য ৳' : 'Sell Price ৳'}</label>
+                                  <input
+                                    type="number"
+                                    placeholder={`৳${sel.sellPrice}`}
+                                    value={newRestockVariantSell}
+                                    onChange={(e) => setNewRestockVariantSell(e.target.value)}
+                                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-end gap-2 pt-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setShowAddNewVariantInRestock(false)}
+                                  className="h-7 text-xs"
+                                >
+                                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={handleAddNewVariantToRestock}
+                                  className="h-7 text-xs bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold"
+                                >
+                                  {lang === 'bn' ? 'যোগ করুন' : 'Add to List'}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAddNewVariantInRestock(true);
+                                setNewRestockVariantCost(String(sel.buyPrice || ''));
+                                setNewRestockVariantSell(String(sel.sellPrice || ''));
+                              }}
+                              className="text-xs font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>{lang === 'bn' ? '+ এই পণ্যে নতুন একটি ভ্যারিয়েশন যোগ করে রিস্টক করুন' : '+ Add New Variation to this Product & Restock'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Single Variant Selector Mode */
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block font-bold text-slate-800 dark:text-zinc-200 mb-1">
+                            {lang === 'bn' ? 'নির্দিষ্ট ভ্যারিয়েশন নির্বাচন করুন *' : 'Select Product Variation *'}
+                          </label>
+                          <Select
+                            value={restockForm.variant_id || '__none__'}
+                            onValueChange={(val) => {
+                              const v = sel.variants.find((vr) => String(vr._id || vr.id) === String(val));
+                              setRestockForm({
+                                ...restockForm,
+                                variant_id: val === '__none__' ? '' : val,
+                                variant_name: v ? v.name : '',
+                                unit_cost: v ? (v.cost_price || sel.buyPrice) : sel.buyPrice,
+                                selling_price: v ? (v.selling_price || sel.sellPrice) : sel.sellPrice,
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="w-full bg-white dark:bg-[#09090b]">
+                              <SelectValue placeholder={lang === 'bn' ? 'ভ্যারিয়েশন নির্বাচন করুন...' : 'Select variation...'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {sel.variants.map((v) => (
+                                <SelectItem key={v._id || v.id} value={v._id || v.id}>
+                                  {v.name} (Stock: {v.stock_quantity || 0} {sel.unit}) — ৳{v.selling_price || sel.sellPrice}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Single Variant Inputs */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                              {lang === 'bn' ? 'নতুন স্টক পরিমাণ *' : 'Qty to Add *'}
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={restockForm.quantity}
+                              onChange={(e) => setRestockForm({ ...restockForm, quantity: e.target.value })}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                              {lang === 'bn' ? 'প্রতি একক ক্রয়মূল্য (৳)' : 'Unit Cost (৳)'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={restockForm.unit_cost}
+                              onChange={(e) => setRestockForm({ ...restockForm, unit_cost: e.target.value })}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                              {lang === 'bn' ? 'বিক্রয়মূল্য (৳)' : 'Sell Price (৳)'}
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={restockForm.selling_price}
+                              onChange={(e) => setRestockForm({ ...restockForm, selling_price: e.target.value })}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Standard inputs if selected product has NO variants */}
+              {(() => {
+                const sel = productList.find((p) => p.id === restockForm.product_id);
+                if (sel && (!sel.has_variants || !Array.isArray(sel.variants) || sel.variants.length === 0)) {
+                  return (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                          {lang === 'bn' ? 'নতুন স্টক পরিমাণ *' : 'Qty to Add *'}
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          value={restockForm.quantity}
+                          onChange={(e) => setRestockForm({ ...restockForm, quantity: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                          {lang === 'bn' ? 'প্রতি একক ক্রয়মূল্য (৳)' : 'Unit Cost (৳)'}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={restockForm.unit_cost}
+                          onChange={(e) => setRestockForm({ ...restockForm, unit_cost: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                          {lang === 'bn' ? 'বিক্রয়মূল্য (৳)' : 'Sell Price (৳)'}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={restockForm.selling_price}
+                          onChange={(e) => setRestockForm({ ...restockForm, selling_price: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {/* Supplier with Inline Creator */}
               <div>
@@ -1864,49 +3141,6 @@ export default function Products() {
                     </SelectContent>
                   </Select>
                 )}
-              </div>
-
-              {/* Quantity, Unit Cost, Total */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                    {lang === 'bn' ? 'নতুন স্টক পরিমাণ *' : 'Qty to Add *'}
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={restockForm.quantity}
-                    onChange={(e) => setRestockForm({ ...restockForm, quantity: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                    {lang === 'bn' ? 'প্রতি একক ক্রয়মূল্য (৳)' : 'Unit Cost (৳)'}
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={restockForm.unit_cost}
-                    onChange={(e) => setRestockForm({ ...restockForm, unit_cost: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                    {lang === 'bn' ? 'বিক্রয়মূল্য (৳)' : 'Sell Price (৳)'}
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={restockForm.selling_price}
-                    onChange={(e) => setRestockForm({ ...restockForm, selling_price: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
-                  />
-                </div>
               </div>
 
               {/* Total Calculation & Payment Method */}
@@ -2311,7 +3545,7 @@ export default function Products() {
                   <input
                     type="number"
                     value={editForm.buyPrice}
-                    onChange={(e) => setEditForm({ ...editForm, buyPrice: e.target.value })}
+                    onChange={(e) => handleEditProductBuyPriceChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
                   />
                 </div>
@@ -2321,20 +3555,213 @@ export default function Products() {
                     type="number"
                     required
                     value={editForm.sellPrice}
-                    onChange={(e) => setEditForm({ ...editForm, sellPrice: e.target.value })}
+                    onChange={(e) => handleEditProductSellPriceChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none focus:ring-2 focus:ring-[#00df89]"
                   />
                 </div>
               </div>
 
+              {/* Product Variations Toggle in Edit Modal */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-[#00df89]" />
+                    <div>
+                      <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                        {lang === 'bn' ? 'পণ্যের ভ্যারিয়েশন (রং, সাইজ ইত্যাদি)' : 'Product Variations'}
+                      </h4>
+                      <p className="text-[10px] text-slate-500">
+                        {lang === 'bn' ? 'আলাদা রং বা সাইজ অনুযায়ী কাস্টম স্টক ও মূল্য' : 'Custom stock & prices per color/size'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !editForm.has_variants;
+                      let newVars = editForm.variants || [];
+                      if (next && newVars.length === 0) {
+                        newVars = [
+                          {
+                            name: 'Standard',
+                            attributes: [],
+                            sku: editForm.sku || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+                            cost_price: parseFloat(editForm.buyPrice) || 0,
+                            selling_price: parseFloat(editForm.sellPrice) || 0,
+                            stock_quantity: parseInt(editForm.stock, 10) || 0,
+                            low_stock_threshold: parseInt(editForm.lowStockThreshold, 10) || 5,
+                          }
+                        ];
+                      }
+                      setEditForm({ ...editForm, has_variants: next, variants: newVars });
+                    }}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                      editForm.has_variants ? 'bg-[#00df89]' : 'bg-slate-300 dark:bg-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                        editForm.has_variants ? 'translate-x-4 bg-[#011812]' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* If Variations Enabled in Edit Modal */}
+                {editForm.has_variants && (
+                  <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-[11px] text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                        <Boxes className="w-3.5 h-3.5 text-[#00df89]" />
+                        {lang === 'bn' ? `ভ্যারিয়েশনসমূহ (${editForm.variants.length} টি):` : `Variants List (${editForm.variants.length}):`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const baseCost = parseFloat(editForm.buyPrice) || 0;
+                          const baseSell = parseFloat(editForm.sellPrice) || 0;
+                          const newVar = {
+                            name: `Variant ${editForm.variants.length + 1}`,
+                            attributes: [],
+                            sku: `SKU-${Math.floor(1000 + Math.random() * 9000)}-V${editForm.variants.length + 1}`,
+                            barcode: generateUniqueBarcode('21'),
+                            cost_price: baseCost,
+                            selling_price: baseSell,
+                            stock_quantity: 0,
+                            low_stock_threshold: 5,
+                          };
+                          setEditForm({ ...editForm, variants: [...editForm.variants, newVar] });
+                        }}
+                        className="text-[10px] font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <Plus className="w-2.5 h-2.5" />
+                        {lang === 'bn' ? '+ নতুন ভ্যারিয়েশন' : '+ Add Variant'}
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                      {editForm.variants.map((v, vIdx) => (
+                        <div key={v._id || vIdx} className="p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-xs shadow-2xs">
+                          <div className="flex items-center justify-between gap-1.5">
+                            <input
+                              type="text"
+                              placeholder="Variant Name (e.g. Red / XL)"
+                              value={v.name}
+                              onChange={(e) => {
+                                const updated = [...editForm.variants];
+                                updated[vIdx] = { ...updated[vIdx], name: e.target.value };
+                                setEditForm({ ...editForm, variants: updated });
+                              }}
+                              className="flex-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-bold"
+                            />
+                            
+                            <div className="flex items-center gap-1">
+                              <div className="flex items-center px-1.5 py-0.5 rounded-md bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
+                                <input
+                                  type="text"
+                                  placeholder="Barcode"
+                                  value={v.barcode || ''}
+                                  onChange={(e) => {
+                                    const updated = [...editForm.variants];
+                                    updated[vIdx] = { ...updated[vIdx], barcode: e.target.value };
+                                    setEditForm({ ...editForm, variants: updated });
+                                  }}
+                                  className="w-24 bg-transparent outline-none font-mono text-[11px]"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = [...editForm.variants];
+                                    updated[vIdx] = { ...updated[vIdx], barcode: generateUniqueBarcode('21') };
+                                    setEditForm({ ...editForm, variants: updated });
+                                  }}
+                                  title="Auto generate barcode"
+                                  className="text-slate-400 hover:text-[#00df89] cursor-pointer ml-0.5"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                </button>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = editForm.variants.filter((_, i) => i !== vIdx);
+                                  setEditForm({ ...editForm, variants: updated });
+                                }}
+                                className="p-1 text-slate-400 hover:text-rose-500 rounded cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="text-[10px] text-slate-500 dark:text-zinc-400">Cost (৳)</label>
+                              <input
+                                type="number"
+                                value={v.cost_price}
+                                onChange={(e) => {
+                                  const updated = [...editForm.variants];
+                                  updated[vIdx] = { ...updated[vIdx], cost_price: e.target.value };
+                                  setEditForm({ ...editForm, variants: updated });
+                                }}
+                                className="w-full px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-slate-500 dark:text-zinc-400">Selling (৳)</label>
+                              <input
+                                type="number"
+                                value={v.selling_price}
+                                onChange={(e) => {
+                                  const updated = [...editForm.variants];
+                                  updated[vIdx] = { ...updated[vIdx], selling_price: e.target.value };
+                                  setEditForm({ ...editForm, variants: updated });
+                                }}
+                                className="w-full px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold text-[#00a86b] dark:text-[#00df89]"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-slate-500 dark:text-zinc-400">Stock (Qty)</label>
+                              <input
+                                type="number"
+                                value={v.stock_quantity}
+                                onChange={(e) => {
+                                  const updated = [...editForm.variants];
+                                  updated[vIdx] = { ...updated[vIdx], stock_quantity: e.target.value };
+                                  setEditForm({ ...editForm, variants: updated });
+                                }}
+                                className="w-full px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between text-xs font-bold">
+                      <span className="text-slate-700 dark:text-zinc-300">
+                        {lang === 'bn' ? 'মোট সামগ্রিক স্টক:' : 'Total Combined Stock:'}
+                      </span>
+                      <span className="text-emerald-600 dark:text-[#00df89]">
+                        {editForm.variants.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0)} Pcs
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Stock inputs - Always Visible */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">Stock Quantity</label>
                   <input
                     type="number"
                     value={editForm.stock}
-                    onChange={(e) => setEditForm({ ...editForm, stock: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
+                    onChange={(e) => handleEditProductStockChange(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none font-bold"
                   />
                 </div>
                 <div>
@@ -2342,7 +3769,7 @@ export default function Products() {
                   <input
                     type="number"
                     value={editForm.lowStockThreshold}
-                    onChange={(e) => setEditForm({ ...editForm, lowStockThreshold: e.target.value })}
+                    onChange={(e) => handleEditProductLowStockChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none"
                   />
                 </div>
@@ -2359,9 +3786,14 @@ export default function Products() {
 
               {/* Supplier Stock Purchase Payment Section in Edit Modal */}
               {editForm.supplier_id && (() => {
-                const curStock = parseInt(editForm.stock, 10) || 0;
+                const hasVars = Boolean(editForm.has_variants);
+                const curStock = hasVars
+                  ? editForm.variants.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0)
+                  : (parseInt(editForm.stock, 10) || 0);
                 const curCost = parseFloat(editForm.buyPrice) || 0;
-                const newTotalCost = curStock * curCost;
+                const newTotalCost = hasVars
+                  ? editForm.variants.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0) * (parseFloat(v.cost_price) || curCost), 0)
+                  : (curStock * curCost);
                 const prevStock = editForm.initial_stock || 0;
                 const prevCost = editForm.initial_buy_price || 0;
                 const prevTotalCost = prevStock * prevCost;
@@ -2906,6 +4338,135 @@ export default function Products() {
         cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
         onConfirm={handleConfirmDeleteOption}
         onCancel={() => setDeleteOptionModal({ isOpen: false, type: '', id: null, name: '', isLoading: false })}
+      />
+
+      {/* ---------------------------------------------------- */}
+      {/* QUICK VIEW PRODUCT VARIATIONS MODAL                  */}
+      {/* ---------------------------------------------------- */}
+      {selectedVariantProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <Card className="max-w-xl w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl max-h-[85vh] flex flex-col space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-[#00df89] flex items-center justify-center">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                    {selectedVariantProduct.name} — {lang === 'bn' ? 'ভ্যারিয়েশন তালিকা' : 'Variants Breakdown'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {lang === 'bn' ? 'মোট ভ্যারিয়েশন:' : 'Total Variations:'} {selectedVariantProduct.variants?.length || 0} | {lang === 'bn' ? 'মোট স্টক:' : 'Aggregate Stock:'} {selectedVariantProduct.stock} {selectedVariantProduct.unit}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedVariantProduct(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800 flex-1">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400">
+                    <th className="py-2.5 px-3 font-semibold">{lang === 'bn' ? 'ভ্যারিয়েশন' : 'Variant'}</th>
+                    <th className="py-2.5 px-3 font-semibold">SKU</th>
+                    <th className="py-2.5 px-3 font-semibold">{lang === 'bn' ? 'ক্রয় (৳)' : 'Cost (৳)'}</th>
+                    <th className="py-2.5 px-3 font-semibold">{lang === 'bn' ? 'বিক্রয় (৳)' : 'Price (৳)'}</th>
+                    <th className="py-2.5 px-3 font-semibold">{lang === 'bn' ? 'স্টক' : 'Stock'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60 bg-white dark:bg-[#09090b]">
+                  {selectedVariantProduct.variants?.map((v) => (
+                    <tr key={v._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
+                      <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
+                        {v.name}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-500">
+                        {v.sku || selectedVariantProduct.sku || 'N/A'}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-zinc-400">
+                        ৳ {(v.cost_price ?? selectedVariantProduct.buyPrice).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-[#00a86b] dark:text-[#00df89]">
+                        ৳ {(v.selling_price ?? selectedVariantProduct.sellPrice).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <Badge
+                          variant={v.stock_quantity <= 0 ? 'destructive' : v.stock_quantity <= (v.low_stock_threshold || 5) ? 'warning' : 'default'}
+                          className="font-mono text-[10px]"
+                        >
+                          {v.stock_quantity} {selectedVariantProduct.unit}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between items-center pt-2 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const p = selectedVariantProduct;
+                    setSelectedVariantProduct(null);
+                    setBarcodeModalProducts([p]);
+                    setIsBarcodeModalOpen(true);
+                  }}
+                  className="text-xs gap-1.5 cursor-pointer border-emerald-500/30 text-[#00a86b] dark:text-[#00df89] hover:bg-emerald-500/10"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>{lang === 'bn' ? 'বারকোড লেবেল প্রিন্ট' : 'Print Barcode Labels'}</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const p = selectedVariantProduct;
+                    setSelectedVariantProduct(null);
+                    handleOpenEdit(p);
+                  }}
+                  className="text-xs gap-1.5 cursor-pointer"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>{lang === 'bn' ? 'ভ্যারিয়েশন এডিট' : 'Edit Variations'}</span>
+                </Button>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setSelectedVariantProduct(null)}
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold cursor-pointer"
+              >
+                {lang === 'bn' ? 'বন্ধ করুন' : 'Close'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* 6. BARCODE & PRODUCT LABEL PRINT STUDIO MODAL        */}
+      {/* ---------------------------------------------------- */}
+      <BarcodeLabelModal
+        isOpen={isBarcodeModalOpen}
+        onClose={() => {
+          setIsBarcodeModalOpen(false);
+          setBarcodeModalProducts([]);
+        }}
+        initialProducts={barcodeModalProducts}
+        allProducts={productList}
+        shopInfo={mongoShop || activeShop || { name: 'Shopo Store' }}
+        lang={lang}
       />
 
     </div>
