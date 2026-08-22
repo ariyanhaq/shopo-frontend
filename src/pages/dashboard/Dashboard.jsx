@@ -24,8 +24,7 @@ import {
   ExpiringProductsWidget,
   GymAttendanceWidget,
   KitchenQueueWidget,
-  GoldRateWidget,
-  ClothingVariantsWidget
+  GoldRateWidget
 } from '@/components/dashboard/IndustryWidgets';
 
 export default function Dashboard() {
@@ -580,7 +579,6 @@ export default function Dashboard() {
           {isGym && activeShop.widgets.includes('gym_members_queue') && <GymAttendanceWidget />}
           {currentBusinessType === 'restaurant' && activeShop.widgets.includes('kitchen_live_queue') && <KitchenQueueWidget />}
           {currentBusinessType === 'jewelry' && activeShop.widgets.includes('gold_rate_ticker') && <GoldRateWidget />}
-          {currentBusinessType === 'clothing' && activeShop.widgets.includes('clothing_variants') && <ClothingVariantsWidget />}
         </div>
       )}
 

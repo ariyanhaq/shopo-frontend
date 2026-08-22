@@ -334,3 +334,5 @@ export function SelectLabel({ children, className }) {
 export function SelectSeparator({ className }) {
   return <div className={cn("my-1 h-px bg-slate-100 dark:bg-zinc-800", className)} />;
 }
+
+export default Select;

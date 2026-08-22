@@ -2,7 +2,7 @@
  * @file AddProduct.jsx
  * @description Dedicated Add Product page for inventory management saving directly to MongoDB with inline Category & Supplier creation.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
 import { useShop } from '@/context/ShopContext';
@@ -236,9 +236,10 @@ export default function AddProduct() {
   // Product Variations State
   const [hasVariants, setHasVariants] = useState(false);
   const [variationOptions, setVariationOptions] = useState([
-    { name: 'Color', values: ['Red', 'Blue', 'Black'] },
+    { name: 'Color', values: ['RED', 'BLUE', 'BLACK'] },
   ]);
   const [variants, setVariants] = useState([]);
+  const attrEndRef = useRef(null);
 
   // Preset attribute suggestions
   const attributePresets = [
@@ -248,7 +249,7 @@ export default function AddProduct() {
     { name: 'Storage / RAM', values: ['64GB', '128GB', '256GB'] },
   ];
 
-  // Generate Cartesian Product of Attributes
+  // Generate Cartesian Combinations for Variants Matrix
   const generateCombinations = () => {
     const validOptions = variationOptions.filter((opt) => opt.name.trim() && opt.values.length > 0);
     if (validOptions.length === 0) {
@@ -265,9 +266,8 @@ export default function AddProduct() {
     const valuesArrays = validOptions.map((opt) => opt.values);
     const combinations = cartesian(valuesArrays);
 
-    const baseCost = parseFloat(form.cost_price) || 0;
-    const baseSell = parseFloat(form.selling_price) || 0;
-    const baseStock = parseInt(form.stock_quantity, 10) || 0;
+    const costPrice = parseFloat(form.cost_price) || 0;
+    const sellPrice = parseFloat(form.selling_price) || costPrice;
     const basePrefix = form.name ? form.name.slice(0, 3).toUpperCase() : 'SKU';
 
     const newVariants = combinations.map((combo, idx) => {
@@ -279,15 +279,14 @@ export default function AddProduct() {
       const variantSku = `${basePrefix}-${Math.floor(1000 + Math.random() * 9000)}-V${idx + 1}`;
 
       return {
-        id: `var_${Date.now()}_${idx}`,
         name: comboName,
         attributes: variantAttrs,
+        cost_price: costPrice,
+        selling_price: sellPrice,
+        stock_quantity: 0,
+        low_stock_threshold: 5,
         sku: variantSku,
-        barcode: '',
-        cost_price: baseCost,
-        selling_price: baseSell,
-        stock_quantity: baseStock,
-        low_stock_threshold: form.low_stock_threshold || 5,
+        barcode: generateUniqueBarcode('20'),
       };
     });
 
@@ -302,10 +301,16 @@ export default function AddProduct() {
         toast.error(lang === 'bn' ? 'এই বৈশিষ্ট্যটি ইতিমধ্যে যুক্ত আছে।' : 'Attribute already added.');
         return;
       }
-      setVariationOptions([...variationOptions, { name: preset.name, values: [...preset.values] }]);
+      setVariationOptions([...variationOptions, { name: preset.name, values: [] }]);
     } else {
       setVariationOptions([...variationOptions, { name: '', values: [] }]);
     }
+
+    setTimeout(() => {
+      if (attrEndRef.current) {
+        attrEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 80);
   };
 
   // Remove an Attribute Group
@@ -325,7 +330,7 @@ export default function AddProduct() {
     const updated = [...variationOptions];
     const vals = valStr
       .split(',')
-      .map((v) => v.trim())
+      .map((v) => v.trim().toUpperCase())
       .filter((v) => v.length > 0);
     updated[index].values = vals;
     setVariationOptions(updated);
@@ -917,7 +922,11 @@ export default function AddProduct() {
                   {/* Attribute Option Rows */}
                   <div className="space-y-2 pt-1">
                     {variationOptions.map((opt, idx) => (
-                      <div key={idx} className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-900/60 p-2 rounded-lg border border-slate-200/60 dark:border-zinc-800">
+                      <div
+                        key={idx}
+                        ref={idx === variationOptions.length - 1 ? attrEndRef : null}
+                        className="flex items-center gap-2 bg-slate-50 dark:bg-zinc-900/60 p-2 rounded-lg border border-slate-200/60 dark:border-zinc-800"
+                      >
                         <div className="w-1/3">
                           <input
                             type="text"
@@ -930,10 +939,10 @@ export default function AddProduct() {
                         <div className="flex-1">
                           <input
                             type="text"
-                            placeholder="Values comma-separated: e.g. Red, Blue, Green"
+                            placeholder="Values comma-separated: e.g. RED, BLUE, GREEN"
                             value={opt.values.join(', ')}
                             onChange={(e) => handleUpdateOptionValues(idx, e.target.value)}
-                            className="w-full px-2.5 py-1.5 rounded-md bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
+                            className="w-full px-2.5 py-1.5 rounded-md bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs uppercase placeholder:normal-case text-slate-900 dark:text-white outline-none"
                           />
                         </div>
                         <button
@@ -946,6 +955,7 @@ export default function AddProduct() {
                         </button>
                       </div>
                     ))}
+                    <div ref={attrEndRef} className="h-0" />
                   </div>
 
                   {/* Generate Button */}

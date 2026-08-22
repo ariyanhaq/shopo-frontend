@@ -2,7 +2,7 @@
  * @file Products.jsx
  * @description Comprehensive Products catalog & Inventory management with Live DB sync, Category-wise sorting, Category filters, Edit product modal, and Inline Category creation.
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useShop } from '@/context/ShopContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -89,6 +89,7 @@ export default function Products() {
   const [showEditSuppInline, setShowEditSuppInline] = useState(false);
   const [newSuppData, setNewSuppData] = useState({ name: '', phone: '', company_name: '', address: '' });
   const [isCreatingSupp, setIsCreatingSupp] = useState(false);
+  const newAttrEndRef = useRef(null);
 
   // New Product Form State
   const [newProduct, setNewProduct] = useState({
@@ -183,6 +184,13 @@ export default function Products() {
         variation_options: [...(prev.variation_options || []), { name: '', values: [] }]
       }));
     }
+
+    // Scroll down to the newly added attribute smoothly
+    setTimeout(() => {
+      if (newAttrEndRef.current) {
+        newAttrEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 80);
   };
 
   const handleRemoveNewProductAttrGroup = (index) => {
@@ -194,10 +202,14 @@ export default function Products() {
 
   const handleAddNewProductOptionValue = (optIndex, val) => {
     if (!val || !val.trim()) return;
+    const upperVal = String(val).trim().toUpperCase();
     setNewProduct(prev => {
       const updated = [...(prev.variation_options || [])];
-      if (!updated[optIndex].values.includes(val.trim())) {
-        updated[optIndex].values.push(val.trim());
+      if (updated[optIndex] && !updated[optIndex].values.includes(upperVal)) {
+        updated[optIndex] = {
+          ...updated[optIndex],
+          values: [...updated[optIndex].values, upperVal],
+        };
       }
       return { ...prev, variation_options: updated };
     });
@@ -2231,7 +2243,11 @@ export default function Products() {
                       ) : (
                         <div className="space-y-2.5">
                           {newProduct.variation_options.map((opt, optIdx) => (
-                            <div key={optIdx} className="p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/70 dark:border-zinc-800 space-y-2 text-sm">
+                            <div
+                              key={optIdx}
+                              ref={optIdx === newProduct.variation_options.length - 1 ? newAttrEndRef : null}
+                              className="p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/70 dark:border-zinc-800 space-y-2 text-sm"
+                            >
                               <div className="flex items-center justify-between gap-2">
                                 <input
                                   type="text"
@@ -2260,7 +2276,7 @@ export default function Products() {
                                     {opt.values.map((val, valIdx) => (
                                       <span
                                         key={valIdx}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30"
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30 uppercase"
                                       >
                                         {val}
                                         <button
@@ -2276,7 +2292,7 @@ export default function Products() {
                                 )}
                                 <input
                                   type="text"
-                                  placeholder={lang === 'bn' ? 'মান লিখে Enter চাপুন (যেমন: Red, Blue, L)...' : 'Type value and press Enter...'}
+                                  placeholder={lang === 'bn' ? 'মান লিখে Enter চাপুন (যেমন: RED, BLUE, L)...' : 'Type value and press Enter...'}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ',') {
                                       e.preventDefault();
@@ -2284,11 +2300,12 @@ export default function Products() {
                                       e.currentTarget.value = '';
                                     }
                                   }}
-                                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-sm outline-none focus:ring-1 focus:ring-[#00df89]"
+                                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-sm uppercase placeholder:normal-case outline-none focus:ring-1 focus:ring-[#00df89]"
                                 />
                               </div>
                             </div>
                           ))}
+                          <div ref={newAttrEndRef} className="h-0" />
                         </div>
                       )}
 

@@ -298,6 +298,7 @@ export default function Purchases() {
     { name: 'Pages / Type', values: ['100 Pages', '200 Pages', '300 Pages'] },
     { name: 'Storage / RAM', values: ['64GB', '128GB', '256GB'] },
   ];
+  const quickAttrEndRef = useRef(null);
 
   // Open Quick Add Product Modal
   const handleOpenQuickAddProduct = (rowIndex, mode = 'create') => {
@@ -314,7 +315,7 @@ export default function Purchases() {
       isSubmitting: false,
       has_variants: false,
       variation_options: [
-        { name: 'Color', values: ['Red', 'Blue', 'Black'] },
+        { name: 'Color', values: ['RED', 'BLUE', 'BLACK'] },
       ],
       variants: [],
     });
@@ -370,7 +371,7 @@ export default function Purchases() {
     if (preset) {
       setQuickProductModal(prev => ({
         ...prev,
-        variation_options: [...(prev.variation_options || []), { name: preset.name, values: [...preset.values] }]
+        variation_options: [...(prev.variation_options || []), { name: preset.name, values: [] }]
       }));
     } else {
       setQuickProductModal(prev => ({
@@ -378,6 +379,12 @@ export default function Purchases() {
         variation_options: [...(prev.variation_options || []), { name: `Attribute ${(prev.variation_options?.length || 0) + 1}`, values: [] }]
       }));
     }
+
+    setTimeout(() => {
+      if (quickAttrEndRef.current) {
+        quickAttrEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 80);
   };
 
   const handleRemoveQuickProductAttrGroup = (index) => {
@@ -389,10 +396,14 @@ export default function Purchases() {
 
   const handleAddQuickProductOptionValue = (optIndex, val) => {
     if (!val || !val.trim()) return;
+    const upperVal = String(val).trim().toUpperCase();
     setQuickProductModal(prev => {
       const updated = [...(prev.variation_options || [])];
-      if (!updated[optIndex].values.includes(val.trim())) {
-        updated[optIndex].values.push(val.trim());
+      if (updated[optIndex] && !updated[optIndex].values.includes(upperVal)) {
+        updated[optIndex] = {
+          ...updated[optIndex],
+          values: [...updated[optIndex].values, upperVal],
+        };
       }
       return { ...prev, variation_options: updated };
     });
@@ -2788,7 +2799,11 @@ export default function Purchases() {
                       {/* Attribute Rows */}
                       <div className="space-y-1.5">
                         {(quickProductModal.variation_options || []).map((opt, optIdx) => (
-                          <div key={optIdx} className="p-2 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800 space-y-1 text-xs">
+                          <div
+                            key={optIdx}
+                            ref={optIdx === (quickProductModal.variation_options || []).length - 1 ? quickAttrEndRef : null}
+                            className="p-2 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800 space-y-1 text-xs"
+                          >
                             <div className="flex items-center justify-between gap-2">
                               <input
                                 type="text"
@@ -2816,7 +2831,7 @@ export default function Purchases() {
                                 {opt.values.map((val, valIdx) => (
                                   <span
                                     key={valIdx}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30"
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30 uppercase"
                                   >
                                     {val}
                                     <button
@@ -2831,7 +2846,7 @@ export default function Purchases() {
                               </div>
                               <input
                                 type="text"
-                                placeholder={lang === 'bn' ? 'মান লিখে Enter চাপুন (e.g. Red, Blue, XL)...' : 'Type value and press Enter...'}
+                                placeholder={lang === 'bn' ? 'মান লিখে Enter চাপুন (e.g. RED, BLUE, XL)...' : 'Type value and press Enter...'}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' || e.key === ',') {
                                     e.preventDefault();
@@ -2839,11 +2854,12 @@ export default function Purchases() {
                                     e.currentTarget.value = '';
                                   }
                                 }}
-                                className="w-full px-2 py-1 rounded bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-1 focus:ring-[#00df89]"
+                                className="w-full px-2 py-1 rounded bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs uppercase placeholder:normal-case outline-none focus:ring-1 focus:ring-[#00df89]"
                               />
                             </div>
                           </div>
                         ))}
+                        <div ref={quickAttrEndRef} className="h-0" />
                       </div>
 
                       <Button

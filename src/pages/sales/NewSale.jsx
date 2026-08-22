@@ -13,6 +13,7 @@ import { Card, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { VariantPickerModal } from '@/components/common';
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, CheckCircle2,
   DollarSign, ArrowLeft, Printer, FileText, Smartphone, CreditCard,
@@ -220,7 +221,9 @@ export default function NewSale() {
 
   // Add Specific Variant to Cart
   const handleAddVariantToCart = (parentProd, variant) => {
-    const cartKey = `${parentProd.id}_${variant._id}`;
+    const parentId = parentProd.id || parentProd._id;
+    const variantId = variant._id || variant.id;
+    const cartKey = `${parentId}_${variantId}`;
     const existing = cart.find((item) => item.cart_id === cartKey || item.id === cartKey);
     if (existing) {
       setCart(
@@ -234,8 +237,8 @@ export default function NewSale() {
         {
           cart_id: cartKey,
           id: cartKey,
-          product_id: parentProd.id,
-          variant_id: variant._id,
+          product_id: parentId,
+          variant_id: variantId,
           variant_name: variant.name,
           name: `${parentProd.name} (${variant.name})`,
           sku: variant.sku || parentProd.sku,
@@ -245,8 +248,15 @@ export default function NewSale() {
         },
       ]);
     }
-    setVariantPickerProduct(null);
     toast.success(lang === 'bn' ? `'${variant.name}' কার্টে যুক্ত হয়েছে!` : `Added '${variant.name}' to cart!`);
+  };
+
+  // Update Specific Variant Quantity in Cart
+  const handleUpdateVariantQty = (parentProd, variant, delta) => {
+    const parentId = parentProd.id || parentProd._id;
+    const variantId = variant._id || variant.id;
+    const cartKey = `${parentId}_${variantId}`;
+    handleUpdateQty(cartKey, delta);
   };
 
   // Update Item Quantity in Cart
@@ -1326,86 +1336,16 @@ export default function NewSale() {
       {/* ---------------------------------------------------- */}
       {/* VARIANT PICKER MODAL                                 */}
       {/* ---------------------------------------------------- */}
-      {variantPickerProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <Card className="max-w-md w-full p-5 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-[#00df89] flex items-center justify-center">
-                  <Layers className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                      {variantPickerProduct.name}
-                    </h3>
-                    {(() => {
-                      const totalModalStock = (variantPickerProduct.variants && variantPickerProduct.variants.length > 0)
-                        ? variantPickerProduct.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0)
-                        : (Number(variantPickerProduct.stock || variantPickerProduct.stock_quantity) || 0);
-                      return (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-[#00df89] border border-emerald-500/20">
-                          {totalModalStock} {variantPickerProduct.unit ? (variantPickerProduct.unit === 'piece' ? 'pcs' : variantPickerProduct.unit) : 'pcs'} {lang === 'bn' ? 'স্টক' : 'in stock'}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    {lang === 'bn' ? 'কার্টে যুক্ত করতে ভ্যারিয়েশন বেছে নিন:' : 'Select variation to add to memo:'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setVariantPickerProduct(null)}
-                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              {variantPickerProduct.variants?.map((v) => (
-                <div
-                  key={v._id}
-                  onClick={() => handleAddVariantToCart(variantPickerProduct, v)}
-                  className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800/80 hover:border-[#00df89] hover:bg-emerald-50/20 dark:hover:bg-emerald-950/20 transition-all flex items-center justify-between cursor-pointer group"
-                >
-                  <div>
-                    <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-[#00df89] transition-colors">
-                      {v.name}
-                    </h4>
-                    <span className="text-[11px] text-slate-400 font-mono">{v.sku || variantPickerProduct.sku || 'SKU'}</span>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="font-bold text-sm text-[#00a86b] dark:text-[#00df89]">
-                      ৳ {(v.selling_price || variantPickerProduct.price).toLocaleString()}
-                    </div>
-                    <Badge
-                      variant={v.stock_quantity <= 0 ? 'destructive' : v.stock_quantity <= 5 ? 'warning' : 'default'}
-                      className="text-[10px] font-mono mt-0.5"
-                    >
-                      {v.stock_quantity} left
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-end pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setVariantPickerProduct(null)}
-                className="text-xs"
-              >
-                Cancel
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
+      <VariantPickerModal
+        product={variantPickerProduct}
+        isOpen={Boolean(variantPickerProduct)}
+        onClose={() => setVariantPickerProduct(null)}
+        onAddVariant={handleAddVariantToCart}
+        onUpdateVariantQty={handleUpdateVariantQty}
+        cart={cart}
+        lang={lang}
+        mode="memo"
+      />
 
     </div>
   );

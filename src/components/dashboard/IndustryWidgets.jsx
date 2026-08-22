@@ -218,31 +218,3 @@ export function GoldRateWidget() {
     </div>
   );
 }
-
-export function ClothingVariantsWidget() {
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/90 dark:border-slate-800 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-extrabold text-slate-900 dark:text-white text-base">Size & Color Stock Breakdown</h3>
-        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-full">
-          Summer Line 2026
-        </span>
-      </div>
-
-      <div className="space-y-3">
-        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-sm text-slate-900 dark:text-white">Premium Cotton Polo Shirt</span>
-            <span className="text-xs font-extrabold text-emerald-600">120 Pcs Total</span>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap text-xs">
-            <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono">Size S: 24</span>
-            <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono">Size M: 45</span>
-            <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono">Size L: 35</span>
-            <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono">Size XL: 16</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}

@@ -121,7 +121,7 @@ export const SHOP_TYPES = [
       { id: 'print_tag', label: 'Print Barcode Price Tags', icon: 'Tag', color: 'bg-purple-500/10 text-purple-600 font-medium' },
       { id: 'pos_checkout', label: 'Fashion POS Checkout', icon: 'ShoppingBag', color: 'bg-emerald-500/10 text-emerald-600 font-medium' }
     ],
-    widgets: ['clothing_variants', 'size_stock_matrix'],
+    widgets: [],
     sampleInventory: [
       { id: 'C-101', name: 'Mens Slim Fit Casual Shirt (Blue/M)', category: 'Shirts', stock: 15, unit: 'Pcs', price: '৳ 1,250', status: 'In Stock' },
       { id: 'C-102', name: 'Ladies Jamdani Cotton Saree (Red)', category: 'Sarees', stock: 6, unit: 'Pcs', price: '৳ 4,500', status: 'Low Stock' },
