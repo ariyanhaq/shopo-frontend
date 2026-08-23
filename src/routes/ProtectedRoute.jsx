@@ -10,10 +10,10 @@ import { useAuth } from '@/context/AuthContext';
 import Loader from '@/components/common/Loader';
 
 export default function ProtectedRoute() {
-  const { currentUser, mongoUser, mongoShop, hasShop, loading, isProfileLoading, isProfileChecked } = useAuth();
+  const { currentUser, mongoUser, mongoShop, hasShop, loading, isProfileChecked } = useAuth();
   const location = useLocation();
 
-  const isVerifying = loading || isProfileLoading || (currentUser && currentUser.emailVerified && !isProfileChecked);
+  const isVerifying = loading || (currentUser && currentUser.emailVerified && !isProfileChecked);
 
   if (isVerifying) {
     return <Loader message="Checking store data & profile..." />;

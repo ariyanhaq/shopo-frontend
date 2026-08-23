@@ -13,8 +13,10 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { X, Dumbbell, CheckCircle2, User, Phone, Mail, Clock, DollarSign } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function AddTrainerModal({ isOpen, onClose, onSaveTrainer, initialData }) {
+  useBodyScrollLock(isOpen);
   const { lang } = useLanguage();
 
   const [formData, setFormData] = useState({

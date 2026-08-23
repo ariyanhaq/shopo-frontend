@@ -13,37 +13,42 @@ import {
 } from 'firebase/auth';
 
 export const firebaseConfig = {
-  apiKey: import.meta?.env?.VITE_FIREBASE_API_KEY || "AIzaSyDZey6-KVFO6hrV8DXIh9tC-iYuCbkMoEA",
-  authDomain: import.meta?.env?.VITE_FIREBASE_AUTH_DOMAIN || "shopo-f15af.firebaseapp.com",
-  projectId: import.meta?.env?.VITE_FIREBASE_PROJECT_ID || "shopo-f15af",
-  storageBucket: import.meta?.env?.VITE_FIREBASE_STORAGE_BUCKET || "shopo-f15af.firebasestorage.app",
-  messagingSenderId: import.meta?.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "1066778958305",
-  appId: import.meta?.env?.VITE_FIREBASE_APP_ID || "1:1066778958305:web:27b655251d3c9fff5cdaa0"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
 };
 
 export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey &&
-  firebaseConfig.projectId
+  firebaseConfig.projectId &&
+  !firebaseConfig.apiKey.includes('YOUR_') &&
+  firebaseConfig.apiKey !== ''
 );
 
-// Initialize Firebase App singleton
-export const app = getApps().length > 0
-  ? getApp()
-  : initializeApp(firebaseConfig);
+// Initialize Firebase App singleton safely
+let appInstance = null;
+let authInstance = null;
 
-// Initialize Firebase Auth with localStorage persistence
-// Using browserLocalPersistence avoids IndexedDB lifecycle closures completely.
-let authInstance;
-try {
-  authInstance = initializeAuth(app, {
-    persistence: browserLocalPersistence,
-    popupRedirectResolver: browserPopupRedirectResolver,
-  });
-} catch (err) {
-  // If already initialized by HMR or concurrent module load
-  authInstance = getAuth(app);
+if (isFirebaseConfigured) {
+  try {
+    appInstance = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    try {
+      authInstance = initializeAuth(appInstance, {
+        persistence: browserLocalPersistence,
+        popupRedirectResolver: browserPopupRedirectResolver,
+      });
+    } catch (authInitErr) {
+      authInstance = getAuth(appInstance);
+    }
+  } catch (err) {
+    console.error('Firebase initialization error:', err);
+  }
 }
 
+export const app = appInstance;
 export const auth = authInstance;
 
 // Initialize Google Auth Provider

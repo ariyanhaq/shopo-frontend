@@ -16,9 +16,9 @@ import {
   Dashboard, Overview, Settings,
   Products, AddProduct, Categories, StockHistory,
   POS, Orders, NewSale, Transactions,
-  Customers, CustomerDetails,
+  Customers, CustomerDetails, Members,
   Suppliers, Purchases,
-  Employees, Salary,
+  Employees, Salary, Expenses, Users,
   SalesReport, ProfitLoss, Analytics,
   GymDashboard, GymMembers, GymMemberProfile, GymMemberships,
   GymPackages, GymAttendance, GymPayments, GymTrainers,
@@ -26,6 +26,8 @@ import {
   GymReports, GymSettings, GymProducts, GymSales, GymAccounting,
   NotFound
 } from '@/pages';
+
+import PermissionGuard from '@/components/common/PermissionGuard';
 
 export default function AppRoutes() {
   return (
@@ -48,16 +50,11 @@ export default function AppRoutes() {
         </Route>
       </Route>
 
-      {/* Accessible Auth & Password Recovery Pages */}
-      <Route element={<AuthLayout />}>
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-      </Route>
-
-      {/* Universal Firebase Action Handlers */}
+      {/* Password Reset & Account Recovery Flows */}
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/auth/action" element={<AuthAction />} />
-      <Route path="/__/auth/action" element={<AuthAction />} />
 
       {/* Onboarding Flow (Full screen experience) */}
       <Route element={<ProtectedRoute />}>
@@ -74,55 +71,59 @@ export default function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/overview" element={<Overview />} />
-          <Route path="/dashboard/settings" element={<Settings />} />
+          <Route path="/dashboard/settings" element={<PermissionGuard permission="settings"><Settings /></PermissionGuard>} />
 
           {/* Dedicated Gym Business Module Routes */}
           <Route path="/gym/dashboard" element={<GymDashboard />} />
-          <Route path="/gym/sales" element={<GymSales />} />
-          <Route path="/gym/products" element={<GymProducts />} />
-          <Route path="/gym/accounting" element={<GymAccounting />} />
-          <Route path="/gym/members" element={<GymMembers />} />
-          <Route path="/gym/members/:id" element={<GymMemberProfile />} />
-          <Route path="/gym/memberships" element={<GymMemberships />} />
-          <Route path="/gym/attendance" element={<GymAttendance />} />
-          <Route path="/gym/payments" element={<GymPayments />} />
-          <Route path="/gym/packages" element={<GymPackages />} />
-          <Route path="/gym/trainers" element={<GymTrainers />} />
-          <Route path="/gym/workout-plans" element={<GymWorkouts />} />
-          <Route path="/gym/classes" element={<GymClasses />} />
-          <Route path="/gym/equipment" element={<GymEquipment />} />
-          <Route path="/gym/expenses" element={<GymExpenses />} />
-          <Route path="/gym/reports" element={<GymReports />} />
-          <Route path="/gym/settings" element={<GymSettings />} />
+          <Route path="/gym/sales" element={<PermissionGuard permission="orders"><GymSales /></PermissionGuard>} />
+          <Route path="/gym/products" element={<PermissionGuard permission="products"><GymProducts /></PermissionGuard>} />
+          <Route path="/gym/accounting" element={<PermissionGuard permission="accounting"><GymAccounting /></PermissionGuard>} />
+          <Route path="/gym/members" element={<PermissionGuard permission="customers"><GymMembers /></PermissionGuard>} />
+          <Route path="/gym/members/:id" element={<PermissionGuard permission="customers"><GymMemberProfile /></PermissionGuard>} />
+          <Route path="/gym/memberships" element={<PermissionGuard permission="customers"><GymMemberships /></PermissionGuard>} />
+          <Route path="/gym/attendance" element={<PermissionGuard permission="employees"><GymAttendance /></PermissionGuard>} />
+          <Route path="/gym/payments" element={<PermissionGuard permission="payments"><GymPayments /></PermissionGuard>} />
+          <Route path="/gym/packages" element={<PermissionGuard permission="products"><GymPackages /></PermissionGuard>} />
+          <Route path="/gym/trainers" element={<PermissionGuard permission="employees"><GymTrainers /></PermissionGuard>} />
+          <Route path="/gym/workout-plans" element={<PermissionGuard permission="employees"><GymWorkouts /></PermissionGuard>} />
+          <Route path="/gym/classes" element={<PermissionGuard permission="employees"><GymClasses /></PermissionGuard>} />
+          <Route path="/gym/equipment" element={<PermissionGuard permission="products"><GymEquipment /></PermissionGuard>} />
+          <Route path="/gym/expenses" element={<PermissionGuard permission="expenses"><GymExpenses /></PermissionGuard>} />
+          <Route path="/gym/reports" element={<PermissionGuard permission="accounting"><GymReports /></PermissionGuard>} />
+          <Route path="/gym/settings" element={<PermissionGuard permission="settings"><GymSettings /></PermissionGuard>} />
 
           {/* Distinct Core Feature Routes */}
-          <Route path="/sales" element={<Orders />} />
-          <Route path="/sales/new" element={<NewSale />} />
-          <Route path="/sales/pos" element={<POS />} />
-          <Route path="/pos" element={<POS />} />
+          <Route path="/sales" element={<PermissionGuard permission={['orders', 'pos']}><Orders /></PermissionGuard>} />
+          <Route path="/sales/new" element={<PermissionGuard permission={['orders', 'pos']}><NewSale /></PermissionGuard>} />
+          <Route path="/sales/pos" element={<PermissionGuard permission={['orders', 'pos']}><POS /></PermissionGuard>} />
+          <Route path="/pos" element={<PermissionGuard permission={['orders', 'pos']}><POS /></PermissionGuard>} />
 
           {/* Products & Inventory Routes */}
-          <Route path="/products" element={<Products />} />
-          <Route path="/products/add" element={<Products />} />
-          <Route path="/inventory" element={<Products />} />
-          <Route path="/inventory/products" element={<Products />} />
-          <Route path="/inventory/add-product" element={<Products />} />
-          <Route path="/inventory/categories" element={<Categories />} />
-          <Route path="/inventory/stock-history" element={<StockHistory />} />
+          <Route path="/products" element={<PermissionGuard permission="products"><Products /></PermissionGuard>} />
+          <Route path="/products/add" element={<PermissionGuard permission="products"><Products /></PermissionGuard>} />
+          <Route path="/inventory" element={<PermissionGuard permission="products"><Products /></PermissionGuard>} />
+          <Route path="/inventory/products" element={<PermissionGuard permission="products"><Products /></PermissionGuard>} />
+          <Route path="/inventory/add-product" element={<PermissionGuard permission="products"><Products /></PermissionGuard>} />
+          <Route path="/inventory/categories" element={<PermissionGuard permission="products"><Categories /></PermissionGuard>} />
+          <Route path="/inventory/stock-history" element={<PermissionGuard permission="products"><StockHistory /></PermissionGuard>} />
 
           {/* Suppliers & Purchases */}
-          <Route path="/suppliers" element={<Suppliers />} />
-          <Route path="/purchases" element={<Purchases />} />
+          <Route path="/suppliers" element={<PermissionGuard permission="suppliers"><Suppliers /></PermissionGuard>} />
+          <Route path="/purchases" element={<PermissionGuard permission="purchases"><Purchases /></PermissionGuard>} />
 
-          <Route path="/accounting" element={<ProfitLoss />} />
+          <Route path="/accounting" element={<PermissionGuard permission="accounting"><ProfitLoss /></PermissionGuard>} />
 
-          <Route path="/customers" element={<Customers />} />
-          <Route path="/customers/details" element={<CustomerDetails />} />
-          <Route path="/employees" element={<Employees />} />
-          <Route path="/employees/salary" element={<Salary />} />
-          <Route path="/reports/sales" element={<SalesReport />} />
-          <Route path="/reports/profit-loss" element={<ProfitLoss />} />
-          <Route path="/reports/analytics" element={<Analytics />} />
+          <Route path="/customers" element={<PermissionGuard permission="customers"><Customers /></PermissionGuard>} />
+          <Route path="/customers/details" element={<PermissionGuard permission="customers"><CustomerDetails /></PermissionGuard>} />
+          <Route path="/members" element={<PermissionGuard permission="customers"><Members /></PermissionGuard>} />
+          <Route path="/membership" element={<PermissionGuard permission="customers"><Members /></PermissionGuard>} />
+          <Route path="/employees" element={<PermissionGuard permission="employees"><Employees /></PermissionGuard>} />
+          <Route path="/employees/salary" element={<PermissionGuard permission="employees"><Salary /></PermissionGuard>} />
+          <Route path="/expenses" element={<PermissionGuard permission="expenses"><Expenses /></PermissionGuard>} />
+          <Route path="/users" element={<PermissionGuard requireAdmin={true}><Users /></PermissionGuard>} />
+          <Route path="/reports/sales" element={<PermissionGuard permission={['orders', 'accounting']}><SalesReport /></PermissionGuard>} />
+          <Route path="/reports/profit-loss" element={<PermissionGuard permission="accounting"><ProfitLoss /></PermissionGuard>} />
+          <Route path="/reports/analytics" element={<PermissionGuard permission="accounting"><Analytics /></PermissionGuard>} />
         </Route>
       </Route>
 

@@ -15,6 +15,7 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { X, DollarSign, CheckCircle2, Loader2, Plus, FolderPlus } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 const DEFAULT_GYM_CATEGORIES = [
   'Rent',
@@ -28,6 +29,7 @@ const DEFAULT_GYM_CATEGORIES = [
 ];
 
 export default function RecordExpenseModal({ isOpen, onClose, onRecordExpense }) {
+  useBodyScrollLock(isOpen);
   const { lang } = useLanguage();
   const [isSubmitting, setIsSubmitting] = useState(false);
 

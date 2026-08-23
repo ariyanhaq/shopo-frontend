@@ -22,10 +22,11 @@ import {
   SelectItem
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import toast from 'react-hot-toast';
 
 export default function Suppliers() {
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
 
   const [suppliers, setSuppliers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,6 +48,13 @@ export default function Suppliers() {
     notes: '',
     isSubmitting: false,
   });
+
+  useBodyScrollLock(
+    Boolean(
+      isModalOpen ||
+      payDueModal.isOpen
+    )
+  );
 
   // Supplier Form
   const [formData, setFormData] = useState({

@@ -14,6 +14,8 @@ import {
   Layers, ShoppingCart, Loader2
 } from 'lucide-react';
 
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+
 export default function GymProducts() {
   const { lang } = useLanguage();
 
@@ -22,6 +24,8 @@ export default function GymProducts() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [productList, setProductList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  useBodyScrollLock(isAddModalOpen);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newProduct, setNewProduct] = useState({

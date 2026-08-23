@@ -21,10 +21,14 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   ShoppingCart, DollarSign, Plus, Search, Filter, Calendar,
-  FileText, Printer, CheckCircle2, Clock, X, Loader2, Tag,
-  Coins, Percent, Edit2, Trash2, AlertTriangle, Sparkles, Eye, ShoppingBag
+  Download, Edit2, Trash2, CheckCircle2, Clock, X, Eye,
+  ArrowUpDown, Receipt, CreditCard, Banknote, UserCheck,
+  TrendingUp, ShieldCheck, Printer, AlertTriangle, Loader2,
+  Percent, Coins, HelpCircle, Tag, FileText, ShoppingBag,
+  RotateCcw, Undo2, Minus, AlertCircle, RefreshCw
 } from 'lucide-react';
 
 const safeMoney = (val, fallback = 0) => {
@@ -66,6 +70,23 @@ export default function Orders() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingSale, setEditingSale] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Return & Refund Modal State
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [returningOrder, setReturningOrder] = useState(null);
+  const [returnQuantities, setReturnQuantities] = useState({});
+  const [returnReason, setReturnReason] = useState('');
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+
+  useBodyScrollLock(
+    Boolean(
+      selectedOrder ||
+      isCollectModalOpen ||
+      collectedVoucher ||
+      isEditModalOpen ||
+      isReturnModalOpen
+    )
+  );
 
   const [editForm, setEditForm] = useState({
     id: '',
@@ -223,6 +244,156 @@ export default function Orders() {
       toast.error(err.message || 'Failed to update sale invoice.');
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const getItemDocId = (val) => {
+    if (!val) return '';
+    if (typeof val === 'object') {
+      return String(val._id || val.id || '');
+    }
+    return String(val);
+  };
+
+  // Open Return Modal
+  const handleOpenReturn = (order) => {
+    setReturningOrder(order);
+    const returnedMap = {};
+    if (Array.isArray(order.return_history)) {
+      order.return_history.forEach((rev) => {
+        (rev.items || []).forEach((rit) => {
+          const prodId = getItemDocId(rit.product_id);
+          const varId = getItemDocId(rit.variant_id);
+          const key = `${prodId}_${varId || 'none'}`;
+          returnedMap[key] = (returnedMap[key] || 0) + (rit.quantity || 0);
+        });
+      });
+    }
+
+    const initialQty = {};
+    (order.items || []).forEach((it) => {
+      const prodId = getItemDocId(it.product_id);
+      const varId = getItemDocId(it.variant_id);
+      const key = `${prodId}_${varId || 'none'}`;
+      const alreadyReturned = returnedMap[key] || 0;
+      const maxAvailable = Math.max(0, it.quantity - alreadyReturned);
+      initialQty[key] = maxAvailable;
+    });
+
+    setReturnQuantities(initialQty);
+    setReturnReason('');
+    setIsReturnModalOpen(true);
+  };
+
+  // Live Return & Refund Preview Calculation
+  const returnSummary = useMemo(() => {
+    if (!returningOrder || !Array.isArray(returningOrder.items)) {
+      return { totalReturnGross: 0, netRefund: 0, pointsToDeduct: 0, pointsToRefund: 0, itemsCount: 0, dueReduction: 0, cashRefund: 0 };
+    }
+
+    const returnedMap = {};
+    if (Array.isArray(returningOrder.return_history)) {
+      returningOrder.return_history.forEach((rev) => {
+        (rev.items || []).forEach((rit) => {
+          const prodId = getItemDocId(rit.product_id);
+          const varId = getItemDocId(rit.variant_id);
+          const key = `${prodId}_${varId || 'none'}`;
+          returnedMap[key] = (returnedMap[key] || 0) + (rit.quantity || 0);
+        });
+      });
+    }
+
+    let totalReturnGross = 0;
+    let itemsCount = 0;
+
+    returningOrder.items.forEach((it) => {
+      const prodId = getItemDocId(it.product_id);
+      const varId = getItemDocId(it.variant_id);
+      const key = `${prodId}_${varId || 'none'}`;
+      const qty = Number(returnQuantities[key]) || 0;
+      if (qty > 0) {
+        totalReturnGross += (Number(it.unit_price) || 0) * qty;
+        itemsCount += qty;
+      }
+    });
+
+    const discountRatio = returningOrder.subtotal > 0 ? Math.min(1, totalReturnGross / returningOrder.subtotal) : 0;
+    const generalDiscountRefund = (returningOrder.discount || 0) * discountRatio;
+    const tierDiscountRefund = (returningOrder.tier_discount_amount || 0) * discountRatio;
+    const rewardDiscountRefund = (returningOrder.reward_discount_amount || 0) * discountRatio;
+
+    const netRefund = Math.max(0, Math.round((totalReturnGross - generalDiscountRefund - tierDiscountRefund - rewardDiscountRefund) * 100) / 100);
+    const pointsToDeduct = Math.round((returningOrder.reward_points_earned || 0) * discountRatio);
+    const pointsToRefund = Math.round((returningOrder.reward_points_redeemed || 0) * discountRatio);
+
+    let dueReduction = 0;
+    let cashRefund = 0;
+    const currentDue = returningOrder.due_amount || 0;
+
+    if (currentDue > 0) {
+      if (netRefund <= currentDue) {
+        dueReduction = netRefund;
+      } else {
+        dueReduction = currentDue;
+        cashRefund = netRefund - currentDue;
+      }
+    } else {
+      cashRefund = netRefund;
+    }
+
+    return {
+      totalReturnGross,
+      netRefund,
+      pointsToDeduct,
+      pointsToRefund,
+      itemsCount,
+      dueReduction,
+      cashRefund,
+    };
+  }, [returningOrder, returnQuantities]);
+
+  // Submit Product Return
+  const handleSubmitReturn = async (e) => {
+    e.preventDefault();
+    if (!returningOrder || returnSummary.itemsCount <= 0) {
+      toast.error(lang === 'bn' ? 'অনুগ্রহ করে ফেরত দেওয়ার জন্য পণ্য নির্বাচন করুন।' : 'Please select at least 1 item to return.');
+      return;
+    }
+
+    setIsSubmittingReturn(true);
+    try {
+      const payloadItems = returningOrder.items.map((it) => {
+        const prodId = getItemDocId(it.product_id);
+        const varId = getItemDocId(it.variant_id);
+        const key = `${prodId}_${varId || 'none'}`;
+        const qty = Number(returnQuantities[key]) || 0;
+        return {
+          product_id: prodId,
+          name: it.name,
+          variant_id: varId || undefined,
+          variant_name: it.variant_name || '',
+          quantity: qty,
+        };
+      }).filter((it) => it.quantity > 0);
+
+      const res = await api.sales.return(returningOrder._id, {
+        items: payloadItems,
+        reason: returnReason,
+      });
+
+      toast.success(
+        lang === 'bn'
+          ? `পণ্য ফেরত ও রিফান্ড সম্পন্ন! রিফান্ড: ৳${returnSummary.netRefund.toLocaleString()}`
+          : `Return processed successfully! Refund: ৳${returnSummary.netRefund.toLocaleString()}`
+      );
+
+      setIsReturnModalOpen(false);
+      setReturningOrder(null);
+      fetchSales();
+    } catch (err) {
+      toast.error(err.message || 'Failed to process return.');
+    } finally {
+      setIsSubmittingReturn(false);
     }
   };
 
@@ -425,17 +596,35 @@ export default function Orders() {
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
                         <div className="flex flex-col items-start gap-1">
-                          <Badge
-                            variant={order.payment_method?.toLowerCase() === 'due' ? 'warning' : 'secondary'}
-                            className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 whitespace-nowrap ${
-                              order.payment_method?.toLowerCase() === 'due'
-                                ? '!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30'
-                                : '!bg-slate-100 !text-slate-700 dark:!bg-zinc-800 dark:!text-zinc-300 !border-slate-200 dark:!border-zinc-700'
-                            }`}
-                          >
-                            {order.payment_method || 'Cash'}
-                          </Badge>
-                          {isDue ? (
+                          <div className="flex items-center gap-1">
+                            <Badge
+                              variant={order.payment_method?.toLowerCase() === 'due' ? 'warning' : 'secondary'}
+                              className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 whitespace-nowrap ${
+                                order.payment_method?.toLowerCase() === 'due'
+                                  ? '!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30'
+                                  : '!bg-slate-100 !text-slate-700 dark:!bg-zinc-800 dark:!text-zinc-300 !border-slate-200 dark:!border-zinc-700'
+                              }`}
+                            >
+                              {order.payment_method || 'Cash'}
+                            </Badge>
+
+                            {order.status === 'returned' && (
+                              <Badge className="!bg-rose-500/15 !text-rose-600 dark:!text-rose-400 !border-rose-500/30 text-[9px] font-bold px-1.5 py-0.2 whitespace-nowrap">
+                                {lang === 'bn' ? 'সম্পূর্ণ ফেরত' : 'Returned'}
+                              </Badge>
+                            )}
+                            {order.status === 'partially_returned' && (
+                              <Badge className="!bg-amber-500/15 !text-amber-600 dark:!text-amber-400 !border-amber-500/30 text-[9px] font-bold px-1.5 py-0.2 whitespace-nowrap">
+                                {lang === 'bn' ? 'আংশিক ফেরত' : 'Partial Return'}
+                              </Badge>
+                            )}
+                          </div>
+
+                          {order.status === 'returned' ? (
+                            <span className="text-[10px] text-rose-500 font-medium">
+                              {lang === 'bn' ? 'রিফান্ড:' : 'Refunded:'} ৳{safeMoney(order.refunded_amount || order.total)}
+                            </span>
+                          ) : isDue ? (
                             <Badge
                               variant="warning"
                               className="!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30 text-[10px] font-bold px-2 py-0.5 whitespace-nowrap"
@@ -453,11 +642,20 @@ export default function Orders() {
                         </div>
                       </td>
                       <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89] whitespace-nowrap">
-                        ৳ {safeMoney(order.total)}
+                        <div className="flex flex-col">
+                          <span className={order.status === 'returned' ? 'line-through text-slate-400 font-normal' : ''}>
+                            ৳ {safeMoney(order.total)}
+                          </span>
+                          {order.status === 'partially_returned' && Number(order.refunded_amount) > 0 && (
+                            <span className="text-[10px] text-rose-500 font-medium font-mono">
+                              - ৳{safeMoney(order.refunded_amount)} refunded
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1 flex-nowrap">
-                          {isDue && (
+                          {isDue && order.status !== 'returned' && (
                             <Button
                               size="sm"
                               onClick={() => handleOpenCollectDue(order)}
@@ -466,6 +664,17 @@ export default function Orders() {
                             >
                               <Coins className="w-3.5 h-3.5 shrink-0" />
                               <span className="whitespace-nowrap">{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Collect Due'}</span>
+                            </Button>
+                          )}
+                          {order.status !== 'returned' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenReturn(order)}
+                              className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0 cursor-pointer"
+                              title={lang === 'bn' ? 'পণ্য ফেরত ও রিফান্ড' : 'Return & Refund Product'}
+                            >
+                              <Undo2 className="w-3.5 h-3.5" />
                             </Button>
                           )}
                           <Button
@@ -1097,13 +1306,238 @@ export default function Orders() {
       )}
 
       {/* ---------------------------------------------------- */}
+      {/* RETURN & REFUND PRODUCT MODAL                         */}
+      {/* ---------------------------------------------------- */}
+      {isReturnModalOpen && returningOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-xl w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center text-rose-500 shrink-0">
+                  <Undo2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>{lang === 'bn' ? 'পণ্য ফেরত ও রিফান্ড' : 'Return & Refund Sale'}</span>
+                    <Badge variant="outline" className="text-[10px] font-mono border-rose-500/30 text-rose-500">
+                      {returningOrder.invoice_number}
+                    </Badge>
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    {returningOrder.customer_id?.name || (lang === 'bn' ? 'খুচরা ক্রেতা' : 'Walk-in Customer')}
+                    {returningOrder.customer_id?.phone ? ` • ${returningOrder.customer_id.phone}` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsReturnModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitReturn} className="space-y-4 text-xs">
+              {/* Items Return Table */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'ফেরত দেওয়ার পণ্য ও পরিমাণ নির্বাচন করুন:' : 'Select Items & Quantities to Return:'}
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    {lang === 'bn' ? 'স্টক স্বয়ংক্রিয়ভাবে ইনভেন্টরিতে জমা হবে' : 'Stock will be auto-restored to inventory'}
+                  </span>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800/80 bg-slate-50 dark:bg-[#09090b] overflow-hidden">
+                  {returningOrder.items?.map((it, idx) => {
+                    const prodId = getItemDocId(it.product_id);
+                    const varId = getItemDocId(it.variant_id);
+                    const key = `${prodId}_${varId || 'none'}`;
+                    const currentQty = returnQuantities[key] || 0;
+
+                    let alreadyReturned = 0;
+                    if (Array.isArray(returningOrder.return_history)) {
+                      returningOrder.return_history.forEach((rev) => {
+                        (rev.items || []).forEach((rit) => {
+                          const rProdId = getItemDocId(rit.product_id);
+                          const rVarId = getItemDocId(rit.variant_id);
+                          if (rProdId === prodId && (rVarId || 'none') === (varId || 'none')) {
+                            alreadyReturned += rit.quantity || 0;
+                          }
+                        });
+                      });
+                    }
+                    const maxReturnable = Math.max(0, it.quantity - alreadyReturned);
+
+                    return (
+                      <div key={idx} className="p-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-slate-900 dark:text-zinc-100 text-xs truncate">{it.name}</span>
+                            {it.variant_name && (
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-[#00df89] border border-emerald-500/20">
+                                {it.variant_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-2">
+                            <span>Unit: ৳{safeMoney(it.unit_price)}</span>
+                            <span>•</span>
+                            <span>Sold: {it.quantity}</span>
+                            {alreadyReturned > 0 && (
+                              <span className="text-amber-500 font-medium">(Prev. Returned: {alreadyReturned})</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Quantity Stepper */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            disabled={currentQty <= 0}
+                            onClick={() => setReturnQuantities((prev) => ({ ...prev, [key]: Math.max(0, currentQty - 1) }))}
+                            className="w-7 h-7 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex items-center justify-center text-slate-700 dark:text-zinc-200 hover:bg-slate-100 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            max={maxReturnable}
+                            value={currentQty}
+                            onChange={(e) => {
+                              const val = Math.min(maxReturnable, Math.max(0, parseInt(e.target.value) || 0));
+                              setReturnQuantities((prev) => ({ ...prev, [key]: val }));
+                            }}
+                            className="w-12 h-7 text-center font-bold font-mono rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-white text-xs outline-none"
+                          />
+                          <button
+                            type="button"
+                            disabled={currentQty >= maxReturnable}
+                            onClick={() => setReturnQuantities((prev) => ({ ...prev, [key]: Math.min(maxReturnable, currentQty + 1) }))}
+                            className="w-7 h-7 rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 flex items-center justify-center text-slate-700 dark:text-zinc-200 hover:bg-slate-100 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Live Return Impact Summary Box */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
+                <div className="font-semibold text-slate-700 dark:text-zinc-300 pb-1 border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between">
+                  <span>{lang === 'bn' ? 'রিফান্ড ও হিসাবের প্রভাব' : 'Return & Refund Breakdown'}</span>
+                  <Badge variant="outline" className="text-[10px] font-medium">
+                    {returnSummary.itemsCount} {lang === 'bn' ? 'টি পণ্য ফেরত' : 'items returning'}
+                  </Badge>
+                </div>
+
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between text-slate-500">
+                    <span>{lang === 'bn' ? 'মোট পণ্যের মূল্য:' : 'Gross Items Subtotal:'}</span>
+                    <span>৳ {safeMoney(returnSummary.totalReturnGross)}</span>
+                  </div>
+
+                  {returningOrder.discount > 0 && (
+                    <div className="flex justify-between text-rose-500">
+                      <span>{lang === 'bn' ? 'ডিসকাউন্ট সমন্বয়:' : 'Discount Adjustment:'}</span>
+                      <span>- ৳ {safeMoney(returnSummary.totalReturnGross - returnSummary.netRefund)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-800">
+                    <span>{lang === 'bn' ? 'মোট রিফান্ড পরিমাণ:' : 'Net Refund Amount:'}</span>
+                    <span className="text-rose-600 dark:text-rose-400">৳ {safeMoney(returnSummary.netRefund)}</span>
+                  </div>
+
+                  {/* Settlement split */}
+                  <div className="pt-1 text-[11px] space-y-0.5 border-t border-dashed border-slate-200 dark:border-zinc-800">
+                    {returnSummary.dueReduction > 0 && (
+                      <div className="flex justify-between text-amber-600 font-medium">
+                        <span>{lang === 'bn' ? 'বকেয়া থেকে কর্তন:' : 'Due Deducted / Cancelled:'}</span>
+                        <span>- ৳ {safeMoney(returnSummary.dueReduction)}</span>
+                      </div>
+                    )}
+                    {returnSummary.cashRefund > 0 && (
+                      <div className="flex justify-between text-slate-700 dark:text-zinc-300 font-semibold">
+                        <span>{lang === 'bn' ? 'ক্যাশ/পেমেন্ট ফেরত:' : 'Cash / Payment Refund to Customer:'}</span>
+                        <span>৳ {safeMoney(returnSummary.cashRefund)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Loyalty Points Clawback Warning */}
+                {returnSummary.pointsToDeduct > 0 && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-center gap-2">
+                    <Coins className="w-4 h-4 shrink-0" />
+                    <span>
+                      {lang === 'bn'
+                        ? `কাস্টমারের অর্জিত পয়েন্ট থেকে ${returnSummary.pointsToDeduct} পয়েন্ট কর্তন হবে।`
+                        : `Customer loyalty balance will be reduced by ${returnSummary.pointsToDeduct} earned pts.`}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Reason / Note input */}
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'ফেরতের কারণ (ঐচ্ছিক)' : 'Reason for Return (Optional)'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={lang === 'bn' ? 'যেমন: নষ্ট পণ্য, সাইজ সমস্যা, ইত্যাদি' : 'e.g. Defective product, customer changed mind'}
+                  value={returnReason}
+                  onChange={(e) => setReturnReason(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white outline-none focus:border-rose-500 text-xs"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsReturnModalOpen(false)}
+                  className="cursor-pointer"
+                >
+                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmittingReturn || returnSummary.itemsCount <= 0}
+                  size="sm"
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-semibold gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingReturn ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <Undo2 className="w-3.5 h-3.5" />
+                      <span>{lang === 'bn' ? 'ফেরত নিশ্চিত করুন' : 'Confirm Return & Refund'}</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
       {/* CONFIRM DELETE MODAL                                 */}
       {/* ---------------------------------------------------- */}
       <ConfirmDialog
         isOpen={confirmDeleteDialog.isOpen}
         isLoading={isDeleting}
         title={lang === 'bn' ? `ইনভয়েস '${confirmDeleteDialog.invoiceNumber}' মুছে ফেলতে চান?` : `Delete invoice '${confirmDeleteDialog.invoiceNumber}'?`}
-        description={lang === 'bn' ? 'এই বিক্রিটি মুছে ফেলা হবে এবং সংশ্লিষ্ট পণ্যগুলোর স্টক পুনরায় ইনভেন্টরিতে ফেরত আসবে।' : 'This sale will be permanently deleted and all product stock will be restored back to your inventory.'}
+        description={lang === 'bn' ? 'এই বিক্রিটি মুছে ফেলা হবে, সংশ্লিষ্ট পণ্যগুলোর স্টক পুনরায় ইনভেন্টরিতে ফেরত আসবে এবং অর্জিত রিওয়ার্ড পয়েন্ট কাস্টমার থেকে কর্তন করা হবে।' : 'This sale will be permanently deleted: inventory stock will be restored and any reward points earned from this sale will be deducted from the customer.'}
         confirmText={lang === 'bn' ? 'হ্যাঁ, মুছে ফেলুন' : 'Yes, Delete'}
         cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
         onConfirm={handleConfirmDeleteSale}

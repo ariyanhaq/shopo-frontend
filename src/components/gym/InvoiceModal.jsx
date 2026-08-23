@@ -6,8 +6,10 @@ import { useLanguage } from '@/context/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { X, Printer, Download, CheckCircle2, Dumbbell, ShieldCheck } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function InvoiceModal({ isOpen, onClose, payment }) {
+  useBodyScrollLock(isOpen && Boolean(payment));
   const { lang } = useLanguage();
 
   if (!isOpen || !payment) return null;

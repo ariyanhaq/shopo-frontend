@@ -4,10 +4,11 @@
  */
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
-import { Button } from '@/components/ui/button';
 import { X, Package, Plus, CheckCircle2, Dumbbell, Loader2 } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function AddEditPackageModal({ isOpen, onClose, onSavePackage, initialData, isSubmitting = false }) {
+  useBodyScrollLock(isOpen);
   const { lang } = useLanguage();
 
   const [formData, setFormData] = useState({

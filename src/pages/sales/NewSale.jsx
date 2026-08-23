@@ -14,12 +14,26 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VariantPickerModal } from '@/components/common';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   ShoppingCart, Search, Plus, Minus, Trash2, CheckCircle2,
   DollarSign, ArrowLeft, Printer, FileText, Smartphone, CreditCard,
   Banknote, X, Sparkles, User, Phone, Check, RefreshCw, AlertCircle,
-  Loader2, Package, Percent, Coins, ArrowRight, Store, Layers
+  Loader2, Package, Percent, Coins, ArrowRight, Store, Layers,
+  Crown, Star, Gift, Award
 } from 'lucide-react';
+
+const getTierBadgeStyle = (rawColor = '#10b981') => {
+  let hex = typeof rawColor === 'string' && rawColor.trim().startsWith('#') ? rawColor.trim() : '#10b981';
+  if (hex.length === 4) {
+    hex = `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+  }
+  return {
+    backgroundColor: `${hex}18`,
+    color: hex,
+    borderColor: `${hex}38`,
+  };
+};
 
 export default function NewSale() {
   const navigate = useNavigate();
@@ -47,15 +61,32 @@ export default function NewSale() {
   const [cashGiven, setCashGiven] = useState('');
   const [duePaidAmount, setDuePaidAmount] = useState(''); // Amount paid when payment method is Due / Partial
 
+  // Membership & Reward Points State
+  const [membershipConfig, setMembershipConfig] = useState(null);
+  const [isApplyingTierDiscount, setIsApplyingTierDiscount] = useState(true);
+  const [isRedeemingPoints, setIsRedeemingPoints] = useState(false);
+  const [pointsToRedeem, setPointsToRedeem] = useState('');
+
   // Post-sale Receipt Modal
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
+
+  useBodyScrollLock(Boolean(isSuccessModalOpen || variantPickerProduct));
 
   // Real-time Customer Recognition & Autocomplete State
   const [matchedCustomer, setMatchedCustomer] = useState(null);
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+
+  // Fetch shop membership settings on mount
+  useEffect(() => {
+    api.membership.getSettings()
+      .then((res) => {
+        if (res?.data) setMembershipConfig(res.data);
+      })
+      .catch((err) => console.warn('Could not load membership config:', err));
+  }, []);
 
   // Debounced Customer Lookup by Phone or Name
   useEffect(() => {
@@ -292,7 +323,59 @@ export default function NewSale() {
     return Math.min(val, subtotal);
   }, [subtotal, discountType, discountValue]);
 
-  const totalPayable = Math.max(0, subtotal - discountAmount);
+  // Reward Points Redemption Calculations
+  const memberPointsAvailable = useMemo(() => {
+    if (!matchedCustomer || !matchedCustomer.is_member) return 0;
+    return Number(matchedCustomer.reward_points || 0);
+  }, [matchedCustomer]);
+
+  // Look up customer's tier configuration
+  const matchedCustomerTier = useMemo(() => {
+    if (!matchedCustomer?.is_member || !membershipConfig?.tiers) return null;
+    const tName = matchedCustomer.membership_tier || 'Regular';
+    return membershipConfig.tiers.find(
+      (t) => t.name && t.name.toLowerCase() === tName.toLowerCase()
+    ) || null;
+  }, [matchedCustomer, membershipConfig]);
+
+  const tierDiscountPercent = Number(matchedCustomerTier?.extra_discount_percent || 0);
+  const hasTierDiscount = Boolean(matchedCustomer?.is_member && tierDiscountPercent > 0);
+  const tierAutoDiscountAmount = useMemo(() => {
+    if (!hasTierDiscount || !isApplyingTierDiscount || subtotal <= 0) return 0;
+    return (subtotal * tierDiscountPercent) / 100;
+  }, [hasTierDiscount, isApplyingTierDiscount, subtotal, tierDiscountPercent]);
+
+  const tierPointRedeemRate = Number(matchedCustomerTier?.point_redeem_value || 0);
+  const minPointsRequired = Number(matchedCustomerTier?.min_points_to_redeem || 0);
+  const hasPointsRedeemSystem = Boolean(matchedCustomer?.is_member && tierPointRedeemRate > 0);
+
+  const isEligibleToRedeem = Boolean(
+    hasPointsRedeemSystem &&
+    membershipConfig?.enabled !== false &&
+    matchedCustomer?.is_member &&
+    memberPointsAvailable >= minPointsRequired &&
+    memberPointsAvailable > 0
+  );
+
+  const rewardDiscountAmount = useMemo(() => {
+    if (!isRedeemingPoints || !isEligibleToRedeem) return 0;
+    const requested = Number(pointsToRedeem) || 0;
+    if (requested <= 0) return 0;
+    const actualPoints = Math.min(requested, memberPointsAvailable);
+    const maxDiscount = Math.max(0, subtotal - discountAmount - tierAutoDiscountAmount);
+    return Math.min(actualPoints * tierPointRedeemRate, maxDiscount);
+  }, [isRedeemingPoints, isEligibleToRedeem, pointsToRedeem, memberPointsAvailable, tierPointRedeemRate, subtotal, discountAmount, tierAutoDiscountAmount]);
+
+  const totalPayable = Math.max(0, subtotal - discountAmount - tierAutoDiscountAmount - rewardDiscountAmount);
+
+  // Projected Points Earned on this Order based on customer's tier
+  const pointsEarnedOnSale = useMemo(() => {
+    if (!membershipConfig?.enabled || !matchedCustomer?.is_member || totalPayable <= 0) return 0;
+    const spendUnit = Number(matchedCustomerTier?.earn_spend_unit || 0);
+    const pointsPerUnit = Number(matchedCustomerTier?.earn_points_per_unit || 0);
+    if (spendUnit <= 0 || pointsPerUnit <= 0) return 0;
+    return Math.floor(totalPayable / spendUnit) * pointsPerUnit;
+  }, [membershipConfig, matchedCustomer, matchedCustomerTier, totalPayable]);
 
   // Customer Previous Due Calculation
   const previousCustomerDue = useMemo(() => {
@@ -371,6 +454,8 @@ export default function NewSale() {
     let serverPreviousDue = previousCustomerDue;
     let serverTotalDue = totalOutstandingDue;
 
+    const actualPointsRedeemed = isRedeemingPoints ? (Number(pointsToRedeem) || 0) : 0;
+
     try {
       const payload = {
         customer_id: matchedCustomer?._id || undefined,
@@ -383,6 +468,8 @@ export default function NewSale() {
         discount_type: discountType,
         discount_value: parseFloat(discountValue) || 0,
         discount: discountAmount,
+        apply_tier_discount: Boolean(isApplyingTierDiscount && hasTierDiscount),
+        reward_points_redeemed: actualPointsRedeemed,
         paid_amount: paidNow,
         tendered_amount: paymentMethod === 'Cash' ? (parseFloat(cashGiven) || paidNow) : paidNow,
         change_amount: paymentMethod === 'Cash' ? changeToReturn : 0,
@@ -403,6 +490,36 @@ export default function NewSale() {
         serverTotalDue = res.data.total_customer_due;
       }
 
+      const orderData = {
+        id: generatedInvoice,
+        date: new Date().toLocaleString(),
+        customer: customerName.trim() || (matchedCustomer?.name || (lang === 'bn' ? 'সাধারণ কাস্টমার' : 'Walk-in Customer')),
+        phone: customerPhone.trim() || (matchedCustomer?.phone || 'N/A'),
+        items: [...cart],
+        subtotal,
+        discountType,
+        discountValue: parseFloat(discountValue) || 0,
+        discount: discountAmount,
+        tierDiscountPercent: hasTierDiscount && isApplyingTierDiscount ? tierDiscountPercent : 0,
+        tierDiscountAmount: hasTierDiscount && isApplyingTierDiscount ? tierAutoDiscountAmount : 0,
+        rewardPointsEarned: pointsEarnedOnSale,
+        rewardPointsRedeemed: actualPointsRedeemed,
+        rewardDiscountAmount,
+        isMember: Boolean(matchedCustomer?.is_member),
+        memberTier: matchedCustomer?.membership_tier || 'Regular',
+        total: totalPayable,
+        paidAmount: paidNow,
+        currentBillDue: currentBillDue,
+        previousDue: serverPreviousDue,
+        totalDue: serverTotalDue,
+        method: paymentMethod,
+        cashReceived: paymentMethod === 'Cash' ? (parseFloat(cashGiven) || paidNow) : paidNow,
+        changeToReturn: paymentMethod === 'Cash' ? changeToReturn : 0,
+      };
+
+      setCompletedOrder(orderData);
+      setIsSuccessModalOpen(true);
+
       toast.success(
         lang === 'bn'
           ? `বিক্রি সম্পন্ন! ইনভয়েস: ${generatedInvoice}`
@@ -411,34 +528,9 @@ export default function NewSale() {
       fetchCatalog(); // Refresh live stock counts
     } catch (err) {
       toast.error(err.message || 'Failed to save sale in database.');
-      setIsProcessingSale(false);
-      return;
     } finally {
       setIsProcessingSale(false);
     }
-
-    const orderData = {
-      id: generatedInvoice,
-      date: new Date().toLocaleString(),
-      customer: customerName.trim() || (matchedCustomer?.name || (lang === 'bn' ? 'সাধারণ কাস্টমার' : 'Walk-in Customer')),
-      phone: customerPhone.trim() || (matchedCustomer?.phone || 'N/A'),
-      items: [...cart],
-      subtotal,
-      discountType,
-      discountValue: parseFloat(discountValue) || 0,
-      discount: discountAmount,
-      total: totalPayable,
-      paidAmount: paidNow,
-      currentBillDue: currentBillDue,
-      previousDue: serverPreviousDue,
-      totalDue: serverTotalDue,
-      method: paymentMethod,
-      cashReceived: paymentMethod === 'Cash' ? (parseFloat(cashGiven) || paidNow) : paidNow,
-      changeToReturn: paymentMethod === 'Cash' ? changeToReturn : 0,
-    };
-
-    setCompletedOrder(orderData);
-    setIsSuccessModalOpen(true);
   };
 
   const handleResetSale = () => {
@@ -449,6 +541,9 @@ export default function NewSale() {
     setCashGiven('');
     setDuePaidAmount('');
     setMatchedCustomer(null);
+    setIsRedeemingPoints(false);
+    setPointsToRedeem('');
+    setIsApplyingTierDiscount(true);
     setIsSuccessModalOpen(false);
     setCompletedOrder(null);
   };
@@ -818,6 +913,162 @@ export default function NewSale() {
                   <span>{lang === 'bn' ? 'কোন পূর্ববর্তী বকেয়া নেই' : 'No previous dues on record'}</span>
                 </div>
               ) : null}
+
+              {/* VIP MEMBERSHIP & REWARD POINTS RECOGNITION */}
+              {matchedCustomer?.is_member && (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900/90 border border-slate-200 dark:border-zinc-800 space-y-2.5 text-xs animate-in fade-in">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 border border-slate-300 dark:border-zinc-700 flex items-center justify-center font-bold text-xs shrink-0">
+                        {(matchedCustomer.name || 'C')
+                          .split(' ')
+                          .map((n) => n[0])
+                          .slice(0, 2)
+                          .join('')
+                          .toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-white">
+                          <span className="truncate">{matchedCustomer.name}</span>
+                          {(() => {
+                            const tierColor = matchedCustomerTier?.color || '#10b981';
+                            const tierBadgeStyle = getTierBadgeStyle(tierColor);
+
+                            return (
+                              <span
+                                className="text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors shadow-2xs"
+                                style={tierBadgeStyle}
+                              >
+                                {matchedCustomer.membership_tier || 'Regular'}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {matchedCustomer.member_code || `MEM-${matchedCustomer._id?.slice(-4).toUpperCase()}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {hasPointsRedeemSystem && (
+                      <div className="text-right shrink-0">
+                        <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center justify-end gap-1 font-mono">
+                          <Star className="w-3 h-3 text-amber-500 fill-amber-400" />
+                          <span>{memberPointsAvailable.toLocaleString()}</span>
+                          <span className="text-[10px] text-slate-400 font-normal">pts</span>
+                        </div>
+                        {tierPointRedeemRate > 0 && memberPointsAvailable > 0 && (
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            ≈ ৳{(memberPointsAvailable * tierPointRedeemRate).toFixed(2)} discount
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 1. TIER PERCENTAGE DISCOUNT OPTION */}
+                  {hasTierDiscount && (
+                    <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 cursor-pointer select-none font-semibold text-xs text-emerald-800 dark:text-[#00df89]">
+                          <input
+                            type="checkbox"
+                            checked={isApplyingTierDiscount}
+                            onChange={(e) => setIsApplyingTierDiscount(e.target.checked)}
+                            className="w-3.5 h-3.5 text-[#00df89] rounded border-slate-300 focus:ring-[#00df89]"
+                          />
+                          <span>{matchedCustomerTier?.name || 'Tier'} Auto Discount ({tierDiscountPercent}%)</span>
+                        </label>
+                        {isApplyingTierDiscount && tierAutoDiscountAmount > 0 && (
+                          <span className="text-xs font-bold font-mono text-emerald-700 dark:text-[#00df89]">
+                            - ৳{tierAutoDiscountAmount.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 2. REWARD POINTS REDEMPTION OPTION */}
+                  {hasPointsRedeemSystem && (
+                    <>
+                      {isEligibleToRedeem ? (
+                        <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-2 cursor-pointer select-none font-semibold text-xs text-amber-800 dark:text-amber-300">
+                              <input
+                                type="checkbox"
+                                checked={isRedeemingPoints}
+                                onChange={(e) => {
+                                  setIsRedeemingPoints(e.target.checked);
+                                  if (e.target.checked && !pointsToRedeem) {
+                                    setPointsToRedeem(String(memberPointsAvailable));
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 text-amber-500 rounded border-slate-300 focus:ring-amber-500"
+                              />
+                              <span>
+                                {lang === 'bn' ? `পয়েন্ট রিডিম করুন (${memberPointsAvailable} pts)` : `Redeem Points (${memberPointsAvailable} pts)`}
+                              </span>
+                            </label>
+
+                            {isRedeemingPoints && rewardDiscountAmount > 0 && (
+                              <span className="text-xs font-bold font-mono text-amber-700 dark:text-amber-400">
+                                - ৳{rewardDiscountAmount.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+
+                          {isRedeemingPoints && (
+                            <div className="flex items-center gap-2 animate-in fade-in duration-100">
+                              <div className="relative flex-1">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={memberPointsAvailable}
+                                  placeholder={`Points to redeem (Max ${memberPointsAvailable})`}
+                                  value={pointsToRedeem}
+                                  onChange={(e) => setPointsToRedeem(e.target.value)}
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-xs font-mono text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-amber-500"
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPointsToRedeem(String(memberPointsAvailable))}
+                                className="text-[11px] h-7.5 px-2.5 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                              >
+                                {lang === 'bn' ? 'সর্বোচ্চ' : 'Max Points'}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-slate-400 pt-1.5 border-t border-slate-200/70 dark:border-zinc-800/70 flex items-center gap-1.5">
+                          <Sparkles className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>
+                            {lang === 'bn'
+                              ? `রিডিম ডিসকাউন্ট পেতে ন্যূনতম ${minPointsRequired} পয়েন্ট প্রয়োজন (বর্তমান: ${memberPointsAvailable} pts)।`
+                              : `Minimum ${minPointsRequired} points needed to redeem bill discounts (Current: ${memberPointsAvailable} pts).`}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Points Earned Preview */}
+                  {pointsEarnedOnSale > 0 && (
+                    <div className="text-[11px] font-medium text-emerald-700 dark:text-[#00df89] flex items-center gap-1.5 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                      <Sparkles className="w-3 h-3 text-[#00df89] shrink-0" />
+                      <span>
+                        {lang === 'bn'
+                          ? `এই অর্ডারে মেম্বার পাবেন +${pointsEarnedOnSale} রিওয়ার্ড পয়েন্ট`
+                          : `Customer will earn +${pointsEarnedOnSale} loyalty points on this order`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* DISCOUNT CONFIGURATION (FLAT / PERCENTAGE) */}
@@ -1084,10 +1335,37 @@ export default function NewSale() {
                   <span className="font-bold">- ৳ {discountAmount.toLocaleString()}</span>
                 </div>
               )}
+              {tierAutoDiscountAmount > 0 && (
+                <div className="flex justify-between text-emerald-600 dark:text-[#00df89] font-semibold">
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-[#00df89]" />
+                    {lang === 'bn' ? `${matchedCustomerTier?.name || 'টিয়ার'} অটো ডিসকাউন্ট (${tierDiscountPercent}%):` : `${matchedCustomerTier?.name || 'Tier'} Auto Discount (${tierDiscountPercent}%):`}
+                  </span>
+                  <span className="font-bold font-mono">- ৳ {tierAutoDiscountAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {rewardDiscountAmount > 0 && (
+                <div className="flex justify-between text-amber-600 dark:text-amber-400 font-semibold">
+                  <span className="flex items-center gap-1">
+                    <Crown className="w-3 h-3 text-amber-500" />
+                    {lang === 'bn' ? 'মেম্বার পয়েন্ট ডিসকাউন্ট' : 'Reward Points Discount'}
+                  </span>
+                  <span className="font-bold font-mono">- ৳ {rewardDiscountAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
               <div className="flex justify-between items-baseline pt-2 border-t border-slate-100 dark:border-zinc-800 text-base font-bold text-slate-900 dark:text-white">
                 <span>Total Payable:</span>
                 <span className="text-xl text-[#00a86b] dark:text-[#00df89]">৳ {totalPayable.toLocaleString()}</span>
               </div>
+              {pointsEarnedOnSale > 0 && (
+                <div className="flex justify-between text-[11px] text-emerald-600 dark:text-[#00df89] font-medium pt-0.5">
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    {lang === 'bn' ? 'অর্ডারে অর্জিত পয়েন্ট:' : 'Points to be earned:'}
+                  </span>
+                  <span className="font-bold font-mono">+{pointsEarnedOnSale} pts</span>
+                </div>
+              )}
 
               {/* Extra dues breakdown in summary if applicable */}
               {(paymentMethod === 'Due' || currentBillDue > 0 || previousCustomerDue > 0) && (
@@ -1151,7 +1429,7 @@ export default function NewSale() {
 
       {/* COMPLETED RECEIPT MODAL */}
       {isSuccessModalOpen && completedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in">
           <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl relative">
             
             {/* Top Right Close Button */}
@@ -1162,7 +1440,7 @@ export default function NewSale() {
                 navigate('/sales');
               }}
               className="absolute top-4 right-4 p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800/80 transition-colors cursor-pointer"
-              title="Close & Go to Sales"
+              title={lang === 'bn' ? 'বন্ধ করুন ও বিক্রয় তালিকায় যান' : 'Close & Go to Sales'}
             >
               <X className="w-5 h-5" />
             </button>
@@ -1193,20 +1471,20 @@ export default function NewSale() {
 
               <div className="space-y-1 text-[11px]">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Customer:</span>
+                  <span className="text-slate-500">{lang === 'bn' ? 'কাস্টমার:' : 'Customer:'}</span>
                   <span className="font-semibold text-slate-800 dark:text-zinc-200">{completedOrder.customer}</span>
                 </div>
                 {completedOrder.phone !== 'N/A' && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Phone:</span>
+                    <span className="text-slate-500">{lang === 'bn' ? 'ফোন:' : 'Phone:'}</span>
                     <span className="font-mono text-slate-700 dark:text-zinc-300">{completedOrder.phone}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Payment Method:</span>
+                  <span className="text-slate-500">{lang === 'bn' ? 'পেমেন্ট মেথড:' : 'Payment Method:'}</span>
                   <span className="font-semibold capitalize">
                     {completedOrder.method}
-                    {completedOrder.currentBillDue > 0 && ` (Due: ৳${completedOrder.currentBillDue.toLocaleString()})`}
+                    {completedOrder.currentBillDue > 0 && ` (${lang === 'bn' ? 'বকেয়া:' : 'Due:'} ৳${completedOrder.currentBillDue.toLocaleString()})`}
                   </span>
                 </div>
               </div>
@@ -1232,24 +1510,40 @@ export default function NewSale() {
               {/* Financial Totals */}
               <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1 text-xs">
                 <div className="flex justify-between text-slate-500">
-                  <span>Subtotal:</span>
+                  <span>{lang === 'bn' ? 'সাবটোটাল:' : 'Subtotal:'}</span>
                   <span>৳ {completedOrder.subtotal.toLocaleString()}</span>
                 </div>
                 {completedOrder.discount > 0 && (
                   <div className="flex justify-between text-rose-500">
                     <span>
-                      Discount {completedOrder.discountType === 'percentage' ? `(${completedOrder.discountValue}%)` : '(Flat)'}:
+                      {lang === 'bn' ? 'ডিসকাউন্ট' : 'Discount'} {completedOrder.discountType === 'percentage' ? `(${completedOrder.discountValue}%)` : '(Flat)'}:
                     </span>
                     <span className="font-bold">- ৳ {completedOrder.discount.toLocaleString()}</span>
                   </div>
                 )}
+                {completedOrder.tierDiscountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-600 dark:text-[#00df89] font-semibold">
+                    <span>
+                      {lang === 'bn' ? `টিয়ার ছাড় (${completedOrder.memberTier} ${completedOrder.tierDiscountPercent}%):` : `Tier Discount (${completedOrder.memberTier} ${completedOrder.tierDiscountPercent}%):`}
+                    </span>
+                    <span className="font-bold font-mono">- ৳ {completedOrder.tierDiscountAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                {completedOrder.rewardDiscountAmount > 0 && (
+                  <div className="flex justify-between text-amber-600 dark:text-amber-400 font-semibold">
+                    <span>
+                      {lang === 'bn' ? `পয়েন্ট ডিসকাউন্ট (${completedOrder.rewardPointsRedeemed} pts):` : `Points Discount (${completedOrder.rewardPointsRedeemed} pts):`}
+                    </span>
+                    <span className="font-bold font-mono">- ৳ {completedOrder.rewardDiscountAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-800">
-                  <span>Total Bill Amount:</span>
+                  <span>{lang === 'bn' ? 'মোট বিল:' : 'Total Bill Amount:'}</span>
                   <span className="text-[#00a86b] dark:text-[#00df89]">৳ {completedOrder.total.toLocaleString()}</span>
                 </div>
 
                 <div className="flex justify-between text-slate-700 dark:text-zinc-300 pt-1">
-                  <span>Amount Paid Now:</span>
+                  <span>{lang === 'bn' ? 'পরিশোধিত:' : 'Amount Paid Now:'}</span>
                   <span className="font-bold text-[#00a86b] dark:text-[#00df89]">৳ {(completedOrder.paidAmount ?? completedOrder.total).toLocaleString()}</span>
                 </div>
 
@@ -1292,8 +1586,8 @@ export default function NewSale() {
 
             {/* Modal Actions */}
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
-              <Button variant="outline" size="sm" onClick={handleResetSale}>
-                New Sale
+              <Button variant="outline" size="sm" onClick={handleResetSale} className="cursor-pointer font-medium">
+                {lang === 'bn' ? 'নতুন বিক্রি' : 'New Sale'}
               </Button>
               <Button
                 size="sm"
@@ -1314,6 +1608,13 @@ export default function NewSale() {
                     })),
                     subtotal: completedOrder.subtotal,
                     discount: completedOrder.discount,
+                    tierDiscountPercent: completedOrder.tierDiscountPercent,
+                    tierDiscountAmount: completedOrder.tierDiscountAmount,
+                    rewardDiscountAmount: completedOrder.rewardDiscountAmount,
+                    rewardPointsRedeemed: completedOrder.rewardPointsRedeemed,
+                    rewardPointsEarned: completedOrder.rewardPointsEarned,
+                    isMember: completedOrder.isMember,
+                    memberTier: completedOrder.memberTier,
                     total: completedOrder.total,
                     paid_amount: completedOrder.paidAmount,
                     due_amount: completedOrder.currentBillDue,
@@ -1324,9 +1625,9 @@ export default function NewSale() {
                   shop: mongoShop,
                   lang
                 })}
-                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1.5 cursor-pointer shadow-sm"
               >
-                <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'ক্যাশ মেমো প্রিন্ট' : 'Print Memo'}
+                <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'ক্যাশ মেমো প্রিন্ট' : 'Generate Memo'}
               </Button>
             </div>
           </Card>

@@ -7,7 +7,7 @@ import { auth } from '@/firebase.config';
 const DEFAULT_PROD_API_URL = 'https://shopo-api.vidflix.live';
 
 const getBaseUrl = () => {
-  const envUrl = (import.meta?.env?.VITE_API_URL || '').trim();
+  const envUrl = (import.meta.env.VITE_API_URL || '').trim();
   if (envUrl) {
     return `${envUrl.replace(/\/+$/, '').replace(/\/api(\/v1)?\/?$/, '')}/api/v1`;
   }
@@ -24,6 +24,17 @@ const getBaseUrl = () => {
 };
 
 const BASE_URL = getBaseUrl();
+
+/**
+ * Clean URL search params helper avoiding 'undefined', 'null', or empty values
+ */
+const toQueryString = (params = {}) => {
+  const clean = Object.entries(params).filter(
+    ([_, v]) => v !== undefined && v !== null && v !== '' && v !== 'undefined' && v !== 'null' && v !== 'all'
+  );
+  if (clean.length === 0) return '';
+  return new URLSearchParams(Object.fromEntries(clean)).toString();
+};
 
 /**
  * Universal request wrapper attaching Firebase ID Token with safety timeout
@@ -48,6 +59,14 @@ async function request(endpoint, options = {}) {
     }
   }
 
+  // Inject active shop ID header if stored in session
+  if (typeof window !== 'undefined') {
+    const activeShopId = localStorage.getItem('shopo_active_shop_id');
+    if (activeShopId) {
+      headers['x-shop-id'] = activeShopId;
+    }
+  }
+
   const url = `${BASE_URL}${endpoint}`;
   try {
     const response = await fetch(url, {
@@ -67,10 +86,11 @@ async function request(endpoint, options = {}) {
 
     return data;
   } catch (err) {
+    clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      const timeoutErr = new Error(`Request timed out after ${timeout / 1000}s: ${endpoint}`);
-      timeoutErr.code = 'TIMEOUT';
-      throw timeoutErr;
+      const timeoutError = new Error('Network request timed out. Please check your connection.');
+      timeoutError.status = 408;
+      throw timeoutError;
     }
     throw err;
   } finally {
@@ -79,23 +99,51 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
-  // Auth & Profile
+  // Authentication & Profile Sync
   auth: {
     getMe: () => request('/auth/me'),
   },
 
   // Shops & Settings
   shops: {
+    list: () => request('/shops'),
     create: (shopData) =>
       request('/shops', {
         method: 'POST',
         body: JSON.stringify(shopData),
+      }),
+    switch: (id) =>
+      request(`/shops/${id}/switch`, {
+        method: 'POST',
       }),
     getCurrent: () => request('/shops/current'),
     update: (updateData) =>
       request('/shops/current', {
         method: 'PATCH',
         body: JSON.stringify(updateData),
+      }),
+  },
+
+  // Users & Roles & Permissions
+  users: {
+    list: () => request('/users'),
+    create: (data) =>
+      request('/users', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id, data) =>
+      request(`/users/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    checkVerification: (id) =>
+      request(`/users/${id}/check-verification`, {
+        method: 'POST',
+      }),
+    delete: (id) =>
+      request(`/users/${id}`, {
+        method: 'DELETE',
       }),
   },
 
@@ -242,6 +290,43 @@ export const api = {
       }),
   },
 
+  // Membership & Reward Points
+  membership: {
+    getSettings: () => request('/membership/settings'),
+    updateSettings: (data) =>
+      request('/membership/settings', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    getMembers: (params = {}) => {
+      const qs = toQueryString(params);
+      return request(`/membership/members${qs ? `?${qs}` : ''}`);
+    },
+    listMembers: (params = {}) => {
+      const qs = toQueryString(params);
+      return request(`/membership/members${qs ? `?${qs}` : ''}`);
+    },
+    getStats: () =>
+      request('/membership/members').then((res) => ({
+        success: true,
+        data: res?.stats || {},
+      })),
+    enrollMember: (data) =>
+      request('/membership/members', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    adjustPoints: (id, data) =>
+      request(`/membership/members/${id}/points`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    removeMembership: (id) =>
+      request(`/membership/members/${id}`, {
+        method: 'DELETE',
+      }),
+  },
+
   // Sales & POS Checkout
   sales: {
     create: (data) =>
@@ -262,6 +347,11 @@ export const api = {
     update: (id, data) =>
       request(`/sales/${id}`, {
         method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    return: (id, data) =>
+      request(`/sales/${id}/return`, {
+        method: 'POST',
         body: JSON.stringify(data),
       }),
     delete: (id) =>

@@ -9,12 +9,16 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Flame, Plus, Clock, Users, Calendar, MapPin, Loader2, X } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function GymClasses() {
   const { lang } = useLanguage();
   const [classes, setClasses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useBodyScrollLock(isModalOpen);
+
   const [newClass, setNewClass] = useState({
     name: '',
     trainer: 'Lead Trainer',

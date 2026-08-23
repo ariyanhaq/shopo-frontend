@@ -11,8 +11,10 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { X, CreditCard, DollarSign, CheckCircle2, Loader2 } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function RecordPaymentModal({ isOpen, onClose, onRecordPayment, defaultMemberId = '' }) {
+  useBodyScrollLock(isOpen);
   const { lang } = useLanguage();
   const [members, setMembers] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);

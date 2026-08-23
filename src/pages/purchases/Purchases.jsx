@@ -28,6 +28,7 @@ import {
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { BarcodeLabelModal } from '@/components/inventory/BarcodeLabelModal';
 import { generateUniqueBarcode } from '@/utils/barcodePrinter';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import toast from 'react-hot-toast';
 
 export default function Purchases() {
@@ -59,6 +60,15 @@ export default function Purchases() {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [barcodeModalProducts, setBarcodeModalProducts] = useState([]);
+
+  useBodyScrollLock(
+    Boolean(
+      isPurchaseModalOpen ||
+      isEditModalOpen ||
+      selectedInvoice ||
+      isBarcodeModalOpen
+    )
+  );
 
   // Pay Due Modal State
   const [payDueModal, setPayDueModal] = useState({

@@ -16,8 +16,10 @@ import {
   X, User, Phone, ShieldAlert, HeartPulse, CheckCircle2,
   Calendar, CreditCard, ChevronRight, ChevronLeft, Dumbbell, Wallet, Loader2
 } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function AddMemberModal({ isOpen, onClose, onAddMember }) {
+  useBodyScrollLock(isOpen);
   const { lang } = useLanguage();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);

@@ -90,12 +90,19 @@ export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
 
   const customerName = order.customer_id?.name || order.customer_name || (isBn ? 'খুচরা ক্রেতা' : 'Walk-in Customer');
   const customerPhone = order.customer_id?.phone || order.customer_phone || '';
+  const isMember = Boolean(order.isMember || order.customer_id?.is_member);
+  const memberTier = order.memberTier || order.customer_id?.membership_tier || 'Regular';
+  const tierDiscountPercent = Number(order.tierDiscountPercent || order.tier_discount_percent || 0);
+  const tierDiscountAmount = Number(order.tierDiscountAmount || order.tier_discount_amount || order.tierExtraDiscount || 0);
+  const rewardPointsEarned = Number(order.rewardPointsEarned || order.reward_points_earned || 0);
+  const rewardPointsRedeemed = Number(order.rewardPointsRedeemed || order.reward_points_redeemed || 0);
+  const rewardDiscountAmount = Number(order.rewardDiscountAmount || order.reward_discount_amount || 0);
   const paymentMethod = (order.payment_method || order.paymentMethod || 'cash').toUpperCase();
 
   const items = Array.isArray(order.items) ? order.items : [];
   const subtotal = Number(order.subtotal || order.total || 0);
   const discount = Number(order.discount || 0);
-  const total = Number(order.total || (subtotal - discount));
+  const total = Number(order.total || (subtotal - discount - tierDiscountAmount - rewardDiscountAmount));
   const paid = Number(order.paid_amount !== undefined ? order.paid_amount : (order.paid !== undefined ? order.paid : total));
   const due = Number(order.due_amount !== undefined ? order.due_amount : (order.due || Math.max(0, total - paid)));
   const customerTotalDue = Number(order.customer_id?.total_due || 0);
@@ -175,7 +182,10 @@ export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
       <span><span class="font-bold">${isBn ? 'তারিখ' : 'Date'}:</span> ${dateStr}</span>
     </div>
     <div style="margin-top: 2px; padding-top: 2px; border-top: 1px dashed #ddd;">
-      <div><span class="font-bold">${isBn ? 'ক্রেতা' : 'Customer'}:</span> ${customerName}</div>
+      <div class="flex justify-between items-center">
+        <span><span class="font-bold">${isBn ? 'ক্রেতা' : 'Customer'}:</span> ${customerName}</span>
+        ${isMember ? `<span class="badge" style="background:#fef3c7; border-color:#d97706; color:#92400e;">👑 ${memberTier}</span>` : ''}
+      </div>
       ${customerPhone ? `<div><span class="font-bold">${isBn ? 'ফোন' : 'Phone'}:</span> ${customerPhone}</div>` : ''}
     </div>
   </div>
@@ -230,6 +240,20 @@ export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
       </div>
     ` : ''}
 
+    ${tierDiscountAmount > 0 ? `
+      <div class="totals-row" style="color: #047857; font-weight: 700;">
+        <span>${isBn ? `টিয়ার ছাড় (${memberTier} ${tierDiscountPercent}%):` : `Tier Discount (${memberTier} ${tierDiscountPercent}%):`}</span>
+        <span>- ৳${tierDiscountAmount.toLocaleString()}</span>
+      </div>
+    ` : ''}
+
+    ${rewardDiscountAmount > 0 ? `
+      <div class="totals-row" style="color: #b45309; font-weight: 700;">
+        <span>${isBn ? 'মেম্বার পয়েন্ট ছাড় (Points Discount):' : 'Reward Points Discount:'}</span>
+        <span>- ৳${rewardDiscountAmount.toLocaleString()}</span>
+      </div>
+    ` : ''}
+
     <div class="grand-total">
       <span>${isBn ? 'সর্বমোট বিল (Net Total):' : 'Grand Total:'}</span>
       <span>৳${total.toLocaleString()}</span>
@@ -262,6 +286,13 @@ export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
       <div class="totals-row font-bold" style="font-size: 10.5px;">
         <span>${isBn ? 'ফেরত দেওয়া হয়েছে (Change):' : 'Change Returned:'}</span>
         <span>৳${changeReturned.toLocaleString()}</span>
+      </div>
+    ` : ''}
+
+    ${(rewardPointsEarned > 0 || rewardPointsRedeemed > 0) ? `
+      <div style="margin-top: 4px; padding: 4px 6px; background: #fefce8; border: 1px dashed #ca8a04; border-radius: 4px; font-size: 10px;">
+        ${rewardPointsRedeemed > 0 ? `<div>⭐ ${isBn ? 'পয়েন্ট রিডিম করা হয়েছে:' : 'Points Redeemed:'} <strong>-${rewardPointsRedeemed} pts</strong></div>` : ''}
+        ${rewardPointsEarned > 0 ? `<div>⭐ ${isBn ? 'নতুন অর্জিত পয়েন্ট:' : 'Points Earned on Sale:'} <strong>+${rewardPointsEarned} pts</strong></div>` : ''}
       </div>
     ` : ''}
   </div>

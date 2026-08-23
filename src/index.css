@@ -17,10 +17,23 @@
     width: 100%;
     font-family: 'Hind Siliguri', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
+  
+  /* Prevent background scrolling when a modal is open */
+  body.modal-open {
+    overflow: hidden !important;
+  }
+
   body {
     @apply bg-[#F8FAFC] text-slate-900 dark:bg-[#09090b] dark:text-zinc-100 antialiased transition-colors duration-300;
   }
 }
+
+/* Modal Inner Card Scroll Containment */
+[role="dialog"] {
+  overscroll-behavior: contain;
+}
+
+
 
 /* Hide scrollbars globally for no-scrollbar containers */
 .no-scrollbar::-webkit-scrollbar {

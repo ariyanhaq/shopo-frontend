@@ -5,6 +5,7 @@
 import { X, AlertTriangle, Trash2, HelpCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function ConfirmDialog({
   isOpen,
@@ -18,13 +19,29 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }) {
+  useBodyScrollLock(isOpen);
+
   if (!isOpen) return null;
 
   const activeLoadingText = loadingText || (confirmText?.includes('মুছ') || title?.includes('মুছ') ? 'মুছে ফেলা হচ্ছে...' : 'Deleting...');
 
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget && !isLoading && onCancel) {
+      onCancel();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <Card className="max-w-sm w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl space-y-4 relative">
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={handleBackdropClick}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
+    >
+      <Card
+        onClick={(e) => e.stopPropagation()}
+        className="max-w-sm w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl space-y-4 relative modal-dialog-content"
+      >
         
         {/* Close Icon */}
         <button

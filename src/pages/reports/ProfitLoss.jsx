@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/calendar';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   Wallet, DollarSign, TrendingUp, TrendingDown, Plus, Download,
   Calendar, FileSpreadsheet, PieChart, ArrowUpRight, ArrowDownRight,
@@ -53,7 +54,7 @@ const MONTHS = [
   { value: '8', labelEn: 'September', labelBn: 'সেপ্টেম্বর' },
   { value: '9', labelEn: 'October', labelBn: 'অক্টোবর' },
   { value: '10', labelEn: 'November', labelBn: 'নভেম্বর' },
-  { value: '11', labelEn: 'December', labelBn: 'ডিসেম্বর' },
+  { value: '11', labelEn: 'December', labelBn: 'ডিসেম্বর' }
 ];
 
 export default function ProfitLoss() {
@@ -111,6 +112,8 @@ export default function ProfitLoss() {
     date: new Date().toISOString().split('T')[0],
     description: '',
   });
+
+  useBodyScrollLock(Boolean(isAddExpenseModalOpen || isEditExpenseModalOpen));
 
   // Confirm Delete Dialog State
   const [confirmDeleteDialog, setConfirmDeleteDialog] = useState({

@@ -5,8 +5,11 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, Scan, Plus, QrCode, ShoppingCart, UserPlus, CreditCard } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function QuickActionModal({ isOpen, onClose, title = 'Quick Action', shopName = 'Workspace' }) {
+  useBodyScrollLock(isOpen);
+
   const [submitted, setSubmitted] = useState(false);
   const [formData, setFormData] = useState({ itemName: '', category: '', price: '', quantity: '1' });
 
@@ -21,14 +24,26 @@ export default function QuickActionModal({ isOpen, onClose, title = 'Quick Actio
     }, 1200);
   };
 
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget && onClose) {
+      onClose();
+    }
+  };
+
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={handleBackdropClick}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+      >
         <motion.div
+          onClick={(e) => e.stopPropagation()}
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-800 shadow-2xl relative overflow-hidden"
+          className="bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-md border border-slate-200 dark:border-slate-800 shadow-2xl relative overflow-hidden modal-dialog-content"
         >
           {/* Close button */}
           <button

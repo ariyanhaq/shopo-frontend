@@ -6,6 +6,7 @@ import { Card, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tag, Plus, Edit2, Trash2, CheckCircle2, Loader2, X, Search } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function Categories() {
   const { lang } = useLanguage();
@@ -16,6 +17,8 @@ export default function Categories() {
   const [categoryName, setCategoryName] = useState('');
   const [categoryDesc, setCategoryDesc] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useBodyScrollLock(isModalOpen);
 
   const fetchCategories = async () => {
     try {

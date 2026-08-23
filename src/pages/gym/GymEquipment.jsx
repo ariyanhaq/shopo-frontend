@@ -16,12 +16,15 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { Wrench, Plus, AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function GymEquipment() {
   const { lang } = useLanguage();
   const [equipment, setEquipment] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useBodyScrollLock(isModalOpen);
   const [newEq, setNewEq] = useState({
     name: '',
     category: 'Cardio',

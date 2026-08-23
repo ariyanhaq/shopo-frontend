@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 // Comprehensive color palette for auto-detecting variation colors
 const COLOR_MAP = {
@@ -141,6 +142,7 @@ export default function VariantPickerModal({
   lang = 'en',
   mode = 'memo', // 'memo' | 'pos'
 }) {
+  useBodyScrollLock(isOpen && Boolean(product));
   const [searchQuery, setSearchQuery] = useState('');
   const [stockFilter, setStockFilter] = useState('all'); // 'all' | 'instock'
 

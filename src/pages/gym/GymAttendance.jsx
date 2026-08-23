@@ -16,6 +16,7 @@ import {
   UserCheck, QrCode, Search, Calendar, Clock, CheckCircle2,
   LogOut, Dumbbell, Zap, Flame, Filter, Loader2, Plus
 } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function GymAttendance() {
   const { lang } = useLanguage();
@@ -28,6 +29,8 @@ export default function GymAttendance() {
   const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useBodyScrollLock(isCheckInModalOpen);
 
   const fetchAttendance = async () => {
     try {

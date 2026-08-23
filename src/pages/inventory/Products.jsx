@@ -25,6 +25,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog';
 import ProductImageUploader from '@/components/common/ProductImageUploader';
 import { BarcodeLabelModal } from '@/components/inventory/BarcodeLabelModal';
 import { generateUniqueBarcode } from '@/utils/barcodePrinter';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   Package, PackagePlus, DollarSign, Plus, Search, Filter, AlertTriangle,
   Download, Edit2, Trash2, CheckCircle2, Clock, X, Barcode,
@@ -59,6 +60,17 @@ export default function Products() {
   const [barcodeModalProducts, setBarcodeModalProducts] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useBodyScrollLock(
+    Boolean(
+      isActionChoiceModalOpen ||
+      isAddModalOpen ||
+      isRestockModalOpen ||
+      isQuickEditPickerOpen ||
+      isEditModalOpen ||
+      isBarcodeModalOpen
+    )
+  );
 
   useEffect(() => {
     if (location.state?.openAddModal || new URLSearchParams(location.search).get('action') === 'add') {

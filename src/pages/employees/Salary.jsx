@@ -16,6 +16,7 @@ import {
   DollarSign, Plus, CheckCircle2, Search, Calendar,
   Wallet, FileText, Loader2, X, Briefcase
 } from 'lucide-react';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export default function Salary() {
   const { lang } = useLanguage();
@@ -25,6 +26,8 @@ export default function Salary() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useBodyScrollLock(isModalOpen);
 
   const [payForm, setPayForm] = useState({
     employee_id: '',

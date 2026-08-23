@@ -107,6 +107,7 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [mongoUser, setMongoUser] = useState(null);
   const [mongoShop, setMongoShop] = useState(null);
+  const [userShops, setUserShops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [isProfileChecked, setIsProfileChecked] = useState(false);
@@ -116,6 +117,7 @@ export function AuthProvider({ children }) {
     if (shop) {
       setMongoShop(shop);
       localStorage.setItem('shopo_has_shop', 'true');
+      localStorage.setItem('shopo_active_shop_id', shop._id);
       localStorage.setItem('shopo_business_type', shop.business_type || 'grocery');
     }
     if (user) {
@@ -125,15 +127,24 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const syncBackendProfile = async () => {
-    setIsProfileLoading(true);
+  const syncBackendProfile = async (silent = false) => {
+    if (!silent && !isProfileChecked) {
+      setIsProfileLoading(true);
+    }
     try {
       const res = await api.auth.getMe();
       if (res.data) {
         setMongoUser(res.data.user);
         setMongoShop(res.data.shop);
+        if (Array.isArray(res.data.shops)) {
+          setUserShops(res.data.shops);
+        }
         if (res.data.shop?._id || res.data.user?.shop_id) {
           localStorage.setItem('shopo_has_shop', 'true');
+          const activeId = res.data.shop?._id || res.data.user?.shop_id;
+          if (activeId) {
+            localStorage.setItem('shopo_active_shop_id', activeId);
+          }
           if (res.data.shop?.business_type) {
             localStorage.setItem('shopo_business_type', res.data.shop.business_type);
           }
@@ -187,6 +198,25 @@ export function AuthProvider({ children }) {
       unsubscribe();
     };
   }, []);
+
+  // Background heartbeat & window focus sync (runs 100% silently under the hood without UI loader)
+  useEffect(() => {
+    if (!currentUser || !currentUser.emailVerified) return;
+
+    const handleFocus = () => {
+      syncBackendProfile(true);
+    };
+    window.addEventListener('focus', handleFocus);
+
+    const intervalId = setInterval(() => {
+      syncBackendProfile(true);
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(intervalId);
+    };
+  }, [currentUser]);
 
   /**
    * Log in with Email and Password (requires email verification)
@@ -376,6 +406,49 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const switchShop = async (targetShopId) => {
+    setIsProfileLoading(true);
+    try {
+      localStorage.setItem('shopo_active_shop_id', targetShopId);
+      const res = await api.shops.switch(targetShopId);
+      if (res.data?.shop) {
+        setMongoShop(res.data.shop);
+        setMongoUser(res.data.user);
+        localStorage.setItem('shopo_has_shop', 'true');
+        localStorage.setItem('shopo_business_type', res.data.shop.business_type || 'grocery');
+      }
+      await syncBackendProfile();
+      return res.data;
+    } catch (err) {
+      console.error('Failed to switch shop:', err);
+      throw err;
+    } finally {
+      setIsProfileLoading(false);
+    }
+  };
+
+  const createNewShop = async (shopData) => {
+    setIsProfileLoading(true);
+    try {
+      const res = await api.shops.create(shopData);
+      if (res.data?.shop) {
+        const newShop = res.data.shop;
+        localStorage.setItem('shopo_active_shop_id', newShop._id);
+        localStorage.setItem('shopo_has_shop', 'true');
+        localStorage.setItem('shopo_business_type', newShop.business_type || 'grocery');
+        setMongoShop(newShop);
+        if (res.data.user) setMongoUser(res.data.user);
+      }
+      await syncBackendProfile();
+      return res.data;
+    } catch (err) {
+      console.error('Failed to create new shop:', err);
+      throw err;
+    } finally {
+      setIsProfileLoading(false);
+    }
+  };
+
   const clearAuthError = () => setAuthError(null);
 
   const hasShop = Boolean(mongoUser?.shop_id || mongoShop?._id || localStorage.getItem('shopo_has_shop') === 'true');
@@ -384,6 +457,7 @@ export function AuthProvider({ children }) {
     currentUser,
     mongoUser,
     mongoShop,
+    userShops,
     hasShop,
     isAuthenticated: Boolean(currentUser),
     isEmailVerified: Boolean(currentUser?.emailVerified),
@@ -395,6 +469,8 @@ export function AuthProvider({ children }) {
     isFirebaseConfigured,
     setSessionShop,
     syncBackendProfile,
+    switchShop,
+    createNewShop,
     loginWithEmail,
     registerWithEmail,
     sendVerificationEmail,

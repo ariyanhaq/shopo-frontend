@@ -29,6 +29,7 @@ import {
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   BARCODE_PRESETS,
   renderBarcodeElement,
@@ -44,6 +45,7 @@ export const BarcodeLabelModal = ({
   shopInfo = {},
   lang = 'en',
 }) => {
+  useBodyScrollLock(isOpen);
   // Label Print Queue Items
   const [printItems, setPrintItems] = useState([]);
   const [selectedPresetId, setSelectedPresetId] = useState('thermal_50x30');
@@ -255,8 +257,18 @@ export const BarcodeLabelModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <Card className="max-w-5xl w-full p-0 bg-white dark:bg-[#121215] border-slate-200/80 dark:border-zinc-800/80 shadow-2xl max-h-[92vh] flex flex-col overflow-hidden rounded-3xl">
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && onClose) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+    >
+      <Card
+        onClick={(e) => e.stopPropagation()}
+        className="max-w-5xl w-full p-0 bg-white dark:bg-[#121215] border-slate-200/80 dark:border-zinc-800/80 shadow-2xl max-h-[92vh] flex flex-col overflow-hidden rounded-3xl modal-dialog-content"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-zinc-800/80 shrink-0 bg-slate-50/60 dark:bg-zinc-900/40">
           <div className="flex items-center gap-3">
