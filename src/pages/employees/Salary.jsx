@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Pagination from '@/components/common/Pagination';
 import {
   Select,
   SelectTrigger,
@@ -90,53 +91,82 @@ export default function Salary() {
   };
 
   const totalPaid = history.reduce((acc, h) => acc + (h.amount || 0), 0);
+  const monthlyBudget = employees.reduce((acc, e) => acc + (e.salary || 0), 0);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const paginatedHistory = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return history.slice(start, start + pageSize);
+  }, [history, currentPage, pageSize]);
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
-      {/* HEADER */}
+      {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <Wallet className="w-6 h-6 text-[#00df89]" />
-            <span>{lang === 'bn' ? 'বেতন বিতরণ ও পে-রোল খতিয়ান' : 'Salary Payouts & Payroll Register'}</span>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+            <DollarSign className="w-6 h-6 text-[#00df89]" />
+            <span>Staff Payroll & Salary Disbursement</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
-            {lang === 'bn' ? 'মাসিক বেতন পরিশোধ ও হিস্ট্রি' : 'Disburse staff salaries, issue payment receipts and track monthly payroll'}
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal">
+            Manage employee monthly payouts, payment vouchers, and staff ledger history.
           </p>
         </div>
 
         <Button
           onClick={() => setIsModalOpen(true)}
-          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs gap-1.5 shadow-xs"
+          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2"
         >
-          <Plus className="w-4 h-4 stroke-[2]" />
-          <span>{lang === 'bn' ? 'বেতন পরিশোধ করুন' : 'Disburse Salary'}</span>
+          <Plus className="w-4 h-4" />
+          <span>Disburse Salary</span>
         </Button>
       </div>
 
-      {/* KPI METRICS */}
+      {/* KPI METRIC CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Total Salary Outflow Recorded</div>
-          <div className="text-2xl font-medium text-rose-500 mt-1">৳ {totalPaid.toLocaleString()}</div>
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Staff</span>
+            <Briefcase className="w-4 h-4 text-blue-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : employees.length}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Active staff members</div>
         </Card>
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Pay Slips Issued</div>
-          <div className="text-2xl font-medium text-slate-900 dark:text-white mt-1">{history.length}</div>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Salary Outflow</span>
+            <DollarSign className="w-4 h-4 text-rose-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-rose-500 mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${totalPaid.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-rose-500 mt-1">Lifetime payroll expense</div>
         </Card>
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Registered Staff</div>
-          <div className="text-2xl font-medium text-[#00a86b] dark:text-[#00df89] mt-1">{employees.length}</div>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Monthly Projected</span>
+            <Calendar className="w-4 h-4 text-purple-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-purple-500 mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${monthlyBudget.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-purple-500 mt-1">Base monthly liability</div>
         </Card>
       </div>
 
-      {/* PAYROLL HISTORY TABLE */}
+      {/* SALARY HISTORY TABLE */}
       <Card className="p-0 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
         {isLoading ? (
-          <div className="p-12 text-center text-slate-400">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-[#00df89]" />
-            Loading salary logs...
+          <div className="p-6 space-y-3">
+            {[1, 2, 3].map(i => <div key={i} className="h-10 bg-slate-100 dark:bg-zinc-800/50 rounded animate-pulse" />)}
           </div>
         ) : history.length === 0 ? (
           <div className="p-12 text-center space-y-3">
@@ -158,7 +188,7 @@ export default function Salary() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {history.map((h) => (
+                {paginatedHistory.map((h) => (
                   <tr key={h._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
                     <td className="p-3.5 font-medium text-slate-900 dark:text-white">
                       {h.employee_id?.name || 'Staff Member'}
@@ -178,6 +208,16 @@ export default function Salary() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={history.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

@@ -19,6 +19,7 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import Pagination from '@/components/common/Pagination';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   Users, Plus, Phone, Mail, DollarSign, Calendar, Search, Trash2,
@@ -371,6 +372,28 @@ export default function Employees() {
     });
   }, [employees, searchQuery, statusFilter]);
 
+  // Directory Pagination
+  const [empPage, setEmpPage] = useState(1);
+  const [empPageSize, setEmpPageSize] = useState(10);
+
+  useEffect(() => {
+    setEmpPage(1);
+  }, [searchQuery, statusFilter, empPageSize]);
+
+  const paginatedEmployees = useMemo(() => {
+    const start = (empPage - 1) * empPageSize;
+    return filteredEmployees.slice(start, start + empPageSize);
+  }, [filteredEmployees, empPage, empPageSize]);
+
+  // Payroll History Pagination
+  const [payPage, setPayPage] = useState(1);
+  const [payPageSize, setPayPageSize] = useState(10);
+
+  const paginatedSalaryHistory = useMemo(() => {
+    const start = (payPage - 1) * payPageSize;
+    return salaryHistory.slice(start, start + payPageSize);
+  }, [salaryHistory, payPage, payPageSize]);
+
   return (
     <div className="space-y-6 font-sans pb-12">
       
@@ -464,28 +487,20 @@ export default function Employees() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('directory')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold uppercase transition-all cursor-pointer ${
-                activeTab === 'directory'
-                  ? 'bg-slate-900 text-white dark:bg-zinc-800'
-                  : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400'
-              }`}
-            >
-              {lang === 'bn' ? 'কর্মী তালিকা' : 'Staff Directory'} ({employees.length})
-            </button>
-
-            <button
-              onClick={() => setActiveTab('payroll')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold uppercase transition-all cursor-pointer ${
-                activeTab === 'payroll'
-                  ? 'bg-slate-900 text-white dark:bg-zinc-800'
-                  : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400'
-              }`}
-            >
-              {lang === 'bn' ? 'বেতন হিস্ট্রি' : 'Salary History'} ({salaryHistory.length})
-            </button>
+          <div className="w-full sm:w-48">
+            <Select value={activeTab} onValueChange={setActiveTab}>
+              <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full h-9.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-semibold">
+                <SelectValue placeholder={lang === 'bn' ? 'কর্মী তালিকা' : 'Staff Directory'} />
+              </SelectTrigger>
+              <SelectContent className="min-w-[180px]">
+                <SelectItem value="directory">
+                  {lang === 'bn' ? 'কর্মী তালিকা' : 'Staff Directory'}
+                </SelectItem>
+                <SelectItem value="payroll">
+                  {lang === 'bn' ? 'বেতন হিস্ট্রি' : 'Salary History'}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </Card>
@@ -529,7 +544,7 @@ export default function Employees() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {filteredEmployees.map((emp) => (
+                  {paginatedEmployees.map((emp) => (
                     <tr key={emp._id} className="hover:bg-slate-50/70 dark:hover:bg-zinc-900/40 transition-colors">
                       <td className="p-3.5 pl-4 sm:pl-6 whitespace-nowrap">
                         <div className="flex items-center gap-3">
@@ -551,12 +566,12 @@ export default function Employees() {
 
                       <td className="p-3.5 whitespace-nowrap text-xs text-slate-600 dark:text-zinc-400">
                         <div className="flex items-center gap-1.5 font-mono">
-                          <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span>{emp.phone}</span>
                         </div>
                         {emp.email && (
                           <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 truncate max-w-48">
-                            <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                            <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <span className="truncate">{emp.email}</span>
                           </div>
                         )}
@@ -591,28 +606,27 @@ export default function Employees() {
 
                       <td className="p-3.5 pr-4 sm:pr-6 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            size="sm"
+                          <button
+                            type="button"
                             onClick={() => handleOpenPaySalary(emp)}
-                            className="h-7 text-xs px-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00a86b] dark:text-[#00df89] font-semibold border border-emerald-500/20 gap-1 cursor-pointer"
+                            title={lang === 'bn' ? 'বেতন পরিশোধ করুন' : 'Pay Salary'}
+                            className="h-8 px-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-[#00a86b] dark:text-[#00df89] border border-emerald-500/20 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0"
                           >
-                            <Banknote className="w-3.5 h-3.5" />
+                            <Banknote className="w-4 h-4 stroke-[2]" />
                             <span>{lang === 'bn' ? 'বেতন দিন' : 'Pay Salary'}</span>
-                          </Button>
+                          </button>
 
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <button
+                            type="button"
                             onClick={() => handleOpenEdit(emp)}
-                            className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                            title="Edit Details"
+                            title={lang === 'bn' ? 'সম্পাদনা করুন' : 'Edit Details'}
+                            className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors cursor-pointer border border-blue-500/20 shadow-2xs shrink-0"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
+                            <Edit2 className="w-4 h-4" />
+                          </button>
 
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <button
+                            type="button"
                             onClick={() =>
                               setConfirmDeactivate({
                                 isOpen: true,
@@ -620,17 +634,27 @@ export default function Employees() {
                                 name: emp.name,
                               })
                             }
-                            className="h-7 w-7 p-0 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
-                            title="Deactivate Employee"
+                            title={lang === 'bn' ? 'নিষ্ক্রিয় / মুছে ফেলুন' : 'Deactivate Employee'}
+                            className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center transition-colors cursor-pointer border border-rose-500/20 shadow-2xs shrink-0"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+
+              {/* Directory Pagination */}
+              <Pagination
+                currentPage={empPage}
+                totalItems={filteredEmployees.length}
+                pageSize={empPageSize}
+                pageSizeOptions={[10, 20, 50, 100]}
+                onPageChange={setEmpPage}
+                onPageSizeChange={setEmpPageSize}
+              />
             </div>
           )}
         </Card>
@@ -668,7 +692,7 @@ export default function Employees() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {salaryHistory.map((p) => (
+                  {paginatedSalaryHistory.map((p) => (
                     <tr key={p._id} className="hover:bg-slate-50/70 dark:hover:bg-zinc-900/40 transition-colors">
                       <td className="p-3.5 pl-4 sm:pl-6 whitespace-nowrap text-xs">
                         <div className="font-bold text-slate-900 dark:text-white">
@@ -716,20 +740,30 @@ export default function Employees() {
                       </td>
 
                       <td className="p-3.5 pr-4 sm:pr-6 text-right whitespace-nowrap">
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <button
+                          type="button"
                           onClick={() => setSelectedPaySlip(p)}
-                          className="h-7 text-xs px-2.5 text-[#00a86b] dark:text-[#00df89] hover:bg-emerald-500/10 gap-1 font-semibold cursor-pointer"
+                          title={lang === 'bn' ? 'বেতন ভাউচার স্লিপ দেখুন' : 'View Salary Voucher Slip'}
+                          className="h-8 px-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-[#00a86b] dark:text-[#00df89] border border-emerald-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0"
                         >
-                          <FileText className="w-3.5 h-3.5" />
+                          <FileText className="w-4 h-4" />
                           <span>{lang === 'bn' ? 'ভাউচার' : 'View Slip'}</span>
-                        </Button>
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+
+              {/* Payroll History Pagination */}
+              <Pagination
+                currentPage={payPage}
+                totalItems={salaryHistory.length}
+                pageSize={payPageSize}
+                pageSizeOptions={[10, 20, 50, 100]}
+                onPageChange={setPayPage}
+                onPageSizeChange={setPayPageSize}
+              />
             </div>
           )}
         </Card>

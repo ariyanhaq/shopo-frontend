@@ -2,12 +2,13 @@
  * @file GymEquipment.jsx
  * @description Gym equipment inventory, machinery maintenance schedules & status monitoring backed by MongoDB.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/services/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Pagination from '@/components/common/Pagination';
 import {
   Select,
   SelectTrigger,
@@ -67,28 +68,67 @@ export default function GymEquipment() {
     }
   };
 
+  const operationalCount = equipment.filter(e => e.maintenanceStatus !== 'Needs Service').length;
+  const maintenanceCount = equipment.filter(e => e.maintenanceStatus === 'Needs Service').length;
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const paginatedEquipment = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return equipment.slice(start, start + pageSize);
+  }, [equipment, currentPage, pageSize]);
+
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* HEADER SECTION */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white flex items-center gap-2.5">
+          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
             <Wrench className="w-6 h-6 text-[#00df89]" />
-            <span>{lang === 'bn' ? 'যন্ত্রপাতি ও ইকুইপমেন্ট মেনটেইন্যান্স' : 'Equipment & Machinery Inventory'}</span>
+            <span>{lang === 'bn' ? 'জিম যন্ত্রপাতি ও রক্ষণাবেক্ষণ' : 'Machinery & Equipment Registry'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
-            {lang === 'bn' ? 'ট্রেডমিল, ডাম্বেল ও মেশিনের স্বাস্থ্য ও সার্ভিসিং তালিকা' : 'Track treadmill conditions, dumbbells, weight racks & maintenance logs'}
+            {lang === 'bn' ? 'ট্রেডমিল, ডাম্বেল, কেবল ও মেশিনের সার্ভিস লগ' : 'Track weights, treadmills, scheduled machine maintenance and service logs'}
           </p>
         </div>
 
         <Button
           onClick={() => setIsModalOpen(true)}
-          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs gap-1.5 shadow-xs"
+          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2"
         >
           <Plus className="w-4 h-4 stroke-[2]" />
-          <span>{lang === 'bn' ? 'ইকুইপমেন্ট যোগ করুন' : 'Add Equipment Item'}</span>
+          <span>{lang === 'bn' ? 'নতুন যন্ত্রপাতি যোগ করুন' : 'Add Equipment'}</span>
         </Button>
+      </div>
+
+      {/* KPI METRICS */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="text-xs text-slate-500 dark:text-zinc-400">Total Machinery Assets</div>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : equipment.length}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Catalogued gear units</div>
+        </Card>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="text-xs text-slate-500 dark:text-zinc-400">Operational & Safe</div>
+          <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : operationalCount}
+          </div>
+          <div className="text-xs text-emerald-600 dark:text-[#00df89] mt-1">Ready for workout sessions</div>
+        </Card>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="text-xs text-slate-500 dark:text-zinc-400">Needs Service / Faulty</div>
+          <div className="text-2xl sm:text-3xl font-bold text-amber-500 mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : maintenanceCount}
+          </div>
+          <div className="text-xs text-amber-500 mt-1">Maintenance required</div>
+        </Card>
       </div>
 
       {/* TABLE */}
@@ -96,7 +136,7 @@ export default function GymEquipment() {
         {isLoading ? (
           <div className="p-12 text-center text-slate-400">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-[#00df89]" />
-            Loading equipment records...
+            Loading machinery catalog...
           </div>
         ) : equipment.length === 0 ? (
           <div className="p-12 text-center space-y-3">
@@ -117,7 +157,7 @@ export default function GymEquipment() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {equipment.map((eq) => (
+                {paginatedEquipment.map((eq) => (
                   <tr key={eq._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
                     <td className="p-3.5 font-medium text-slate-900 dark:text-white">{eq.name}</td>
                     <td className="p-3.5 text-slate-500">{eq.category}</td>
@@ -132,6 +172,16 @@ export default function GymEquipment() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={equipment.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

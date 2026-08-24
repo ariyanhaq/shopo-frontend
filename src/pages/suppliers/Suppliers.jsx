@@ -22,6 +22,7 @@ import {
   SelectItem
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import Pagination from '@/components/common/Pagination';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import toast from 'react-hot-toast';
 
@@ -117,6 +118,19 @@ export default function Suppliers() {
       return true;
     });
   }, [suppliers, searchQuery, dueFilter]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, dueFilter, pageSize]);
+
+  const paginatedSuppliers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredSuppliers.slice(start, start + pageSize);
+  }, [filteredSuppliers, currentPage, pageSize]);
 
   // Metrics
   const totalSuppliersCount = suppliers.length;
@@ -453,7 +467,7 @@ export default function Suppliers() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredSuppliers.map((s) => (
+                {paginatedSuppliers.map((s) => (
                   <tr key={s._id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-800/40 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
@@ -563,6 +577,16 @@ export default function Suppliers() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredSuppliers.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

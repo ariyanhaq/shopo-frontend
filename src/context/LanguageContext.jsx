@@ -24,7 +24,7 @@ export const dictionary = {
       sales: "Sales",
       products: "Products",
       customers: "Customers",
-      accounting: "Accounting & Finance",
+      accounting: "Financial Reports",
       settings: "Settings"
     },
     hero: {
@@ -180,7 +180,7 @@ export const dictionary = {
         products: "Products & Stock",
         inventory: "Inventory",
         pos: "POS & Retail Counter",
-        accounting: "Accounting & Finance",
+        accounting: "Financial Reports",
         settings: "Store Settings",
         customers: "Customers & Accounts"
       }
@@ -358,7 +358,7 @@ export const dictionary = {
         products: "প্রোডাক্টস (পণ্য)",
         inventory: "স্টক (ইনভেন্টরি)",
         pos: "কাউন্টার ও পিওএস",
-        accounting: "হিসাব ও অর্থায়ন",
+        accounting: "আর্থিক রিপোর্ট",
         settings: "দোকান সেটিংস",
         customers: "কাস্টমার ও গ্রাহক"
       }

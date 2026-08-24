@@ -19,6 +19,8 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import Pagination from '@/components/common/Pagination';
+import { printExpenseVoucher } from '@/utils/invoicePrinter';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   DollarSign, Plus, Search, Calendar, Trash2, Edit2,
@@ -261,6 +263,19 @@ export default function Expenses() {
     });
   }, [expenses, searchQuery, categoryFilter]);
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, categoryFilter, pageSize]);
+
+  const paginatedExpenses = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredExpenses.slice(start, start + pageSize);
+  }, [filteredExpenses, currentPage, pageSize]);
+
   return (
     <div className="space-y-6 font-sans pb-12">
       
@@ -344,20 +359,22 @@ export default function Expenses() {
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-            {['all', 'Salary', 'Rent', 'Utilities', 'Logistics', 'Marketing', 'Entertainment', 'General'].map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setCategoryFilter(cat)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold uppercase transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                  categoryFilter.toLowerCase() === cat.toLowerCase()
-                    ? 'bg-slate-900 text-white dark:bg-zinc-800'
-                    : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400'
-                }`}
-              >
-                {cat === 'Salary' ? (lang === 'bn' ? 'বেতন' : 'Salary') : cat}
-              </button>
-            ))}
+          <div className="w-full sm:w-52">
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full h-9.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-semibold">
+                <SelectValue placeholder={lang === 'bn' ? 'সকল খাত' : 'All Categories'} />
+              </SelectTrigger>
+              <SelectContent className="min-w-[190px]">
+                <SelectItem value="all">
+                  {lang === 'bn' ? 'সকল খাত (All Categories)' : 'All Categories'}
+                </SelectItem>
+                {EXPENSE_CATEGORIES.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {lang === 'bn' ? cat.labelBn : cat.labelEn}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </Card>
@@ -400,7 +417,7 @@ export default function Expenses() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredExpenses.map((exp) => (
+                {paginatedExpenses.map((exp) => (
                   <tr key={exp._id} className="hover:bg-slate-50/70 dark:hover:bg-zinc-900/40 transition-colors">
                     <td className="p-3.5 pl-4 sm:pl-6 whitespace-nowrap text-xs">
                       <div className="font-bold text-slate-900 dark:text-white">
@@ -439,42 +456,49 @@ export default function Expenses() {
 
                     <td className="p-3.5 pr-4 sm:pr-6 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <button
+                          type="button"
                           onClick={() => setSelectedVoucher(exp)}
-                          className="h-7 text-xs px-2.5 text-[#00a86b] dark:text-[#00df89] hover:bg-emerald-500/10 gap-1 font-semibold cursor-pointer"
-                          title="View Voucher"
+                          title={lang === 'bn' ? 'ভাউচার স্লিপ দেখুন' : 'View Voucher'}
+                          className="h-8 px-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-[#00a86b] dark:text-[#00df89] border border-emerald-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0"
                         >
-                          <FileText className="w-3.5 h-3.5" />
+                          <FileText className="w-4 h-4" />
                           <span>{lang === 'bn' ? 'ভাউচার' : 'Voucher'}</span>
-                        </Button>
+                        </button>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <button
+                          type="button"
                           onClick={() => handleOpenEdit(exp)}
-                          className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                          title="Edit Expense"
+                          title={lang === 'bn' ? 'সম্পাদনা করুন' : 'Edit Expense'}
+                          className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors cursor-pointer border border-blue-500/20 shadow-2xs shrink-0"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </Button>
+                          <Edit2 className="w-4 h-4" />
+                        </button>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <button
+                          type="button"
                           onClick={() => handleDeleteExpense(exp._id, exp.title)}
-                          className="h-7 w-7 p-0 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
-                          title="Delete Expense"
+                          title={lang === 'bn' ? 'মুছে ফেলুন' : 'Delete Expense'}
+                          className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center transition-colors cursor-pointer border border-rose-500/20 shadow-2xs shrink-0"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredExpenses.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>
@@ -715,7 +739,7 @@ export default function Expenses() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => window.print()}
+                onClick={() => printExpenseVoucher({ expense: selectedVoucher, shop: mongoShop, lang })}
                 className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'ভাউচার প্রিন্ট' : 'Print Voucher'}

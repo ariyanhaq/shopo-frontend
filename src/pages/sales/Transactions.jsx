@@ -2,12 +2,20 @@
  * @file Transactions.jsx
  * @description All financial sales transactions and payment ledger connected directly to MongoDB.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/services/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue
+} from '@/components/ui/select';
+import Pagination from '@/components/common/Pagination';
 import { CreditCard, Search, ArrowUpRight, ArrowDownRight, Loader2, FileText } from 'lucide-react';
 
 export default function Transactions() {
@@ -37,41 +45,58 @@ export default function Transactions() {
     fetchTransactions();
   }, []);
 
-  const combined = [
-    ...sales.map(s => ({
-      id: s.invoice_number,
-      type: 'sale',
-      title: `Sale: ${s.items?.map(i => i.name).join(', ') || 'Items'}`,
-      amount: s.total,
-      date: s.created_at,
-      method: s.payment_method || 'Cash',
-      customer: s.customer_id?.name || 'Walk-in Customer',
-    })),
-    ...expenses.map(e => ({
-      id: `EXP-${e._id.slice(-4).toUpperCase()}`,
-      type: 'expense',
-      title: `${e.category}: ${e.title}`,
-      amount: e.amount,
-      date: e.date || e.created_at,
-      method: 'Cash',
-      customer: 'Facility Outflow',
-    }))
-  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const combined = useMemo(() => {
+    return [
+      ...sales.map(s => ({
+        id: s.invoice_number,
+        type: 'sale',
+        title: `Sale: ${s.items?.map(i => i.name).join(', ') || 'Items'}`,
+        amount: s.total,
+        date: s.created_at,
+        method: s.payment_method || 'Cash',
+        customer: s.customer_id?.name || 'Walk-in Customer',
+      })),
+      ...expenses.map(e => ({
+        id: `EXP-${e._id.slice(-4).toUpperCase()}`,
+        type: 'expense',
+        title: `${e.category}: ${e.title}`,
+        amount: e.amount,
+        date: e.date || e.created_at,
+        method: 'Cash',
+        customer: 'Facility Outflow',
+      }))
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [sales, expenses]);
 
-  const filtered = combined.filter(tx => {
-    const q = searchTerm.toLowerCase();
-    const matchesSearch = tx.id.toLowerCase().includes(q) || tx.title.toLowerCase().includes(q) || tx.customer.toLowerCase().includes(q);
-    const matchesType = filterType === 'all' || tx.type === filterType;
-    return matchesSearch && matchesType;
-  });
+  const filtered = useMemo(() => {
+    return combined.filter(tx => {
+      const q = searchTerm.toLowerCase();
+      const matchesSearch = tx.id.toLowerCase().includes(q) || tx.title.toLowerCase().includes(q) || tx.customer.toLowerCase().includes(q);
+      const matchesType = filterType === 'all' || tx.type === filterType;
+      return matchesSearch && matchesType;
+    });
+  }, [combined, searchTerm, filterType]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterType, pageSize]);
+
+  const paginatedTransactions = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
             <CreditCard className="w-6 h-6 text-[#00df89]" />
             <span>{lang === 'bn' ? 'সকল আর্থিক লেনদেন' : 'Financial Transactions Ledger'}</span>
           </h1>
@@ -94,20 +119,23 @@ export default function Transactions() {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          {['all', 'sale', 'expense'].map((t) => (
-            <button
-              key={t}
-              onClick={() => setFilterType(t)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium uppercase transition-all ${
-                filterType === t
-                  ? 'bg-slate-900 text-white dark:bg-zinc-800'
-                  : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+        <div className="w-full sm:w-48">
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full h-9.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-semibold">
+              <SelectValue placeholder={lang === 'bn' ? 'সকল লেনদেন' : 'All Transactions'} />
+            </SelectTrigger>
+            <SelectContent className="min-w-[180px]">
+              <SelectItem value="all">
+                {lang === 'bn' ? 'সকল লেনদেন (All)' : 'All Transactions'}
+              </SelectItem>
+              <SelectItem value="sale">
+                {lang === 'bn' ? 'বিক্রি ও আয় (Sales)' : 'Sales & Inflow'}
+              </SelectItem>
+              <SelectItem value="expense">
+                {lang === 'bn' ? 'খরচ ও ব্যয় (Expenses)' : 'Expenses & Outflow'}
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </Card>
 
@@ -139,7 +167,7 @@ export default function Transactions() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filtered.map((tx, idx) => (
+                {paginatedTransactions.map((tx, idx) => (
                   <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
                     <td className="p-3.5 font-medium text-slate-900 dark:text-white flex items-center gap-1.5">
                       <FileText className="w-3.5 h-3.5 text-slate-400" />
@@ -164,6 +192,16 @@ export default function Transactions() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filtered.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

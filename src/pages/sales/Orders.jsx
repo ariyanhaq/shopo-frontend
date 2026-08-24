@@ -1,6 +1,6 @@
 /**
  * @file Orders.jsx
- * @description Comprehensive Sales Management page with full View, Edit & Delete capabilities, Live DB sync, Discount & Cash Change tracking.
+ * @description Comprehensive Sales Management page with full View, Edit & Delete capabilities, Live DB sync, Discount & Cash Change tracking, Top Selling Items Pie Chart, and Rich Pagination.
  */
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -9,10 +9,18 @@ import { useAuth } from '@/context/AuthContext';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { printSaleReceipt, printDueReceipt } from '@/utils/invoicePrinter';
-import { Card, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator
+} from '@/components/ui/dropdown-menu';
 import {
   Select,
   SelectTrigger,
@@ -21,6 +29,8 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import Pagination from '@/components/common/Pagination';
+import TopSellingPieChart from '@/components/sales/TopSellingPieChart';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   ShoppingCart, DollarSign, Plus, Search, Filter, Calendar,
@@ -28,7 +38,8 @@ import {
   ArrowUpDown, Receipt, CreditCard, Banknote, UserCheck,
   TrendingUp, ShieldCheck, Printer, AlertTriangle, Loader2,
   Percent, Coins, HelpCircle, Tag, FileText, ShoppingBag,
-  RotateCcw, Undo2, Minus, AlertCircle, RefreshCw
+  RotateCcw, Undo2, Minus, AlertCircle, RefreshCw, Copy,
+  Check, User, Phone, ChevronDown, Sparkles, MoreVertical
 } from 'lucide-react';
 
 const safeMoney = (val, fallback = 0) => {
@@ -51,6 +62,11 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [salesOrders, setSalesOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [copiedInvoice, setCopiedInvoice] = useState(null);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // View Receipt Modal State
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -102,7 +118,7 @@ export default function Orders() {
   const fetchSales = async () => {
     setIsLoading(true);
     try {
-      const res = await api.sales.list();
+      const res = await api.sales.list({ limit: 100 });
       const rawList = Array.isArray(res?.data)
         ? res.data
         : Array.isArray(res?.data?.docs)
@@ -120,24 +136,70 @@ export default function Orders() {
     fetchSales();
   }, []);
 
+  // Filtered Orders
   const filteredOrders = useMemo(() => {
     return salesOrders.filter((order) => {
       const q = searchQuery.toLowerCase().trim();
       const inv = order.invoice_number ? order.invoice_number.toLowerCase() : '';
       const cust = order.customer_id?.name ? order.customer_id.name.toLowerCase() : 'walk-in customer';
-      const matchesSearch = !q || inv.includes(q) || cust.includes(q);
+      const phone = order.customer_id?.phone ? order.customer_id.phone.toLowerCase() : '';
+      const matchesSearch = !q || inv.includes(q) || cust.includes(q) || phone.includes(q);
 
       const matchesStatus =
         statusFilter === 'all' ||
-        (statusFilter === 'paid' && (order.payment_status === 'paid' || (order.due_amount || 0) === 0)) ||
-        (statusFilter === 'due' && (order.due_amount || 0) > 0);
+        (statusFilter === 'paid' && order.status !== 'returned' && (order.payment_status === 'paid' || (order.due_amount || 0) === 0)) ||
+        (statusFilter === 'due' && order.status !== 'returned' && (order.due_amount || 0) > 0) ||
+        (statusFilter === 'returned' && (order.status === 'returned' || order.status === 'partially_returned'));
 
       return matchesSearch && matchesStatus;
     });
   }, [salesOrders, searchQuery, statusFilter]);
 
-  const totalRevenue = salesOrders.reduce((acc, o) => acc + (o.total || 0), 0);
-  const totalDue = salesOrders.reduce((acc, o) => acc + (o.due_amount || 0), 0);
+  // Reset to page 1 on filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, pageSize]);
+
+  // Paginated Orders Slice
+  const paginatedOrders = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredOrders.slice(startIndex, startIndex + pageSize);
+  }, [filteredOrders, currentPage, pageSize]);
+
+  // KPI Calculations
+  const stats = useMemo(() => {
+    const totalSalesCount = salesOrders.length;
+    const totalRevenue = salesOrders.reduce((acc, o) => {
+      if (o.status === 'cancelled') return acc;
+      const net = (o.total || 0) - (o.refunded_amount || 0);
+      return acc + Math.max(0, net);
+    }, 0);
+    const totalDue = salesOrders.reduce((acc, o) => acc + (o.due_amount || 0), 0);
+    const paidCount = salesOrders.filter((o) => (o.due_amount || 0) === 0 && o.status !== 'returned').length;
+    const dueCount = salesOrders.filter((o) => (o.due_amount || 0) > 0 && o.status !== 'returned').length;
+    const returnedCount = salesOrders.filter((o) => o.status === 'returned' || o.status === 'partially_returned').length;
+    const averageOrder = totalSalesCount > 0 ? Math.round(totalRevenue / totalSalesCount) : 0;
+
+    return {
+      totalSalesCount,
+      totalRevenue,
+      totalDue,
+      paidCount,
+      dueCount,
+      returnedCount,
+      averageOrder,
+    };
+  }, [salesOrders]);
+
+  // Copy invoice number with feedback
+  const handleCopyInvoice = (e, inv) => {
+    e.stopPropagation();
+    if (!inv) return;
+    navigator.clipboard?.writeText(inv);
+    setCopiedInvoice(inv);
+    toast.success(lang === 'bn' ? `ইনভয়েস #${inv} কপি হয়েছে!` : `Invoice #${inv} copied!`);
+    setTimeout(() => setCopiedInvoice(null), 2000);
+  };
 
   // Open Collect Due Modal
   const handleOpenCollectDue = (order) => {
@@ -177,7 +239,6 @@ export default function Orders() {
 
       setIsCollectModalOpen(false);
       
-      // Open Money Receipt Voucher Modal
       setCollectedVoucher({
         invoice_number: collectingOrder.invoice_number,
         customer_name: collectingOrder.customer_id?.name || 'Walk-in Customer',
@@ -285,7 +346,7 @@ export default function Orders() {
     setIsReturnModalOpen(true);
   };
 
-  // Live Return & Refund Preview Calculation
+  // Return & Refund Summary Preview
   const returnSummary = useMemo(() => {
     if (!returningOrder || !Array.isArray(returningOrder.items)) {
       return { totalReturnGross: 0, netRefund: 0, pointsToDeduct: 0, pointsToRefund: 0, itemsCount: 0, dueReduction: 0, cashRefund: 0 };
@@ -376,7 +437,7 @@ export default function Orders() {
         };
       }).filter((it) => it.quantity > 0);
 
-      const res = await api.sales.return(returningOrder._id, {
+      await api.sales.return(returningOrder._id, {
         items: payloadItems,
         reason: returnReason,
       });
@@ -397,7 +458,7 @@ export default function Orders() {
     }
   };
 
-  // Confirm Delete Dialog State
+  // Delete Sale Dialog State
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmDeleteDialog, setConfirmDeleteDialog] = useState({
     isOpen: false,
@@ -440,23 +501,37 @@ export default function Orders() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <ShoppingCart className="w-6 h-6 text-[#00df89]" />
+            <div className="w-9 h-9 rounded-xl bg-[#00df89]/10 text-[#00df89] flex items-center justify-center border border-[#00df89]/20 shadow-xs">
+              <ShoppingCart className="w-5 h-5 stroke-[2.2]" />
+            </div>
             <span>{lang === 'bn' ? 'বিক্রয় ও ইনভয়েস হিস্ট্রি' : 'Sales History & Invoices'}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-1">
             {lang === 'bn'
-              ? 'সকল ক্যাশ মেমো, ডিসকাউন্ট, ক্যাশ হিসাব এবং এডিট ও ডিলিট অপশন'
+              ? 'সকল ক্যাশ মেমো, পণ্যের বিক্রয় রিপোর্ট, ডিসকাউন্ট ও বকেয়া ব্যবস্থাপনা'
               : 'Track live sales, edit transaction details, restore stock on delete, and print cash memos.'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchSales}
+            disabled={isLoading}
+            className="h-10 px-3.5 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 gap-1.5 cursor-pointer shadow-xs"
+            title="Refresh Sales"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-[#00df89]' : ''}`} />
+            <span className="hidden sm:inline font-semibold">{lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}</span>
+          </Button>
+
           <Button
             onClick={() => navigate('/sales/new')}
-            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>{lang === 'bn' ? 'নতুন বিক্রি তৈরি করুন' : 'New Sale / POS'}</span>
+            <span>{lang === 'bn' ? 'নতুন বিক্রি তৈরি করুন' : 'New Sale'}</span>
           </Button>
         </div>
       </div>
@@ -465,277 +540,501 @@ export default function Orders() {
       {/* KPI STAT CARDS                                       */}
       {/* ---------------------------------------------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Sales Recorded</span>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
-            {isLoading ? <Skeleton className="h-8 w-20 my-0.5" /> : salesOrders.length}
+        <Card className="p-4 sm:p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] shadow-xs relative overflow-hidden group hover:border-[#00df89]/30 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400">
+              {lang === 'bn' ? 'মোট বিক্রয়' : 'Total Invoices'}
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center border border-blue-500/20 shadow-2xs">
+              <FileText className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-xs text-slate-500 mt-1">Invoices issued</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <Skeleton className="h-8 w-20 my-0.5" /> : stats.totalSalesCount}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+            <span>{stats.paidCount} paid</span>
+            <span>•</span>
+            <span className="text-amber-500 font-medium">{stats.dueCount} due</span>
+          </div>
         </Card>
 
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Revenue Collected</span>
-          <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] mt-2">
-            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${totalRevenue.toLocaleString()}`}
+        <Card className="p-4 sm:p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] shadow-xs relative overflow-hidden group hover:border-[#00df89]/30 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400">
+              {lang === 'bn' ? 'মোট সংগৃহীত আয়' : 'Total Revenue'}
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-[#00df89] flex items-center justify-center border border-emerald-500/20 shadow-2xs">
+              <DollarSign className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-xs text-[#00a86b] dark:text-[#00df89] mt-1">Gross sales</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#00a86b] dark:text-[#00df89] mt-2">
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${stats.totalRevenue.toLocaleString()}`}
+          </div>
+          <div className="text-[11px] text-[#00a86b] dark:text-[#00df89] mt-1 font-medium">
+            {lang === 'bn' ? 'নেট বিক্রয় মূল্য' : 'Net sales collected'}
+          </div>
         </Card>
 
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Customer Due</span>
-          <div className="text-2xl sm:text-3xl font-bold text-amber-500 mt-2">
-            {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${totalDue.toLocaleString()}`}
+        <Card className="p-4 sm:p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] shadow-xs relative overflow-hidden group hover:border-amber-500/30 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400">
+              {lang === 'bn' ? 'বকেয়া পাওনা' : 'Pending Customer Due'}
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20 shadow-2xs">
+              <Coins className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-xs text-amber-500 mt-1">Pending payments</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-amber-500 mt-2">
+            {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${stats.totalDue.toLocaleString()}`}
+          </div>
+          <div className="text-[11px] text-amber-500 mt-1 font-medium">
+            {stats.dueCount} {lang === 'bn' ? 'টি মেমোতে বকেয়া' : 'unsettled invoices'}
+          </div>
         </Card>
 
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Average Order Size</span>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
-            {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${salesOrders.length > 0 ? Math.round(totalRevenue / salesOrders.length).toLocaleString() : 0}`}
+        <Card className="p-4 sm:p-5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] shadow-xs relative overflow-hidden group hover:border-[#00df89]/30 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400">
+              {lang === 'bn' ? 'গড় অর্ডার সাইজ' : 'Average Order Value'}
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center border border-purple-500/20 shadow-2xs">
+              <TrendingUp className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-xs text-slate-500 mt-1">Per invoice</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${stats.averageOrder.toLocaleString()}`}
+          </div>
+          <div className="text-[11px] text-slate-400 mt-1">
+            {lang === 'bn' ? 'প্রতি ইনভয়েস গড়' : 'Per transaction average'}
+          </div>
         </Card>
       </div>
 
       {/* ---------------------------------------------------- */}
-      {/* FILTER & SEARCH                                      */}
+      {/* FILTER & SEARCH BAR                                  */}
       {/* ---------------------------------------------------- */}
-      <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="w-full sm:w-80 relative">
+      <Card className="p-3.5 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] shadow-xs">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="w-full md:w-96 relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder={lang === 'bn' ? 'ইনভয়েস বা কাস্টমার খুঁজুন...' : 'Search by invoice # or customer...'}
+              placeholder={lang === 'bn' ? 'ইনভয়েস #, কাস্টমারের নাম বা ফোন খুঁজুন...' : 'Search by invoice #, customer name or phone...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
+              className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89] transition-all"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white p-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {['all', 'paid', 'due'].map((st) => (
-              <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold uppercase transition-all cursor-pointer ${
-                  statusFilter === st
-                    ? 'bg-slate-900 text-white dark:bg-zinc-800'
-                    : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400'
-                }`}
-              >
-                {st}
-              </button>
-            ))}
+          {/* Status Filter Dropdown */}
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="w-full md:w-48">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full h-9.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-semibold">
+                  <SelectValue placeholder={lang === 'bn' ? 'সকল ইনভয়েস' : 'All Invoices'} />
+                </SelectTrigger>
+                <SelectContent className="min-w-[180px]">
+                  <SelectItem value="all">
+                    {lang === 'bn' ? 'সকল ইনভয়েস' : 'All Invoices'}
+                  </SelectItem>
+                  <SelectItem value="paid">
+                    {lang === 'bn' ? 'পরিশোধিত' : 'Paid in Full'}
+                  </SelectItem>
+                  <SelectItem value="due">
+                    {lang === 'bn' ? 'বকেয়া' : 'Due / Unpaid'}
+                  </SelectItem>
+                  <SelectItem value="returned">
+                    {lang === 'bn' ? 'ফেরত' : 'Returned'}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       </Card>
 
       {/* ---------------------------------------------------- */}
-      {/* SALES ORDERS TABLE                                   */}
+      {/* SALES ORDERS TABLE (FIRST)                           */}
       {/* ---------------------------------------------------- */}
-      <Card className="p-0 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
+      <Card className="p-0 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] shadow-xs overflow-hidden">
         {isLoading ? (
-          <div className="p-5 space-y-3">
+          <div className="p-6 space-y-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Skeleton key={i} className="h-12 w-full" />
+              <Skeleton key={i} className="h-12 w-full rounded-xl" />
             ))}
           </div>
         ) : filteredOrders.length === 0 ? (
           <div className="p-12 text-center space-y-3">
-            <ShoppingCart className="w-10 h-10 text-slate-300 dark:text-zinc-600 mx-auto" />
-            <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">No Sales Orders Found</h3>
-            <p className="text-xs text-slate-500 dark:text-zinc-400">Generate your first cash memo or sale transaction.</p>
-            <Button size="sm" onClick={() => navigate('/sales/new')} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold">
-              <Plus className="w-3.5 h-3.5 mr-1" /> New Sale
-            </Button>
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-zinc-800/70 text-slate-400 dark:text-zinc-500 flex items-center justify-center mx-auto">
+              <ShoppingCart className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-800 dark:text-zinc-200">
+              {searchQuery || statusFilter !== 'all'
+                ? lang === 'bn'
+                  ? 'কোন ইনভয়েস পাওয়া যায়নি'
+                  : 'No Matching Sales Invoices'
+                : lang === 'bn'
+                ? 'এখনও কোন বিক্রয় নেই'
+                : 'No Sales Recorded Yet'}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-sm mx-auto">
+              {searchQuery || statusFilter !== 'all'
+                ? lang === 'bn'
+                  ? 'অনুগ্রহ করে সার্চ কীওয়ার্ড বা ফিল্টার পরিবর্তন করে পুনরায় চেষ্টা করুন।'
+                  : 'Try adjusting your search query or status filter to see sales orders.'
+                : lang === 'bn'
+                ? 'কাউন্টারে নতুন বিক্রয় শুরু করুন বা চালান তৈরি করুন।'
+                : 'Generate your first cash memo or sale transaction.'}
+            </p>
+            {searchQuery || statusFilter !== 'all' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery('');
+                  setStatusFilter('all');
+                }}
+                className="text-xs font-semibold cursor-pointer"
+              >
+                {lang === 'bn' ? 'ফিল্টার ক্লিয়ার করুন' : 'Clear Filters'}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => navigate('/sales/new')}
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-bold cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1 stroke-[2.5]" />
+                <span>{lang === 'bn' ? 'নতুন বিক্রি তৈরি করুন' : 'New Sale'}</span>
+              </Button>
+            )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-500 border-b border-slate-200 dark:border-zinc-800">
-                <tr>
-                  <th className="p-3.5 whitespace-nowrap">Invoice #</th>
-                  <th className="p-3.5 whitespace-nowrap">Customer</th>
-                  <th className="p-3.5 whitespace-nowrap">Items</th>
-                  <th className="p-3.5 whitespace-nowrap">Discount</th>
-                  <th className="p-3.5 whitespace-nowrap">Date & Time</th>
-                  <th className="p-3.5 whitespace-nowrap">Payment / Due Status</th>
-                  <th className="p-3.5 whitespace-nowrap">Net Total (৳)</th>
-                  <th className="p-3.5 text-right whitespace-nowrap">{lang === 'bn' ? 'অ্যাকশন' : 'Actions'}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredOrders.map((order) => {
-                  const isDue = (order.due_amount || 0) > 0;
-                  return (
-                    <tr key={order._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
-                      <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2 whitespace-nowrap">
-                        <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{order.invoice_number}</span>
-                      </td>
-                      <td className="p-3.5 text-slate-800 dark:text-zinc-200 font-medium">
-                        <div className="whitespace-nowrap">{order.customer_id?.name || 'Walk-in Customer'}</div>
-                        {order.customer_id?.phone && (
-                          <div className="text-[10px] text-slate-400 font-mono">{order.customer_id.phone}</div>
-                        )}
-                      </td>
-                      <td className="p-3.5 text-slate-600 dark:text-zinc-300">
-                        {order.items?.map(it => `${it.name} (${it.quantity})`).join(', ') || '1 item'}
-                      </td>
-                      <td className="p-3.5 text-rose-500 font-medium whitespace-nowrap">
-                        {Number(order.discount || 0) > 0 ? (
-                          <span>- ৳ {safeMoney(order.discount)} {order.discount_type === 'percentage' ? `(${order.discount_value}%)` : ''}</span>
-                        ) : (
-                          <span className="text-slate-400">None</span>
-                        )}
-                      </td>
-                      <td className="p-3.5 text-slate-500 whitespace-nowrap">
-                        {safeDate(order.created_at || order.date)}
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <div className="flex flex-col items-start gap-1">
-                          <div className="flex items-center gap-1">
-                            <Badge
-                              variant={order.payment_method?.toLowerCase() === 'due' ? 'warning' : 'secondary'}
-                              className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 whitespace-nowrap ${
-                                order.payment_method?.toLowerCase() === 'due'
-                                  ? '!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30'
-                                  : '!bg-slate-100 !text-slate-700 dark:!bg-zinc-800 dark:!text-zinc-300 !border-slate-200 dark:!border-zinc-700'
-                              }`}
-                            >
-                              {order.payment_method || 'Cash'}
-                            </Badge>
+          <div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300 min-w-[1050px]">
+                <thead className="bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[11px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-wider select-none">
+                  <tr>
+                    <th className="py-3.5 px-4 whitespace-nowrap">{lang === 'bn' ? 'ইনভয়েস ও তারিখ' : 'Invoice & Date'}</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">{lang === 'bn' ? 'কাস্টমার' : 'Customer'}</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">{lang === 'bn' ? 'পণ্যসমূহ' : 'Items'}</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">{lang === 'bn' ? 'ডিসকাউন্ট' : 'Discount'}</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">{lang === 'bn' ? 'পেমেন্ট ও স্ট্যাটাস' : 'Payment / Due Status'}</th>
+                    <th className="py-3.5 px-4 whitespace-nowrap">{lang === 'bn' ? 'মোট বিল' : 'Net Total (৳)'}</th>
+                    <th className="py-3.5 px-4 text-right w-[160px] min-w-[160px] whitespace-nowrap">{lang === 'bn' ? 'অ্যাকশন' : 'Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
+                  {paginatedOrders.map((order) => {
+                    const isDue = (order.due_amount || 0) > 0;
+                    const isCopied = copiedInvoice === order.invoice_number;
+                    const items = Array.isArray(order.items) ? order.items : [];
 
-                            {order.status === 'returned' && (
-                              <Badge className="!bg-rose-500/15 !text-rose-600 dark:!text-rose-400 !border-rose-500/30 text-[9px] font-bold px-1.5 py-0.2 whitespace-nowrap">
-                                {lang === 'bn' ? 'সম্পূর্ণ ফেরত' : 'Returned'}
-                              </Badge>
-                            )}
-                            {order.status === 'partially_returned' && (
-                              <Badge className="!bg-amber-500/15 !text-amber-600 dark:!text-amber-400 !border-amber-500/30 text-[9px] font-bold px-1.5 py-0.2 whitespace-nowrap">
-                                {lang === 'bn' ? 'আংশিক ফেরত' : 'Partial Return'}
-                              </Badge>
+                    return (
+                      <tr
+                        key={order._id}
+                        className="hover:bg-slate-50/70 dark:hover:bg-zinc-800/40 transition-colors group"
+                      >
+                        {/* Invoice & Date */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-900 dark:text-white font-mono text-[13px]">
+                              {order.invoice_number}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleCopyInvoice(e, order.invoice_number)}
+                              className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                              title={isCopied ? 'Copied!' : 'Copy Invoice #'}
+                            >
+                              {isCopied ? <Check className="w-3.5 h-3.5 text-[#00df89]" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>
+                              {order.created_at || order.date
+                                ? new Date(order.created_at || order.date).toLocaleDateString()
+                                : 'N/A'}
+                            </span>
+                            <span>&middot;</span>
+                            <span>
+                              {order.created_at || order.date
+                                ? new Date(order.created_at || order.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                : ''}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Customer Column */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200/80 dark:border-zinc-700 flex items-center justify-center text-slate-600 dark:text-zinc-300 text-xs font-bold shrink-0">
+                              {order.customer_id?.name ? order.customer_id.name.charAt(0).toUpperCase() : 'W'}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 dark:text-white text-xs truncate max-w-[160px]">
+                                {order.customer_id?.name || (lang === 'bn' ? 'খুচরা ক্রেতা' : 'Walk-in Customer')}
+                              </div>
+                              {order.customer_id?.phone ? (
+                                <div className="text-[11px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                                  <Phone className="w-3 h-3 text-slate-400" />
+                                  <span>{order.customer_id.phone}</span>
+                                </div>
+                              ) : (
+                                <div className="text-[10px] text-slate-400">{lang === 'bn' ? 'খুচরা' : 'Retail'}</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Items Column */}
+                        <td className="py-3.5 px-4">
+                          {items.length === 0 ? (
+                            <span className="text-slate-400 text-xs">1 item</span>
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-1.5 max-w-xs">
+                              {items.slice(0, 2).map((it, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-800 dark:text-zinc-200 border border-slate-200/80 dark:border-zinc-700/80 text-[11px] font-medium max-w-[150px] truncate shadow-2xs"
+                                  title={`${it.name}${it.variant_name ? ` (${it.variant_name})` : ''} × ${it.quantity}`}
+                                >
+                                  <span className="truncate">{it.name}</span>
+                                  <span className="font-bold text-slate-900 dark:text-white shrink-0 font-mono">
+                                    ({it.quantity})
+                                  </span>
+                                </span>
+                              ))}
+                              {items.length > 2 && (
+                                <span
+                                  className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-[10px] font-bold border border-slate-200 dark:border-zinc-700"
+                                  title={items.map((it) => `${it.name} (${it.quantity})`).join('\n')}
+                                >
+                                  +{items.length - 2} more
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Discount Column */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {Number(order.discount || 0) > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[11px] font-bold">
+                              - ৳{safeMoney(order.discount)}{' '}
+                              {order.discount_type === 'percentage' ? `(${order.discount_value}%)` : ''}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-normal">None</span>
+                          )}
+                        </td>
+
+                        {/* Payment & Due Status Column */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="flex flex-col items-start gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {/* Payment Method */}
+                              <span className="capitalize px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-bold text-[11px] uppercase tracking-wide border border-slate-200/80 dark:border-zinc-700">
+                                {order.payment_method || 'cash'}
+                              </span>
+
+                              {/* Returned Badges */}
+                              {order.status === 'returned' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                                  <RotateCcw className="w-3 h-3" />
+                                  <span>{lang === 'bn' ? 'সম্পূর্ণ ফেরত' : 'Returned'}</span>
+                                </span>
+                              )}
+                              {order.status === 'partially_returned' && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                  <RotateCcw className="w-3 h-3" />
+                                  <span>{lang === 'bn' ? 'আংশিক ফেরত' : 'Partial'}</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Settlement Pill */}
+                            {order.status === 'returned' ? (
+                              <span className="text-[11px] text-rose-500 font-semibold font-mono">
+                                {lang === 'bn' ? 'রিফান্ড:' : 'Refunded:'} ৳{safeMoney(order.refunded_amount || order.total)}
+                              </span>
+                            ) : isDue ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                <span>Due: ৳{safeMoney(order.due_amount)}</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-[#00df89] border border-emerald-500/20">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#00df89]" />
+                                <span>Paid in Full</span>
+                              </span>
                             )}
                           </div>
+                        </td>
 
-                          {order.status === 'returned' ? (
-                            <span className="text-[10px] text-rose-500 font-medium">
-                              {lang === 'bn' ? 'রিফান্ড:' : 'Refunded:'} ৳{safeMoney(order.refunded_amount || order.total)}
+                        {/* Net Total (৳) */}
+                        <td className="py-3.5 px-4 font-bold font-mono text-sm text-[#00a86b] dark:text-[#00df89] whitespace-nowrap">
+                          <div className="flex flex-col">
+                            <span className={order.status === 'returned' ? 'line-through text-slate-400 font-normal text-xs' : ''}>
+                              ৳ {safeMoney(order.total)}
                             </span>
-                          ) : isDue ? (
-                            <Badge
-                              variant="warning"
-                              className="!bg-amber-500/15 !text-amber-500 dark:!text-amber-400 !border-amber-500/30 text-[10px] font-bold px-2 py-0.5 whitespace-nowrap"
+                            {order.status === 'partially_returned' && Number(order.refunded_amount) > 0 && (
+                              <span className="text-[10px] text-rose-500 font-medium font-mono">
+                                - ৳{safeMoney(order.refunded_amount)} refunded
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Actions Toolbar (Properly sized & Accessible) */}
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap w-[160px] min-w-[160px]">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Collect Due (Primary highlighted when due is active) */}
+                            {isDue && order.status !== 'returned' && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCollectDue(order)}
+                                title={lang === 'bn' ? 'বকেয়া টাকা গ্রহণ করুন' : 'Collect Due Payment'}
+                                className="h-8 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs shrink-0"
+                              >
+                                <Coins className="w-3.5 h-3.5" />
+                                <span>{lang === 'bn' ? 'বকেয়া' : 'Due'}</span>
+                              </button>
+                            )}
+
+                            {/* View Receipt Memo Modal */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrder(order)}
+                              title={lang === 'bn' ? 'মেমো বিবরণ দেখুন' : 'View Receipt Memo'}
+                              className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 flex items-center justify-center transition-colors cursor-pointer border border-slate-200/80 dark:border-zinc-700/80 shrink-0"
                             >
-                              Due: ৳{safeMoney(order.due_amount)}
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="default"
-                              className="!bg-emerald-500/10 !text-emerald-700 dark:!text-emerald-400 !border-emerald-500/20 text-[9px] font-semibold px-2 py-0.5 whitespace-nowrap"
+                              <Eye className="w-4 h-4" />
+                            </button>
+
+                            {/* Print Cash Memo */}
+                            <button
+                              type="button"
+                              onClick={() => printSaleReceipt({ order, shop: mongoShop, lang })}
+                              title={lang === 'bn' ? 'ক্যাশ মেমো প্রিন্ট করুন' : 'Print Receipt'}
+                              className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-600 dark:text-[#00df89] flex items-center justify-center transition-colors cursor-pointer border border-emerald-500/20 shrink-0"
                             >
-                              Paid in Full
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-3.5 font-bold text-[#00a86b] dark:text-[#00df89] whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <span className={order.status === 'returned' ? 'line-through text-slate-400 font-normal' : ''}>
-                            ৳ {safeMoney(order.total)}
-                          </span>
-                          {order.status === 'partially_returned' && Number(order.refunded_amount) > 0 && (
-                            <span className="text-[10px] text-rose-500 font-medium font-mono">
-                              - ৳{safeMoney(order.refunded_amount)} refunded
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1 flex-nowrap">
-                          {isDue && order.status !== 'returned' && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleOpenCollectDue(order)}
-                              className="h-7 text-xs px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1.5 shadow-2xs cursor-pointer mr-1 whitespace-nowrap shrink-0 inline-flex items-center"
-                              title="Collect Due Payment"
-                            >
-                              <Coins className="w-3.5 h-3.5 shrink-0" />
-                              <span className="whitespace-nowrap">{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Collect Due'}</span>
-                            </Button>
-                          )}
-                          {order.status !== 'returned' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenReturn(order)}
-                              className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0 cursor-pointer"
-                              title={lang === 'bn' ? 'পণ্য ফেরত ও রিফান্ড' : 'Return & Refund Product'}
-                            >
-                              <Undo2 className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSelectedOrder(order)}
-                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-blue-500 shrink-0 cursor-pointer"
-                            title={lang === 'bn' ? 'মেমো বিবরণ দেখুন' : 'View Receipt Memo'}
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => printSaleReceipt({ order, shop: mongoShop, lang })}
-                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-[#00df89] shrink-0 cursor-pointer"
-                            title={lang === 'bn' ? 'ক্যাশ মেমো প্রিন্ট করুন' : 'Print Receipt Memo'}
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenEdit(order)}
-                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500 shrink-0"
-                            title="Edit Sale Details"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteSale(order._id, order.invoice_number)}
-                            className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
-                            title="Delete Sale & Restore Stock"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                              <Printer className="w-4 h-4" />
+                            </button>
+
+                            {/* More Actions Dropdown (Shadcn DropdownMenu) */}
+                            <div className="shrink-0">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 flex items-center justify-center transition-colors cursor-pointer border border-slate-200/80 dark:border-zinc-700/80">
+                                  <MoreVertical className="w-4 h-4" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="right" width="w-52">
+                                  <DropdownMenuLabel>
+                                    {order.invoice_number}
+                                  </DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+
+                                  <DropdownMenuItem onClick={() => setSelectedOrder(order)}>
+                                    <Eye className="w-4 h-4" />
+                                    <span>{lang === 'bn' ? 'মেমো বিবরণ দেখুন' : 'View Full Details'}</span>
+                                  </DropdownMenuItem>
+
+                                  <DropdownMenuItem onClick={() => printSaleReceipt({ order, shop: mongoShop, lang })}>
+                                    <Printer className="w-4 h-4" />
+                                    <span>{lang === 'bn' ? 'রশিদ প্রিন্ট করুন' : 'Print Receipt'}</span>
+                                  </DropdownMenuItem>
+
+                                  {isDue && order.status !== 'returned' && (
+                                    <DropdownMenuItem onClick={() => handleOpenCollectDue(order)} variant="success">
+                                      <Coins className="w-4 h-4" />
+                                      <span>{lang === 'bn' ? 'বকেয়া টাকা গ্রহণ' : 'Collect Due Payment'}</span>
+                                    </DropdownMenuItem>
+                                  )}
+
+                                  <DropdownMenuItem onClick={() => handleOpenEdit(order)}>
+                                    <Edit2 className="w-4 h-4" />
+                                    <span>{lang === 'bn' ? 'ইনভয়েস এডিট করুন' : 'Edit Sale Invoice'}</span>
+                                  </DropdownMenuItem>
+
+                                  {order.status !== 'returned' && (
+                                    <DropdownMenuItem onClick={() => handleOpenReturn(order)}>
+                                      <Undo2 className="w-4 h-4 text-rose-500" />
+                                      <span>{lang === 'bn' ? 'পণ্য ফেরত ও রিফান্ড' : 'Return & Refund'}</span>
+                                    </DropdownMenuItem>
+                                  )}
+
+                                  <DropdownMenuSeparator />
+
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteSale(order._id, order.invoice_number)}
+                                    variant="danger"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    <span>{lang === 'bn' ? 'মুছে ফেলুন ও স্টক ফেরত দিন' : 'Delete & Restore Stock'}</span>
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredOrders.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>
+
+      {/* ---------------------------------------------------- */}
+      {/* TOP SELLING PRODUCTS PIE CHART WIDGET (BELOW TABLE)  */}
+      {/* ---------------------------------------------------- */}
+      <TopSellingPieChart salesOrders={salesOrders} isLoading={isLoading} />
 
       {/* ---------------------------------------------------- */}
       {/* EDIT SALE MODAL                                      */}
       {/* ---------------------------------------------------- */}
       {isEditModalOpen && editingSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">Edit Sale: {editForm.invoice_number}</h2>
-                <p className="text-xs text-slate-400">Update payment method, discount, cash received or notes</p>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  {lang === 'bn' ? `বিক্রয় এডিট: ${editForm.invoice_number}` : `Edit Sale: ${editForm.invoice_number}`}
+                </h2>
+                <p className="text-xs text-slate-400">
+                  {lang === 'bn'
+                    ? 'পেমেন্ট মাধ্যম, ডিসকাউন্ট ও নগদ টাকার হিসাব আপডেট করুন'
+                    : 'Update payment method, discount, cash received or notes'}
+                </p>
               </div>
-              <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 p-1 cursor-pointer">
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -743,7 +1042,9 @@ export default function Orders() {
             <form onSubmit={handleUpdateSale} className="space-y-3.5 text-xs">
               {/* Payment Method */}
               <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Payment Method</label>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
+                </label>
                 <Select
                   value={editForm.payment_method}
                   onValueChange={(val) => setEditForm({ ...editForm, payment_method: val })}
@@ -766,19 +1067,29 @@ export default function Orders() {
               {/* Discount Controls */}
               <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-700 dark:text-zinc-300">Discount Option</span>
+                  <span className="font-semibold text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'ডিসকাউন্ট মোড' : 'Discount Option'}
+                  </span>
                   <div className="flex bg-slate-200 dark:bg-zinc-800 p-0.5 rounded-lg text-[11px]">
                     <button
                       type="button"
                       onClick={() => setEditForm({ ...editForm, discount_type: 'flat' })}
-                      className={`px-2 py-0.5 rounded-md font-medium transition-all ${editForm.discount_type === 'flat' ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'}`}
+                      className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                        editForm.discount_type === 'flat'
+                          ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs'
+                          : 'text-slate-500'
+                      }`}
                     >
                       Flat (৳)
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditForm({ ...editForm, discount_type: 'percentage' })}
-                      className={`px-2 py-0.5 rounded-md font-medium transition-all ${editForm.discount_type === 'percentage' ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'}`}
+                      className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                        editForm.discount_type === 'percentage'
+                          ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs'
+                          : 'text-slate-500'
+                      }`}
                     >
                       Percent (%)
                     </button>
@@ -797,7 +1108,9 @@ export default function Orders() {
               {/* Paid & Tendered Amount */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Paid Amount (৳)</label>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'পরিশোধিত (৳)' : 'Paid Amount (৳)'}
+                  </label>
                   <input
                     type="number"
                     value={editForm.paid_amount}
@@ -806,7 +1119,9 @@ export default function Orders() {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Cash Given (৳)</label>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">
+                    {lang === 'bn' ? 'নগদ গ্রহণ (৳)' : 'Cash Given (৳)'}
+                  </label>
                   <input
                     type="number"
                     value={editForm.tendered_amount}
@@ -818,7 +1133,9 @@ export default function Orders() {
 
               {/* Notes */}
               <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">Note / Remarks</label>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-zinc-300">
+                  {lang === 'bn' ? 'নোট / মন্তব্য' : 'Note / Remarks'}
+                </label>
                 <input
                   type="text"
                   placeholder="e.g. Discount given by manager"
@@ -830,15 +1147,15 @@ export default function Orders() {
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
                 <Button type="button" variant="outline" size="sm" onClick={() => setIsEditModalOpen(false)}>
-                  Cancel
+                  {lang === 'bn' ? 'বাতিল' : 'Cancel'}
                 </Button>
                 <Button
                   type="submit"
                   disabled={isUpdating}
                   size="sm"
-                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold"
+                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold cursor-pointer"
                 >
-                  {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save Changes'}
+                  {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : lang === 'bn' ? 'সংরক্ষণ করুন' : 'Save Changes'}
                 </Button>
               </div>
             </form>
@@ -851,13 +1168,16 @@ export default function Orders() {
       {/* ---------------------------------------------------- */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">Cash Memo / Receipt</h2>
                 <p className="text-xs text-slate-400 font-mono">{selectedOrder.invoice_number || 'N/A'}</p>
               </div>
-              <button onClick={() => setSelectedOrder(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 cursor-pointer">
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1045,7 +1365,7 @@ export default function Orders() {
       {/* ---------------------------------------------------- */}
       {isCollectModalOpen && collectingOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center text-amber-500">
@@ -1199,7 +1519,7 @@ export default function Orders() {
                   type="submit"
                   disabled={isCollectingDue}
                   size="sm"
-                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1.5 shadow-sm"
+                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1.5 shadow-sm cursor-pointer"
                 >
                   {isCollectingDue ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                   <span>{lang === 'bn' ? 'টাকা গ্রহণ নিশ্চিত করুন' : 'Confirm Payment'}</span>
@@ -1215,7 +1535,7 @@ export default function Orders() {
       {/* ---------------------------------------------------- */}
       {collectedVoucher && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center text-[#00a86b] dark:text-[#00df89]">
@@ -1310,7 +1630,7 @@ export default function Orders() {
       {/* ---------------------------------------------------- */}
       {isReturnModalOpen && returningOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <Card className="max-w-xl w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+          <Card className="max-w-xl w-full p-6 bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center text-rose-500 shrink-0">

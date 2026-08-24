@@ -16,6 +16,7 @@ export * from './expenses';
 export * from './users';
 export * from './reports';
 export * from './gym';
+export * from './settings';
 export { default as NotFound } from './NotFound';
 
 

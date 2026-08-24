@@ -2,12 +2,13 @@
  * @file GymAccounting.jsx
  * @description Live Gym Accounting, Profit & Loss Statement, Cash Flow Ledger & Revenue/Expense analytics computed directly from MongoDB.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/services/api';
 import { Card, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Pagination from '@/components/common/Pagination';
 import {
   Select,
   SelectTrigger,
@@ -99,28 +100,43 @@ export default function GymAccounting() {
   const profitMargin = grossRevenue > 0 ? ((netProfit / grossRevenue) * 100).toFixed(1) + '%' : '0.0%';
 
   // Build combined ledger
-  const ledgerEntries = [
-    ...filteredPayments.map(p => ({
-      id: p.invoiceNumber,
-      type: 'income',
-      category: p.package_name || 'Membership Pass',
-      title: `${p.memberName} — ${p.package_name}`,
-      amount: p.paid,
-      method: p.method,
-      date: p.date,
-      rawDate: new Date(p.date || p.created_at),
-    })),
-    ...filteredExpenses.map(e => ({
-      id: `EXP-${e._id.toString().slice(-4).toUpperCase()}`,
-      type: 'expense',
-      category: e.category,
-      title: e.title,
-      amount: e.amount,
-      method: 'Cash',
-      date: new Date(e.date).toISOString().split('T')[0],
-      rawDate: new Date(e.date),
-    }))
-  ].sort((a, b) => b.rawDate - a.rawDate);
+  const ledgerEntries = useMemo(() => {
+    return [
+      ...filteredPayments.map(p => ({
+        id: p.invoiceNumber,
+        type: 'income',
+        category: p.package_name || 'Membership Pass',
+        title: `${p.memberName} — ${p.package_name}`,
+        amount: p.paid,
+        method: p.method,
+        date: p.date,
+        rawDate: new Date(p.date || p.created_at),
+      })),
+      ...filteredExpenses.map(e => ({
+        id: `EXP-${e._id.toString().slice(-4).toUpperCase()}`,
+        type: 'expense',
+        category: e.category,
+        title: e.title,
+        amount: e.amount,
+        method: 'Cash',
+        date: new Date(e.date).toISOString().split('T')[0],
+        rawDate: new Date(e.date),
+      }))
+    ].sort((a, b) => b.rawDate - a.rawDate);
+  }, [filteredPayments, filteredExpenses]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [timeframe, selectedMonth, selectedYear, pageSize]);
+
+  const paginatedLedgerEntries = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return ledgerEntries.slice(start, start + pageSize);
+  }, [ledgerEntries, currentPage, pageSize]);
 
   return (
     <div className="space-y-6 font-sans">
@@ -318,7 +334,7 @@ export default function GymAccounting() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {ledgerEntries.map((tx, idx) => (
+                {paginatedLedgerEntries.map((tx, idx) => (
                   <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
                     <td className="p-3.5 font-medium text-slate-900 dark:text-white">{tx.id}</td>
                     <td className="p-3.5">
@@ -340,6 +356,16 @@ export default function GymAccounting() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={ledgerEntries.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

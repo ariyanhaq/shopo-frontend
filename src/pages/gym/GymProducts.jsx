@@ -8,6 +8,7 @@ import api from '@/services/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Pagination from '@/components/common/Pagination';
 import {
   Package, DollarSign, Plus, Search, Filter, AlertTriangle,
   Download, Edit2, Trash2, CheckCircle2, Clock, X, Barcode,
@@ -111,61 +112,95 @@ export default function GymProducts() {
     }
   };
 
-  const totalCatalogItems = productList.length;
-  const totalStockUnits = productList.reduce((acc, p) => acc + (p.stock_quantity || 0), 0);
-  const totalStockValue = productList.reduce((acc, p) => acc + ((p.stock_quantity || 0) * (p.cost_price || 0)), 0);
-
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white flex items-center gap-2.5">
+          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
             <Package className="w-6 h-6 text-[#00df89]" />
-            <span>{lang === 'bn' ? 'সাপ্লিমেন্টস ও মার্চেন্ডাইজ' : 'Gym Supplements & Merchandise'}</span>
+            <span>{lang === 'bn' ? 'সাপ্লিমেন্ট ও পণ্য ক্যাটালগ' : 'Supplements & Products Catalog'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
-            {lang === 'bn' ? 'প্রোটিন, শ্যাকার বোতল, জিম টি-শার্ট ও আনুষাঙ্গিক ইনভেন্টরি' : 'Manage supplements, fitness gear, apparel & merchandise inventory'}
+            {lang === 'bn' ? 'প্রোটিন, এনার্জি ড্রিংক ও গিয়ারের লাইভ ইনভেন্টরি' : 'Retails inventory, supplement stock tracking and pricing management'}
           </p>
         </div>
 
-        <Button
-          onClick={() => setIsAddModalOpen(true)}
-          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs gap-1.5 shadow-xs"
-        >
-          <Plus className="w-4 h-4 stroke-[2]" />
-          <span>{lang === 'bn' ? 'নতুন পণ্য যোগ করুন' : 'Add New Product'}</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2"
+          >
+            <Plus className="w-4 h-4 stroke-[2]" />
+            <span>{lang === 'bn' ? 'পণ্য যোগ করুন' : 'Add Product'}</span>
+          </Button>
+        </div>
       </div>
 
-      {/* KPI METRICS */}
+      {/* KPI Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Total Catalog SKUs</div>
-          <div className="text-2xl font-medium text-slate-900 dark:text-white mt-1">{totalCatalogItems} items</div>
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Items in Stock</span>
+            <Layers className="w-4 h-4 text-[#00df89]" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : totalStockCount}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Total inventory units</div>
         </Card>
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Total Stock On Hand</div>
-          <div className="text-2xl font-medium text-slate-900 dark:text-white mt-1">{totalStockUnits} units</div>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Low Stock Alerts</span>
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-amber-500 mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : lowStockCount}
+          </div>
+          <div className="text-xs text-amber-500 mt-1">Requires replenishment</div>
         </Card>
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Inventory Asset Value</div>
-          <div className="text-2xl font-medium text-[#00a86b] dark:text-[#00df89] mt-1">৳ {totalStockValue.toLocaleString()}</div>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Valuation</span>
+            <DollarSign className="w-4 h-4 text-purple-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${inventoryValue.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Cost valuation of products</div>
         </Card>
       </div>
 
-      {/* SEARCH */}
-      <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+      {/* SEARCH AND FILTER BAR */}
+      <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="w-full sm:w-80 relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder={lang === 'bn' ? 'পণ্যের নাম বা SKU খুঁজুন...' : 'Search by name or SKU...'}
+            placeholder={lang === 'bn' ? 'পণ্য বা SKU দিয়ে খুঁজুন...' : 'Search products or SKU...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
           />
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+          {['all', 'in_stock', 'low'].map((status) => (
+            <button
+              key={status}
+              onClick={() => setStockStatusFilter(status)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize whitespace-nowrap transition-all cursor-pointer ${
+                stockStatusFilter === status
+                  ? 'bg-[#00df89] text-[#011812] shadow-xs'
+                  : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              {status.replace('_', ' ')}
+            </button>
+          ))}
         </div>
       </Card>
 
@@ -196,7 +231,7 @@ export default function GymProducts() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredProducts.map((p) => (
+                {paginatedProducts.map((p) => (
                   <tr key={p._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
                     <td className="p-3.5 font-medium text-slate-900 dark:text-white flex items-center gap-2">
                       <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-medium text-xs">
@@ -217,7 +252,7 @@ export default function GymProducts() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDeleteProduct(p._id)}
-                        className="h-7 text-xs text-rose-500 hover:text-rose-600"
+                        className="h-7 text-xs text-rose-500 hover:text-rose-600 cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
@@ -226,6 +261,16 @@ export default function GymProducts() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredProducts.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

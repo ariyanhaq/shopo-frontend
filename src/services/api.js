@@ -102,6 +102,11 @@ export const api = {
   // Authentication & Profile Sync
   auth: {
     getMe: () => request('/auth/me'),
+    updateProfile: (data) =>
+      request('/auth/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
   },
 
   // Shops & Settings
@@ -124,7 +129,7 @@ export const api = {
       }),
   },
 
-  // Users & Roles & Permissions
+  // Users, Roles & Connected Devices
   users: {
     list: () => request('/users'),
     create: (data) =>
@@ -136,6 +141,15 @@ export const api = {
       request(`/users/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
+      }),
+    setOffline: (id) =>
+      request(`/users/${id}/set-offline`, {
+        method: 'POST',
+      }),
+    toggleSession: (id, action) =>
+      request(`/users/${id}/toggle-session`, {
+        method: 'POST',
+        body: JSON.stringify({ action }),
       }),
     checkVerification: (id) =>
       request(`/users/${id}/check-verification`, {

@@ -2,12 +2,13 @@
  * @file GymExpenses.jsx
  * @description Gym operational expense tracker backed by MongoDB.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/services/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Pagination from '@/components/common/Pagination';
 import { DollarSign, Plus, Calendar, FileText, Search, Trash2, Loader2 } from 'lucide-react';
 
 import RecordExpenseModal from '@/components/gym/RecordExpenseModal';
@@ -42,13 +43,28 @@ export default function GymExpenses() {
   const rentExpense = expenses.filter(e => e.category === 'Rent').reduce((acc, e) => acc + (e.amount || 0), 0);
   const utilityExpense = expenses.filter(e => e.category === 'Electricity').reduce((acc, e) => acc + (e.amount || 0), 0);
 
-  const filteredExpenses = expenses.filter((e) => {
-    const matchesSearch =
-      (e.title && e.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (e.category && e.category.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCategory = categoryFilter === 'All' || e.category === categoryFilter;
-    return matchesSearch && matchesCategory;
-  });
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter((e) => {
+      const matchesSearch =
+        (e.title && e.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (e.category && e.category.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesCategory = categoryFilter === 'All' || e.category === categoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+  }, [expenses, searchTerm, categoryFilter]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter, pageSize]);
+
+  const paginatedExpenses = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredExpenses.slice(start, start + pageSize);
+  }, [filteredExpenses, currentPage, pageSize]);
 
   const handleDelete = async (id) => {
     if (confirm('Delete this expense log?')) {
@@ -62,67 +78,87 @@ export default function GymExpenses() {
   };
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* HEADER SECTION */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white flex items-center gap-2.5">
+          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
             <DollarSign className="w-6 h-6 text-[#00df89]" />
-            <span>{lang === 'bn' ? 'সুবিধা ও অপারেশনাল খরচ' : 'Facility Expense Tracker'}</span>
+            <span>{lang === 'bn' ? 'জিম অপারেটিং ব্যয় ও খরচ' : 'Facility Expenses & Outflows'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
-            {lang === 'bn' ? 'ভাড়া, বিদ্যুৎ বিল, ট্রেইনার বেতন ও মেশিন সার্ভিসিং খরচ' : 'Track electricity bills, rent, maintenance, cleaning & supplies'}
+            {lang === 'bn' ? 'বিদ্যুৎ বিল, ট্রেইনার বেতন, ভাড়া ও মেইন্টেনেন্স' : 'Rent, utility bills, machine servicing and coach payouts'}
           </p>
         </div>
 
         <Button
           onClick={() => setIsModalOpen(true)}
-          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs gap-1.5 shadow-xs"
+          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2"
         >
           <Plus className="w-4 h-4 stroke-[2]" />
-          <span>{lang === 'bn' ? 'নতুন খরচ যুক্ত করুন' : 'Log New Expense'}</span>
+          <span>{lang === 'bn' ? 'নতুন খরচ যোগ করুন' : 'Record Expense'}</span>
         </Button>
       </div>
 
       {/* KPI METRICS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Total Operational Outflow</div>
-          <div className="text-2xl font-medium text-rose-500 mt-1">৳ {totalExpense.toLocaleString()}</div>
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Expenses</span>
+            <DollarSign className="w-4 h-4 text-rose-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-rose-500 mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${totalExpense.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-rose-500 mt-1">Recorded facility costs</div>
         </Card>
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Rent Payments</div>
-          <div className="text-2xl font-medium text-slate-900 dark:text-white mt-1">৳ {rentExpense.toLocaleString()}</div>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Facility Rent</span>
+            <Calendar className="w-4 h-4 text-purple-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${rentExpense.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Floor & property lease</div>
         </Card>
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Electricity & AC Bills</div>
-          <div className="text-2xl font-medium text-slate-900 dark:text-white mt-1">৳ {utilityExpense.toLocaleString()}</div>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Electricity & AC</span>
+            <FileText className="w-4 h-4 text-amber-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${utilityExpense.toLocaleString()}`}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Monthly energy overhead</div>
         </Card>
       </div>
 
-      {/* FILTER & SEARCH */}
+      {/* SEARCH AND CATEGORIES */}
       <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="w-full sm:w-80 relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder={lang === 'bn' ? 'খরচের বিবরণ বা খাত খুঁজুন...' : 'Search expense title or note...'}
+            placeholder={lang === 'bn' ? 'খরচ বা খাত খুঁজুন...' : 'Search expense title...'}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          {['All', 'Rent', 'Electricity', 'Maintenance', 'Cleaning'].map((cat) => (
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+          {['All', 'Rent', 'Electricity', 'Maintenance', 'Salaries', 'General'].map((cat) => (
             <button
               key={cat}
               onClick={() => setCategoryFilter(cat)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                 categoryFilter === cat
-                  ? 'bg-slate-900 text-white dark:bg-zinc-800'
-                  : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400'
+                  ? 'bg-[#00df89] text-[#011812] shadow-xs'
+                  : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700'
               }`}
             >
               {cat}
@@ -131,12 +167,12 @@ export default function GymExpenses() {
         </div>
       </Card>
 
-      {/* EXPENSES LIST */}
+      {/* EXPENSES TABLE */}
       <Card className="p-0 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center text-slate-400">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-[#00df89]" />
-            Loading expense logs...
+            Loading expenses...
           </div>
         ) : filteredExpenses.length === 0 ? (
           <div className="p-12 text-center space-y-3">
@@ -157,7 +193,7 @@ export default function GymExpenses() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredExpenses.map((exp) => (
+                {paginatedExpenses.map((exp) => (
                   <tr key={exp._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
                     <td className="p-3.5">
                       <Badge variant="outline" className="text-[10px] uppercase font-normal">
@@ -181,6 +217,16 @@ export default function GymExpenses() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredExpenses.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

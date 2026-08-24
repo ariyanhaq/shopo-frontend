@@ -274,9 +274,9 @@ export default function Dashboard() {
                 <span>{d.addProduct || 'Add New Product'}</span>
               </Button>
 
-              <Button variant="outline" onClick={() => navigate('/pos')} className="w-full justify-start h-11 text-xs sm:text-sm font-medium dark:bg-[#09090b]">
-                <Store className="w-4 h-4 text-slate-400 dark:text-zinc-400" />
-                <span>{lang === 'bn' ? 'পিওএস কাউন্টার টার্মিনাল' : 'POS Counter'}</span>
+              <Button variant="outline" onClick={() => navigate('/sales')} className="w-full justify-start h-11 text-xs sm:text-sm font-medium dark:bg-[#09090b] cursor-pointer">
+                <ShoppingCart className="w-4 h-4 text-slate-400 dark:text-zinc-400" />
+                <span>{lang === 'bn' ? 'বিক্রয় ও ইনভয়েস হিস্ট্রি' : 'Sales & Invoices'}</span>
               </Button>
 
               <Button variant="outline" onClick={() => navigate('/customers')} className="w-full justify-start h-11 text-xs sm:text-sm font-medium dark:bg-[#09090b]">

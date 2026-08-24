@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import Pagination from '@/components/common/Pagination';
 import {
   Crown,
   Sparkles,
@@ -128,6 +129,19 @@ export default function Members() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [tierFilter, setTierFilter] = useState('all');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, tierFilter, pageSize]);
+
+  const paginatedMembers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return members.slice(start, start + pageSize);
+  }, [members, currentPage, pageSize]);
 
   // Program Settings State
   const [settingsData, setSettingsData] = useState({
@@ -842,7 +856,7 @@ export default function Members() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/60 text-slate-700 dark:text-zinc-300">
-                    {members.map((m) => {
+                    {paginatedMembers.map((m) => {
                       const matchedTier = activeTiers.find(
                         (t) => (t.name || '').toLowerCase() === (m.membership_tier || '').toLowerCase()
                       );
@@ -1006,6 +1020,16 @@ export default function Members() {
                     })}
                   </tbody>
                 </table>
+
+                {/* Pagination Controls */}
+                <Pagination
+                  currentPage={currentPage}
+                  totalItems={members.length}
+                  pageSize={pageSize}
+                  pageSizeOptions={[10, 20, 50, 100]}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
+                />
               </div>
             )}
           </Card>

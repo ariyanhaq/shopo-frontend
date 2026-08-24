@@ -194,13 +194,13 @@ export default function DashboardLayout() {
         </Link>
 
         <Link
-          to="/pos"
+          to="/sales"
           className={`flex flex-col items-center gap-1 p-1 rounded-xl transition-colors ${
-            location.pathname.startsWith('/pos') ? 'text-[#00a86b] dark:text-[#00df89] font-medium' : 'text-slate-500 dark:text-zinc-400 font-normal'
+            location.pathname.startsWith('/sales') ? 'text-[#00a86b] dark:text-[#00df89] font-medium' : 'text-slate-500 dark:text-zinc-400 font-normal'
           }`}
         >
           <ShoppingCart className="w-5 h-5" />
-          <span className="text-[10px] font-medium">{t?.dashboard?.sidebar?.pos || 'POS'}</span>
+          <span className="text-[10px] font-medium">{t?.dashboard?.sidebar?.sales || (lang === 'bn' ? 'বিক্রি' : 'Sales')}</span>
         </Link>
 
         {/* Mobile FAB -> New Sale */}

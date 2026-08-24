@@ -9,6 +9,13 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue
+} from '@/components/ui/select';
+import {
   Award, Clock, AlertTriangle, ShieldCheck, RefreshCw,
   Search, CheckCircle2, Snowflake, ArrowUpRight, Loader2
 } from 'lucide-react';
@@ -96,21 +103,21 @@ export default function GymMemberships() {
         </Card>
       </div>
 
-      {/* FILTER TABS */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2">
-        {['All', 'Expiring', 'Expired', 'Active'].map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setFilterTab(tab)}
-            className={`px-4 py-1.5 text-xs font-medium rounded-full transition-colors ${
-              filterTab === tab
-                ? 'bg-slate-900 text-white dark:bg-zinc-800'
-                : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
+      {/* FILTER DROPDOWN */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="w-full sm:w-52">
+          <Select value={filterTab} onValueChange={setFilterTab}>
+            <SelectTrigger size="sm" className="bg-white dark:bg-[#121215] w-full h-9.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-semibold">
+              <SelectValue placeholder="All Memberships" />
+            </SelectTrigger>
+            <SelectContent className="min-w-[180px]">
+              <SelectItem value="All">All Memberships</SelectItem>
+              <SelectItem value="Active">Active Passes</SelectItem>
+              <SelectItem value="Expiring">Expiring Soon</SelectItem>
+              <SelectItem value="Expired">Expired Passes</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* MEMBERSHIPS LIST */}

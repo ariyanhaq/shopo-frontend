@@ -13,8 +13,9 @@ export default function PermissionGuard({ permission, requireAdmin = false, chil
   const { lang } = useLanguage();
   const navigate = useNavigate();
 
-  const isOwner = mongoUser?.role === 'owner';
-  const isManager = mongoUser?.role === 'manager';
+  const userRole = (mongoUser?.role || 'owner').toLowerCase();
+  const isOwner = userRole === 'owner' || userRole === 'admin' || !mongoUser;
+  const isManager = userRole === 'manager';
   const userPerms = Array.isArray(mongoUser?.permissions) ? mongoUser.permissions : [];
 
   let isPermitted = false;
@@ -63,21 +64,12 @@ export default function PermissionGuard({ permission, requireAdmin = false, chil
           <span>{lang === 'bn' ? 'পেছনে যান' : 'Go Back'}</span>
         </Button>
 
-        {userPerms.includes('pos') ? (
-          <Link to="/pos">
-            <Button className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold gap-1.5 cursor-pointer shadow-xs">
-              <Store className="w-3.5 h-3.5" />
-              <span>{lang === 'bn' ? 'পিওএস ক্যাশ কাউন্টার' : 'Open POS'}</span>
-            </Button>
-          </Link>
-        ) : (
-          <Link to={defaultDashboard}>
-            <Button className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold gap-1.5 cursor-pointer shadow-xs">
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              <span>{lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard'}</span>
-            </Button>
-          </Link>
-        )}
+        <Link to={defaultDashboard}>
+          <Button className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold gap-1.5 cursor-pointer shadow-xs">
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>{lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard'}</span>
+          </Button>
+        </Link>
       </div>
     </div>
   );

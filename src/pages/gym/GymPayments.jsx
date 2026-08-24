@@ -2,12 +2,13 @@
  * @file GymPayments.jsx
  * @description Gym fee recording, dues management & printable cash memo invoices backed by MongoDB.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/services/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Pagination from '@/components/common/Pagination';
 import {
   CreditCard, Plus, Printer, DollarSign, Search, CheckCircle2,
   Wallet, FileText, ArrowUpRight, Loader2
@@ -52,35 +53,50 @@ export default function GymPayments() {
     .filter(p => p.method === 'Cash')
     .reduce((acc, p) => acc + (p.paid || 0), 0);
 
-  const filteredPayments = payments.filter((p) => {
-    const matchesSearch =
-      (p.invoiceNumber && p.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (p.memberName && p.memberName.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStatus =
-      statusFilter === 'All' ||
-      (statusFilter === 'Paid' && p.status === 'Paid') ||
-      (statusFilter === 'Partial' && p.due > 0);
-    return matchesSearch && matchesStatus;
-  });
+  const filteredPayments = useMemo(() => {
+    return payments.filter((p) => {
+      const matchesSearch =
+        (p.invoiceNumber && p.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (p.memberName && p.memberName.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesStatus =
+        statusFilter === 'All' ||
+        (statusFilter === 'Paid' && p.status === 'Paid') ||
+        (statusFilter === 'Due' && p.due > 0);
+      return matchesSearch && matchesStatus;
+    });
+  }, [payments, searchTerm, statusFilter]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, pageSize]);
+
+  const paginatedPayments = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPayments.slice(start, start + pageSize);
+  }, [filteredPayments, currentPage, pageSize]);
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* HEADER SECTION */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white flex items-center gap-2.5">
+          <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
             <CreditCard className="w-6 h-6 text-[#00df89]" />
-            <span>{lang === 'bn' ? 'পেমেন্ট ও বিলিং লেজার' : 'Gym Payments & Billing Ledger'}</span>
+            <span>{lang === 'bn' ? 'ফি কালেকশন ও ইনভয়েস রেজিস্টার' : 'Fee Collections & Payments'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
-            {lang === 'bn' ? 'ফি পেমেন্ট জমা, ইনভয়েস তৈরি ও বকেয়া হিসাব' : 'Record membership fee payments, issue invoices & track dues'}
+            {lang === 'bn' ? 'সদস্যদের প্যাকেজ ফি, বকেয়া আদায় এবং মেমো প্রিন্টিং' : 'Member fee transactions, partial payments and printable thermal bills'}
           </p>
         </div>
 
         <Button
           onClick={() => setIsRecordModalOpen(true)}
-          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs gap-1.5 shadow-xs"
+          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2"
         >
           <Plus className="w-4 h-4 stroke-[2]" />
           <span>{lang === 'bn' ? 'ফি গ্রহণ করুন' : 'Record Fee Payment'}</span>
@@ -88,56 +104,67 @@ export default function GymPayments() {
       </div>
 
       {/* KPI METRICS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
           <div className="text-xs text-slate-500 dark:text-zinc-400">Total Collected</div>
-          <div className="text-2xl font-medium text-slate-900 dark:text-white mt-1">৳ {totalCollected.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-[#00a86b] dark:text-[#00df89] mt-1">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${totalCollected.toLocaleString()}`}
+          </div>
         </Card>
+
         <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-amber-500">Pending Dues</div>
-          <div className="text-2xl font-medium text-amber-500 mt-1">৳ {totalPending.toLocaleString()}</div>
+          <div className="text-xs text-slate-500 dark:text-zinc-400">Uncollected Dues</div>
+          <div className="text-2xl font-bold text-amber-500 mt-1">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${totalPending.toLocaleString()}`}
+          </div>
         </Card>
+
         <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">bKash & Mobile Money</div>
-          <div className="text-2xl font-medium text-slate-900 dark:text-white mt-1">৳ {mobileBankingTotal.toLocaleString()}</div>
+          <div className="text-xs text-slate-500 dark:text-zinc-400">bKash / Nagad / MFS</div>
+          <div className="text-2xl font-bold text-blue-500 mt-1">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${mobileBankingTotal.toLocaleString()}`}
+          </div>
         </Card>
+
         <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Cash Collections</div>
-          <div className="text-2xl font-medium text-slate-900 dark:text-white mt-1">৳ {cashTotal.toLocaleString()}</div>
+          <div className="text-xs text-slate-500 dark:text-zinc-400">Cash in Hand</div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${cashTotal.toLocaleString()}`}
+          </div>
         </Card>
       </div>
 
-      {/* Search & Filters */}
+      {/* SEARCH AND FILTERS */}
       <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="w-full sm:w-80 relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder={lang === 'bn' ? 'ইনভয়েস বা সদস্যের নাম দিয়ে খুঁজুন...' : 'Search by invoice or athlete name...'}
+            placeholder={lang === 'bn' ? 'ইনভয়েস বা সদস্য খুঁজুন...' : 'Search invoice or athlete...'}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          {['All', 'Paid', 'Partial'].map((st) => (
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+          {['All', 'Paid', 'Due'].map((status) => (
             <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                statusFilter === st
-                  ? 'bg-slate-900 text-white dark:bg-zinc-800'
-                  : 'bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400'
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                statusFilter === status
+                  ? 'bg-[#00df89] text-[#011812] shadow-xs'
+                  : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700'
               }`}
             >
-              {st}
+              {status}
             </button>
           ))}
         </div>
       </Card>
 
-      {/* Payments Table */}
+      {/* TABLE */}
       <Card className="p-0 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center text-slate-400">
@@ -167,7 +194,7 @@ export default function GymPayments() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredPayments.map((p) => (
+                {paginatedPayments.map((p) => (
                   <tr key={p._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
                     <td className="p-3.5 font-medium text-slate-900 dark:text-white">{p.invoiceNumber}</td>
                     <td className="p-3.5 text-slate-800 dark:text-zinc-200">{p.memberName}</td>
@@ -186,7 +213,7 @@ export default function GymPayments() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setSelectedInvoice(p)}
-                        className="h-7 text-xs gap-1"
+                        className="h-7 text-xs gap-1 cursor-pointer hover:text-[#00df89]"
                       >
                         <Printer className="w-3.5 h-3.5" /> Print
                       </Button>
@@ -195,6 +222,16 @@ export default function GymPayments() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredPayments.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

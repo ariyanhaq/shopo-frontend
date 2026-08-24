@@ -2,13 +2,21 @@
  * @file GymMemberProfile.jsx
  * @description Comprehensive athlete profile view with real MongoDB attendance logs, fee receipts, and health metrics.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/services/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue
+} from '@/components/ui/select';
+import Pagination from '@/components/common/Pagination';
 import {
   User, Phone, Mail, Calendar, HeartPulse, Activity,
   CreditCard, Dumbbell, Clock, ArrowLeft, CheckCircle2,
@@ -67,8 +75,26 @@ export default function GymMemberProfile() {
   const attendanceHistory = member.attendanceHistory || [];
   const paymentHistory = member.paymentHistory || [];
 
+  // Attendance Pagination
+  const [attPage, setAttPage] = useState(1);
+  const [attPageSize, setAttPageSize] = useState(5);
+
+  const paginatedAttendance = useMemo(() => {
+    const start = (attPage - 1) * attPageSize;
+    return attendanceHistory.slice(start, start + attPageSize);
+  }, [attendanceHistory, attPage, attPageSize]);
+
+  // Payment Pagination
+  const [payPage, setPayPage] = useState(1);
+  const [payPageSize, setPayPageSize] = useState(5);
+
+  const paginatedPayments = useMemo(() => {
+    const start = (payPage - 1) * payPageSize;
+    return paymentHistory.slice(start, start + payPageSize);
+  }, [paymentHistory, payPage, payPageSize]);
+
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
       {/* Back link */}
       <div className="flex items-center justify-between">
@@ -108,62 +134,72 @@ export default function GymMemberProfile() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 w-full md:w-auto text-center md:text-right border-t md:border-t-0 pt-4 md:pt-0 border-slate-100 dark:border-zinc-800">
-            <div>
-              <div className="text-xs text-slate-400">Package</div>
-              <div className="text-sm font-medium text-slate-800 dark:text-zinc-200">{member.membershipPackage}</div>
-            </div>
-            <div>
-              <div className="text-xs text-slate-400">Valid Until</div>
-              <div className="text-sm font-medium text-slate-800 dark:text-zinc-200">{member.endDate}</div>
-            </div>
-            <div>
-              <div className="text-xs text-slate-400">Due Balance</div>
-              <div className={`text-sm font-medium ${member.dueAmount > 0 ? 'text-amber-500' : 'text-[#00a86b] dark:text-[#00df89]'}`}>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <span className="text-xs text-slate-400 dark:text-zinc-500 block">Due Fee Balance</span>
+              <span className={`text-xl font-bold ${member.dueAmount > 0 ? 'text-amber-500' : 'text-[#00a86b] dark:text-[#00df89]'}`}>
                 ৳ {(member.dueAmount || 0).toLocaleString()}
-              </div>
+              </span>
             </div>
           </div>
 
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2">
-          {['Overview', 'Attendance History', 'Payment History'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                activeTab === tab
-                  ? 'bg-slate-900 text-white dark:bg-zinc-800'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-zinc-400'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
+        {/* Info Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-100 dark:border-zinc-800/80 text-xs">
+          <div>
+            <span className="text-slate-400 dark:text-zinc-500 block">Phone</span>
+            <span className="font-medium text-slate-800 dark:text-zinc-200">{member.phone}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 dark:text-zinc-500 block">Package</span>
+            <span className="font-medium text-slate-800 dark:text-zinc-200">{member.membershipPackage}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 dark:text-zinc-500 block">Assigned Trainer</span>
+            <span className="font-medium text-slate-800 dark:text-zinc-200">{member.trainer || 'General Floor'}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 dark:text-zinc-500 block">Package Expiry</span>
+            <span className="font-medium text-slate-800 dark:text-zinc-200">{member.endDate}</span>
+          </div>
         </div>
+      </Card>
 
+      {/* VIEW SELECTOR */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="w-full sm:w-52">
+          <Select value={activeTab} onValueChange={setActiveTab}>
+            <SelectTrigger size="sm" className="bg-white dark:bg-[#121215] w-full h-9.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-semibold">
+              <SelectValue placeholder="Overview" />
+            </SelectTrigger>
+            <SelectContent className="min-w-[190px]">
+              <SelectItem value="Overview">Profile Overview</SelectItem>
+              <SelectItem value="Attendance History">Attendance History</SelectItem>
+              <SelectItem value="Payment History">Payment History</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* TAB CONTENTS */}
+      <Card className="p-6 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+        
         {/* Tab 1: Overview */}
         {activeTab === 'Overview' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b]/80 border border-slate-100 dark:border-zinc-800">
-              <div className="text-xs text-slate-400">Phone Number</div>
-              <div className="text-sm font-medium text-slate-900 dark:text-white mt-1">{member.phone}</div>
+          <div className="space-y-6 text-xs">
+            <div>
+              <h3 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Fitness Goals & Profile</h3>
+              <p className="text-slate-600 dark:text-zinc-300 bg-slate-50 dark:bg-[#09090b] p-3 rounded-xl border border-slate-100 dark:border-zinc-800">
+                {member.fitnessGoal || 'No specific fitness goals recorded.'}
+              </p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b]/80 border border-slate-100 dark:border-zinc-800">
-              <div className="text-xs text-slate-400">Emergency Contact</div>
-              <div className="text-sm font-medium text-slate-900 dark:text-white mt-1">{member.emergencyContact || 'Not specified'}</div>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b]/80 border border-slate-100 dark:border-zinc-800">
-              <div className="text-xs text-slate-400">Body Stats</div>
-              <div className="text-sm font-medium text-slate-900 dark:text-white mt-1">
-                {member.height}cm / {member.weight}kg ({member.bmi} BMI)
-              </div>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b]/80 border border-slate-100 dark:border-zinc-800">
-              <div className="text-xs text-slate-400">Fitness Goal</div>
-              <div className="text-sm font-medium text-slate-900 dark:text-white mt-1">{member.fitnessGoal}</div>
+
+            <div>
+              <h3 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Health Notes & Medical History</h3>
+              <p className="text-slate-600 dark:text-zinc-300 bg-slate-50 dark:bg-[#09090b] p-3 rounded-xl border border-slate-100 dark:border-zinc-800">
+                {member.healthNotes || 'No existing injuries or medical conditions declared.'}
+              </p>
             </div>
           </div>
         )}
@@ -172,7 +208,7 @@ export default function GymMemberProfile() {
         {activeTab === 'Attendance History' && (
           <div className="space-y-3">
             {attendanceHistory.length > 0 ? (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto space-y-4">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 dark:bg-zinc-900 text-slate-500 border-b border-slate-100 dark:border-zinc-800">
                     <tr>
@@ -184,7 +220,7 @@ export default function GymMemberProfile() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                    {attendanceHistory.map((log) => (
+                    {paginatedAttendance.map((log) => (
                       <tr key={log._id}>
                         <td className="p-3 font-medium text-slate-900 dark:text-white">{log.date}</td>
                         <td className="p-3 text-slate-600 dark:text-zinc-300">{log.checkInTime}</td>
@@ -197,6 +233,17 @@ export default function GymMemberProfile() {
                     ))}
                   </tbody>
                 </table>
+
+                {attendanceHistory.length > attPageSize && (
+                  <Pagination
+                    currentPage={attPage}
+                    totalItems={attendanceHistory.length}
+                    pageSize={attPageSize}
+                    pageSizeOptions={[5, 10, 20]}
+                    onPageChange={setAttPage}
+                    onPageSizeChange={setAttPageSize}
+                  />
+                )}
               </div>
             ) : (
               <div className="p-6 text-center text-xs text-slate-400 dark:text-zinc-500">
@@ -210,7 +257,7 @@ export default function GymMemberProfile() {
         {activeTab === 'Payment History' && (
           <div className="space-y-3">
             {paymentHistory.length > 0 ? (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto space-y-4">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 dark:bg-zinc-900 text-slate-500 border-b border-slate-100 dark:border-zinc-800">
                     <tr>
@@ -224,7 +271,7 @@ export default function GymMemberProfile() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                    {paymentHistory.map((p) => (
+                    {paginatedPayments.map((p) => (
                       <tr key={p._id}>
                         <td className="p-3 font-medium text-slate-900 dark:text-white">{p.invoiceNumber}</td>
                         <td className="p-3 text-slate-600 dark:text-zinc-300">{p.date}</td>
@@ -239,6 +286,17 @@ export default function GymMemberProfile() {
                     ))}
                   </tbody>
                 </table>
+
+                {paymentHistory.length > payPageSize && (
+                  <Pagination
+                    currentPage={payPage}
+                    totalItems={paymentHistory.length}
+                    pageSize={payPageSize}
+                    pageSizeOptions={[5, 10, 20]}
+                    onPageChange={setPayPage}
+                    onPageSizeChange={setPayPageSize}
+                  />
+                )}
               </div>
             ) : (
               <div className="p-6 text-center text-xs text-slate-400 dark:text-zinc-500">

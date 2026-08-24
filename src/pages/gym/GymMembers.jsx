@@ -2,7 +2,7 @@
  * @file GymMembers.jsx
  * @description Gym member directory with dual View Modes (Grid Cards & Table View), filter tabs, and fast actions backed directly by MongoDB.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/services/api';
@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import Pagination from '@/components/common/Pagination';
 import {
   Select,
   SelectTrigger,
@@ -64,16 +65,31 @@ export default function GymMembers() {
     fetchMembers();
   }, []);
 
-  const filteredMembers = members.filter((m) => {
-    const matchesSearch =
-      m.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.phone.includes(searchTerm) ||
-      (m.lockerNumber && m.lockerNumber.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStatus = statusFilter === 'All' || m.status === statusFilter;
-    const matchesGender = genderFilter === 'All' || m.gender === genderFilter;
-    const matchesGoal = goalFilter === 'All' || (m.fitnessGoal && m.fitnessGoal.includes(goalFilter));
-    return matchesSearch && matchesStatus && matchesGender && matchesGoal;
-  });
+  const filteredMembers = useMemo(() => {
+    return members.filter((m) => {
+      const matchesSearch =
+        m.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        m.phone.includes(searchTerm) ||
+        (m.lockerNumber && m.lockerNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesStatus = statusFilter === 'All' || m.status === statusFilter;
+      const matchesGender = genderFilter === 'All' || m.gender === genderFilter;
+      const matchesGoal = goalFilter === 'All' || (m.fitnessGoal && m.fitnessGoal.includes(goalFilter));
+      return matchesSearch && matchesStatus && matchesGender && matchesGoal;
+    });
+  }, [members, searchTerm, statusFilter, genderFilter, goalFilter]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(viewMode === 'grid' ? 12 : 10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, genderFilter, goalFilter, viewMode, pageSize]);
+
+  const paginatedMembers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredMembers.slice(start, start + pageSize);
+  }, [filteredMembers, currentPage, pageSize]);
 
   const activeCount = members.filter(m => m.status === 'Active').length;
   const expiringCount = members.filter(m => m.status === 'Expiring Soon').length;
@@ -113,58 +129,30 @@ export default function GymMembers() {
 
       {/* KPI Status Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div
-          onClick={() => setStatusFilter('All')}
-          className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-            statusFilter === 'All'
-              ? 'bg-slate-900 text-white dark:bg-zinc-800 border-transparent shadow-xs'
-              : 'bg-white dark:bg-[#121215] border-slate-200/90 dark:border-zinc-800/80 text-slate-700 dark:text-zinc-300'
-          }`}
-        >
-          <div className="text-[11px] font-normal opacity-80">All Members</div>
-          <div className="text-xl sm:text-2xl font-medium mt-1">
+        <div className="p-3.5 rounded-2xl border bg-white dark:bg-[#121215] border-slate-200/90 dark:border-zinc-800/80 text-slate-700 dark:text-zinc-300 shadow-2xs">
+          <div className="text-[11px] font-normal text-slate-500 dark:text-zinc-400">All Members</div>
+          <div className="text-xl sm:text-2xl font-bold mt-1 text-slate-900 dark:text-white font-mono">
             {isLoading ? <Skeleton className="h-6 w-12 my-0.5" /> : members.length}
           </div>
         </div>
 
-        <div
-          onClick={() => setStatusFilter('Active')}
-          className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-            statusFilter === 'Active'
-              ? 'bg-emerald-500/15 border-emerald-500 text-[#00a86b] dark:text-[#00df89]'
-              : 'bg-white dark:bg-[#121215] border-slate-200/90 dark:border-zinc-800/80 text-slate-700 dark:text-zinc-300'
-          }`}
-        >
+        <div className="p-3.5 rounded-2xl border bg-emerald-500/10 border-emerald-500/20 text-[#00a86b] dark:text-[#00df89] shadow-2xs">
           <div className="text-[11px] font-normal text-emerald-600 dark:text-[#00df89]">Active Passes</div>
-          <div className="text-xl sm:text-2xl font-medium mt-1 text-emerald-600 dark:text-[#00df89]">
+          <div className="text-xl sm:text-2xl font-bold mt-1 text-emerald-600 dark:text-[#00df89] font-mono">
             {isLoading ? <Skeleton className="h-6 w-12 my-0.5" /> : activeCount}
           </div>
         </div>
 
-        <div
-          onClick={() => setStatusFilter('Expiring Soon')}
-          className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-            statusFilter === 'Expiring Soon'
-              ? 'bg-amber-500/15 border-amber-500 text-amber-600 dark:text-amber-400'
-              : 'bg-white dark:bg-[#121215] border-slate-200/90 dark:border-zinc-800/80 text-slate-700 dark:text-zinc-300'
-          }`}
-        >
-          <div className="text-[11px] font-normal text-amber-500">Expiring Soon</div>
-          <div className="text-xl sm:text-2xl font-medium mt-1 text-amber-500">
+        <div className="p-3.5 rounded-2xl border bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 shadow-2xs">
+          <div className="text-[11px] font-normal text-amber-600 dark:text-amber-400">Expiring Soon</div>
+          <div className="text-xl sm:text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400 font-mono">
             {isLoading ? <Skeleton className="h-6 w-12 my-0.5" /> : expiringCount}
           </div>
         </div>
 
-        <div
-          onClick={() => setStatusFilter('Expired')}
-          className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-            statusFilter === 'Expired'
-              ? 'bg-rose-500/15 border-rose-500 text-rose-600 dark:text-rose-400'
-              : 'bg-white dark:bg-[#121215] border-slate-200/90 dark:border-zinc-800/80 text-slate-700 dark:text-zinc-300'
-          }`}
-        >
-          <div className="text-[11px] font-normal text-rose-500">Expired Passes</div>
-          <div className="text-xl sm:text-2xl font-medium mt-1 text-rose-500">
+        <div className="p-3.5 rounded-2xl border bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400 shadow-2xs">
+          <div className="text-[11px] font-normal text-rose-600 dark:text-rose-400">Expired Passes</div>
+          <div className="text-xl sm:text-2xl font-bold mt-1 text-rose-600 dark:text-rose-400 font-mono">
             {isLoading ? <Skeleton className="h-6 w-12 my-0.5" /> : expiredCount}
           </div>
         </div>
@@ -185,7 +173,21 @@ export default function GymMembers() {
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+            <div className="w-36">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b]">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Statuses</SelectItem>
+                  <SelectItem value="Active">Active Passes</SelectItem>
+                  <SelectItem value="Expiring Soon">Expiring Soon</SelectItem>
+                  <SelectItem value="Expired">Expired Passes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="w-36">
               <Select value={genderFilter} onValueChange={setGenderFilter}>
                 <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b]">
@@ -252,61 +254,74 @@ export default function GymMembers() {
           </Button>
         </div>
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredMembers.map((m) => (
-            <Card
-              key={m._id}
-              onClick={() => navigate(`/gym/members/${m._id}`)}
-              className="p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] hover:shadow-md transition-all cursor-pointer space-y-4"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-medium text-sm border border-emerald-500/20">
-                    {getInitials(m.fullName)}
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {paginatedMembers.map((m) => (
+              <Card
+                key={m._id}
+                onClick={() => navigate(`/gym/members/${m._id}`)}
+                className="p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] hover:shadow-md transition-all cursor-pointer space-y-4"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-medium text-sm border border-emerald-500/20">
+                      {getInitials(m.fullName)}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-900 dark:text-white leading-tight">{m.fullName}</h3>
+                      <p className="text-xs text-slate-500 dark:text-zinc-400">{m.phone}</p>
+                    </div>
+                  </div>
+
+                  <Badge
+                    variant={m.status === 'Active' ? 'default' : m.status === 'Expiring Soon' ? 'warning' : 'destructive'}
+                    className="text-[10px] uppercase font-normal"
+                  >
+                    {m.status}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/80 text-xs">
+                  <div>
+                    <span className="text-slate-400 dark:text-zinc-500 text-[11px] block">Package:</span>
+                    <span className="font-medium text-slate-800 dark:text-zinc-200">{m.membershipPackage}</span>
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-slate-900 dark:text-white leading-tight">{m.fullName}</h3>
-                    <p className="text-xs text-slate-500 dark:text-zinc-400">{m.phone}</p>
+                    <span className="text-slate-400 dark:text-zinc-500 text-[11px] block">Valid Until:</span>
+                    <span className="font-medium text-slate-800 dark:text-zinc-200">{m.endDate}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-zinc-500 text-[11px] block">Goal:</span>
+                    <span className="text-slate-700 dark:text-zinc-300 truncate block">{m.fitnessGoal}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 dark:text-zinc-500 text-[11px] block">Due Amount:</span>
+                    <span className={m.dueAmount > 0 ? 'text-amber-500 font-medium' : 'text-[#00a86b] dark:text-[#00df89] font-medium'}>
+                      ৳ {(m.dueAmount || 0).toLocaleString()}
+                    </span>
                   </div>
                 </div>
 
-                <Badge
-                  variant={m.status === 'Active' ? 'default' : m.status === 'Expiring Soon' ? 'warning' : 'destructive'}
-                  className="text-[10px] uppercase font-normal"
-                >
-                  {m.status}
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800/80 text-xs">
-                <div>
-                  <span className="text-slate-400 dark:text-zinc-500 text-[11px] block">Package:</span>
-                  <span className="font-medium text-slate-800 dark:text-zinc-200">{m.membershipPackage}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 dark:text-zinc-500 text-[11px] block">Valid Until:</span>
-                  <span className="font-medium text-slate-800 dark:text-zinc-200">{m.endDate}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 dark:text-zinc-500 text-[11px] block">Goal:</span>
-                  <span className="text-slate-700 dark:text-zinc-300 truncate block">{m.fitnessGoal}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 dark:text-zinc-500 text-[11px] block">Due Amount:</span>
-                  <span className={m.dueAmount > 0 ? 'text-amber-500 font-medium' : 'text-[#00a86b] dark:text-[#00df89] font-medium'}>
-                    ৳ {(m.dueAmount || 0).toLocaleString()}
+                <div className="pt-1 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
+                  <span>Trainer: {m.trainer || 'General'}</span>
+                  <span className="text-[#00a86b] dark:text-[#00df89] flex items-center gap-1 font-medium">
+                    View Profile <ChevronRight className="w-3.5 h-3.5" />
                   </span>
                 </div>
-              </div>
+              </Card>
+            ))}
+          </div>
 
-              <div className="pt-1 flex items-center justify-between text-xs text-slate-500 dark:text-zinc-400">
-                <span>Trainer: {m.trainer || 'General'}</span>
-                <span className="text-[#00a86b] dark:text-[#00df89] flex items-center gap-1 font-medium">
-                  View Profile <ChevronRight className="w-3.5 h-3.5" />
-                </span>
-              </div>
-            </Card>
-          ))}
+          <Card className="p-0 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredMembers.length}
+              pageSize={pageSize}
+              pageSizeOptions={[6, 12, 24, 48]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
+          </Card>
         </div>
       ) : (
         /* Table View */
@@ -325,7 +340,7 @@ export default function GymMembers() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredMembers.map((m) => (
+                {paginatedMembers.map((m) => (
                   <tr
                     key={m._id}
                     onClick={() => navigate(`/gym/members/${m._id}`)}
@@ -355,6 +370,16 @@ export default function GymMembers() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredMembers.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         </Card>
       )}

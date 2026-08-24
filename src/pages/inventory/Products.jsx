@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import ProductImageUploader from '@/components/common/ProductImageUploader';
+import Pagination from '@/components/common/Pagination';
 import { BarcodeLabelModal } from '@/components/inventory/BarcodeLabelModal';
 import { generateUniqueBarcode } from '@/utils/barcodePrinter';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -619,6 +620,19 @@ export default function Products() {
       return 0;
     });
   }, [productList, searchQuery, categoryFilter, stockStatusFilter, sortBy]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, categoryFilter, stockStatusFilter, sortBy, pageSize]);
+
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredProducts.slice(start, start + pageSize);
+  }, [filteredProducts, currentPage, pageSize]);
 
   // Toggle Category Header Sort
   const toggleCategorySort = () => {
@@ -1554,7 +1568,7 @@ export default function Products() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredProducts.map((p) => (
+                {paginatedProducts.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
                     <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2.5">
                       {p.image_url ? (
@@ -1609,30 +1623,28 @@ export default function Products() {
                       </Badge>
                     </td>
                     <td className="p-3.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
                           onClick={() => {
                             setBarcodeModalProducts([p]);
                             setIsBarcodeModalOpen(true);
                           }}
-                          className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer"
+                          className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 flex items-center justify-center transition-colors cursor-pointer border border-slate-200/80 dark:border-zinc-700/80 shadow-2xs shrink-0"
                           title={lang === 'bn' ? 'বারকোড লেবেল প্রিন্ট করুন' : 'Print Barcode Label'}
                         >
-                          <Barcode className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                          <Barcode className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleOpenEdit(p)}
-                          className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-[#00df89]"
+                          title={lang === 'bn' ? 'সম্পাদনা করুন' : 'Edit Product'}
+                          className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors cursor-pointer border border-blue-500/20 shadow-2xs shrink-0"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => {
                             setConfirmDeleteDialog({
                               isOpen: true,
@@ -1640,16 +1652,27 @@ export default function Products() {
                               productName: p.name,
                             });
                           }}
-                          className="h-7 text-xs px-2 text-rose-500 hover:bg-rose-500/10"
+                          title={lang === 'bn' ? 'মুছে ফেলুন' : 'Delete Product'}
+                          className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center transition-colors cursor-pointer border border-rose-500/20 shadow-2xs shrink-0"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredProducts.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

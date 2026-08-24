@@ -2,12 +2,13 @@
  * @file StockHistory.jsx
  * @description Inventory movements, stock adjustments & audit ledger connected to MongoDB.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/services/api';
 import { Card, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Pagination from '@/components/common/Pagination';
 import { Layers, Search, ArrowUpRight, ArrowDownRight, RefreshCw, Loader2 } from 'lucide-react';
 
 export default function StockHistory() {
@@ -33,15 +34,30 @@ export default function StockHistory() {
     fetchTransactions();
   }, []);
 
-  const filtered = transactions.filter((t) => {
+  const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase();
-    const prod = t.product_id?.name ? t.product_id.name.toLowerCase() : '';
-    const note = t.note ? t.note.toLowerCase() : '';
-    return prod.includes(q) || note.includes(q) || t.type.toLowerCase().includes(q);
-  });
+    return transactions.filter((t) => {
+      const prod = t.product_id?.name ? t.product_id.name.toLowerCase() : '';
+      const note = t.note ? t.note.toLowerCase() : '';
+      return prod.includes(q) || note.includes(q) || t.type.toLowerCase().includes(q);
+    });
+  }, [transactions, searchTerm]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, pageSize]);
+
+  const paginatedTransactions = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -98,7 +114,7 @@ export default function StockHistory() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filtered.map((tx) => (
+                {paginatedTransactions.map((tx) => (
                   <tr key={tx._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
                     <td className="p-3.5 text-slate-500">{new Date(tx.created_at).toLocaleString()}</td>
                     <td className="p-3.5 font-medium text-slate-900 dark:text-white">
@@ -122,6 +138,16 @@ export default function StockHistory() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filtered.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

@@ -2,11 +2,12 @@
  * @file GymWorkouts.jsx
  * @description Workout routines, exercise templates (sets/reps/rest time) & member assignment.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Pagination from '@/components/common/Pagination';
 import { Activity, Plus, Dumbbell, Clock, Flame, CheckCircle2 } from 'lucide-react';
 import { INITIAL_WORKOUT_TEMPLATES } from '@/data/gymData';
 
@@ -14,8 +15,17 @@ export default function GymWorkouts() {
   const { lang } = useLanguage();
   const [workouts] = useState(INITIAL_WORKOUT_TEMPLATES);
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(4);
+
+  const paginatedWorkouts = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return workouts.slice(start, start + pageSize);
+  }, [workouts, currentPage, pageSize]);
+
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -36,7 +46,7 @@ export default function GymWorkouts() {
 
       {/* WORKOUT TEMPLATES LIST */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {workouts.map((wt) => (
+        {paginatedWorkouts.map((wt) => (
           <Card key={wt.id} className="p-6 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -79,6 +89,19 @@ export default function GymWorkouts() {
           </Card>
         ))}
       </div>
+
+      {workouts.length > pageSize && (
+        <Card className="p-0 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] overflow-hidden">
+          <Pagination
+            currentPage={currentPage}
+            totalItems={workouts.length}
+            pageSize={pageSize}
+            pageSizeOptions={[2, 4, 8, 16]}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        </Card>
+      )}
 
     </div>
   );

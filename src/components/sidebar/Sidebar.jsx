@@ -19,7 +19,7 @@ import {
   Wallet, HelpCircle, Layers, Building2, Sparkles, FolderPlus,
   ArrowLeftRight, Dumbbell, CreditCard, Calendar, Flame, Activity,
   Wrench, DollarSign, Award, Clock, LogOut, User, PlusCircle, Crown,
-  Check
+  Check, FileBarChart
 } from 'lucide-react';
 
 export default function Sidebar({ collapsed }) {
@@ -54,12 +54,13 @@ export default function Sidebar({ collapsed }) {
     }
   };
 
-  const isOwner = mongoUser?.role === 'owner';
-  const isManager = mongoUser?.role === 'manager';
+  const userRole = (mongoUser?.role || 'owner').toLowerCase();
+  const isOwner = userRole === 'owner' || userRole === 'admin' || !mongoUser;
+  const isManager = userRole === 'manager';
   const userPerms = Array.isArray(mongoUser?.permissions) ? mongoUser.permissions : [];
 
   const hasPermission = (permKey) => {
-    if (isOwner || isManager) return true;
+    if (!mongoUser || isOwner || isManager) return true;
     if (!permKey) return true;
     if (permKey === 'users') return isOwner || isManager;
     return userPerms.includes(permKey);
@@ -71,7 +72,6 @@ export default function Sidebar({ collapsed }) {
       items: [
         { label: sb.dashboard || 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
         { label: sb.sales || 'Sales', path: '/sales', icon: ShoppingCart, hasChevron: true, perm: 'orders' },
-        { label: sb.pos || 'POS & Retail', path: '/pos', icon: Store, perm: 'pos' },
         { label: sb.products || 'Products', path: '/products', icon: Package, hasChevron: true, perm: 'products' },
         { label: lang === 'bn' ? 'পণ্য ক্রয় (Purchases)' : 'Purchases', path: '/purchases', icon: ShoppingBag, hasChevron: true, perm: 'purchases' },
         { label: lang === 'bn' ? 'সাপ্লায়ার (Suppliers)' : 'Suppliers', path: '/suppliers', icon: Building2, hasChevron: true, perm: 'suppliers' },
@@ -79,9 +79,10 @@ export default function Sidebar({ collapsed }) {
         { label: lang === 'bn' ? 'মেম্বারশিপ ও রিওয়ার্ড' : 'Members & Rewards', path: '/members', icon: Crown, hasChevron: true, perm: 'customers' },
         { label: lang === 'bn' ? 'কর্মচারী ও বেতন' : 'Employees', path: '/employees', icon: UserCheck, hasChevron: true, perm: 'employees' },
         { label: lang === 'bn' ? 'দোকানের খরচ (Expenses)' : 'Expenses', path: '/expenses', icon: DollarSign, hasChevron: true, perm: 'expenses' },
-        { label: lang === 'bn' ? 'ব্যবহারকারী ও রোল' : 'Users', path: '/users', icon: ShieldCheck, hasChevron: true, perm: 'users' },
-        { label: sb.accounting || 'Accounting & Finance', path: '/accounting', icon: Wallet, hasChevron: true, perm: 'accounting' },
-        { label: sb.settings || 'Settings', path: '/dashboard/settings', icon: Settings, hasChevron: true, perm: 'settings' }
+        { label: lang === 'bn' ? 'ব্যবহারকারী ও ডিভাইস' : 'Users & Devices', path: '/users', icon: ShieldCheck, hasChevron: true, perm: 'users' },
+        { label: sb.accounting || (lang === 'bn' ? 'আর্থিক রিপোর্ট (Reports)' : 'Financial Reports'), path: '/financial-reports', icon: FileBarChart, hasChevron: true, perm: 'accounting' },
+        { label: lang === 'bn' ? 'দোকানের সেটিংস' : 'Store Settings', path: '/settings/store', icon: Store, hasChevron: true, perm: 'settings' },
+        { label: lang === 'bn' ? 'প্রোফাইল সেটিংস' : 'Profile Settings', path: '/settings/profile', icon: User, hasChevron: true }
       ]
     }
   ];
@@ -93,10 +94,10 @@ export default function Sidebar({ collapsed }) {
         { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', path: '/gym/dashboard', icon: LayoutDashboard },
         { label: lang === 'bn' ? 'বিক্রি (Sales)' : 'Sales', path: '/gym/sales', icon: ShoppingCart, perm: 'orders' },
         { label: lang === 'bn' ? 'প্রোডাক্টস (Products)' : 'Products', path: '/gym/products', icon: Package, perm: 'products' },
-        { label: lang === 'bn' ? 'হিসাব ও অর্থ (Accounting)' : 'Accounting', path: '/gym/accounting', icon: Wallet, perm: 'accounting' },
+        { label: lang === 'bn' ? 'আর্থিক রিপোর্ট (Reports)' : 'Financial Reports', path: '/gym/accounting', icon: FileBarChart, perm: 'accounting' },
         { label: lang === 'bn' ? 'সদস্যবৃন্দ (Members)' : 'Members', path: '/gym/members', icon: Users, perm: 'customers' },
         { label: lang === 'bn' ? 'কর্মচারী ও বেতন' : 'Employees', path: '/employees', icon: UserCheck, perm: 'employees' },
-        { label: lang === 'bn' ? 'ব্যবহারকারী ও রোল' : 'Users', path: '/users', icon: ShieldCheck, perm: 'users' },
+        { label: lang === 'bn' ? 'ব্যবহারকারী ও ডিভাইস' : 'Users & Devices', path: '/users', icon: ShieldCheck, perm: 'users' },
         { label: lang === 'bn' ? 'উপস্থিতি (Attendance)' : 'Attendance', path: '/gym/attendance', icon: UserCheck, perm: 'employees' },
         { label: lang === 'bn' ? 'পেমেন্ট ও বিলিং' : 'Payments', path: '/gym/payments', icon: CreditCard, perm: 'payments' },
         { label: lang === 'bn' ? 'প্যাকেজ' : 'Packages', path: '/gym/packages', icon: Package, perm: 'products' },
@@ -296,11 +297,15 @@ export default function Sidebar({ collapsed }) {
 
             <DropdownMenuContent align="left" width="w-58" className="bottom-full mb-1.5 mt-0">
               <DropdownMenuLabel>
-                {lang === 'bn' ? 'অ্যাকাউন্ট' : 'My Account'}
+                {lang === 'bn' ? 'অ্যাকাউন্ট ও সেটিংস' : 'Account & Settings'}
               </DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => navigate('/dashboard/settings')}>
+              <DropdownMenuItem onClick={() => navigate('/settings/profile')}>
                 <User className="w-3.5 h-3.5 text-slate-400" />
                 <span>{lang === 'bn' ? 'প্রোফাইল সেটিংস' : 'Profile Settings'}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/settings/store')}>
+                <Store className="w-3.5 h-3.5 text-slate-400" />
+                <span>{lang === 'bn' ? 'দোকানের সেটিংস' : 'Store Settings'}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

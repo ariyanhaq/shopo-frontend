@@ -722,10 +722,98 @@ export const printCustomerStatement = ({ customer, sales = [], shop, lang = 'en'
   printHtmlViaIframe(html);
 };
 
+/**
+ * Print Expense Voucher Slip
+ */
+export const printExpenseVoucher = ({ expense, shop, lang = 'en' }) => {
+  if (!expense) return;
+
+  const isBn = lang === 'bn';
+  const shopName = shop?.name || 'Shopo Store';
+  const shopAddress = shop?.address || '';
+  const shopPhone = shop?.phone || '';
+  const voucherId = expense.id || `EXP-${expense._id ? String(expense._id).slice(-4).toUpperCase() : '0000'}`;
+  const expenseDate = formatDate(expense.date || expense.created_at);
+  const amountFormatted = (Number(expense.amount) || 0).toLocaleString();
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Expense Voucher - ${voucherId}</title>
+  <style>
+    @page { size: A5 landscape; margin: 12mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; font-size: 12px; line-height: 1.5; }
+    .header { text-align: center; border-bottom: 2px dashed #94a3b8; padding-bottom: 12px; margin-bottom: 14px; }
+    .shop-name { font-size: 18px; font-weight: 800; text-transform: uppercase; color: #0284c7; }
+    .shop-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .voucher-title { display: inline-block; background: #fee2e2; color: #dc2626; border: 1px solid #f87171; padding: 3px 12px; border-radius: 9999px; font-size: 11px; font-weight: 800; text-transform: uppercase; margin-top: 6px; }
+    .details-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .details-table td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+    .details-table td.label { width: 35%; font-weight: 600; color: #475569; }
+    .details-table td.value { font-weight: 700; color: #0f172a; }
+    .amount-box { margin-top: 16px; padding: 12px 16px; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .amount-text { font-size: 18px; font-weight: 800; color: #dc2626; }
+    .signatures { display: flex; justify-content: space-between; margin-top: 40px; padding-top: 10px; }
+    .sig-line { border-top: 1px solid #475569; width: 140px; text-align: center; font-size: 10px; color: #475569; padding-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="shop-name">${shopName}</div>
+    ${shopAddress ? `<div class="shop-meta">${shopAddress}</div>` : ''}
+    ${shopPhone ? `<div class="shop-meta">Tel: ${shopPhone}</div>` : ''}
+    <div><span class="voucher-title">${isBn ? 'অফিসিয়াল খরচ ভাউচার' : 'Official Expense Voucher'}</span></div>
+  </div>
+
+  <table class="details-table">
+    <tr>
+      <td class="label">${isBn ? 'ভাউচার নম্বর:' : 'Voucher Ref:'}</td>
+      <td class="value font-mono">${voucherId}</td>
+    </tr>
+    <tr>
+      <td class="label">${isBn ? 'তারিখ ও সময়:' : 'Date & Time:'}</td>
+      <td class="value">${expenseDate}</td>
+    </tr>
+    <tr>
+      <td class="label">${isBn ? 'খরচের বিবরণ / শিরোনাম:' : 'Expense Title / Purpose:'}</td>
+      <td class="value">${expense.title || '-'}</td>
+    </tr>
+    <tr>
+      <td class="label">${isBn ? 'খরচের ক্যাটাগরি:' : 'Expense Category:'}</td>
+      <td class="value">${expense.category || 'General'}</td>
+    </tr>
+    <tr>
+      <td class="label">${isBn ? 'পেমেন্ট মাধ্যম:' : 'Payment Method:'}</td>
+      <td class="value uppercase">${expense.method || 'Cash'}</td>
+    </tr>
+    ${expense.description ? `
+    <tr>
+      <td class="label">${isBn ? 'নোট / মন্তব্য:' : 'Remarks / Note:'}</td>
+      <td class="value">${expense.description}</td>
+    </tr>` : ''}
+  </table>
+
+  <div class="amount-box">
+    <div style="font-weight: 700; font-size: 13px;">${isBn ? 'মোট পরিশোধিত খরচের পরিমাণ:' : 'Total Amount Paid:'}</div>
+    <div class="amount-text">৳ ${amountFormatted}</div>
+  </div>
+
+  <div class="signatures">
+    <div class="sig-line">${isBn ? 'গ্রহণকারীর স্বাক্ষর' : 'Receiver Signature'}</div>
+    <div class="sig-line">${isBn ? 'অনুমোদনকারীর স্বাক্ষর' : 'Authorized Signature'}</div>
+  </div>
+</body>
+</html>`;
+
+  printHtmlViaIframe(html);
+};
+
 export default {
   printHtmlViaIframe,
   printSaleReceipt,
   printPurchaseReceipt,
   printDueReceipt,
   printCustomerStatement,
+  printExpenseVoucher,
 };

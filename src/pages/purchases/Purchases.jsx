@@ -26,6 +26,7 @@ import {
   SelectItem
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import Pagination from '@/components/common/Pagination';
 import { BarcodeLabelModal } from '@/components/inventory/BarcodeLabelModal';
 import { generateUniqueBarcode } from '@/utils/barcodePrinter';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -287,7 +288,6 @@ export default function Purchases() {
     }
   };
 
-  // Filter Purchases
   const filteredPurchases = useMemo(() => {
     return purchases.filter((p) => {
       const matchesStatus = statusFilter === 'all' || p.payment_status === statusFilter;
@@ -300,6 +300,19 @@ export default function Purchases() {
       return matchesStatus && matchesSearch;
     });
   }, [purchases, statusFilter, searchQuery]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, pageSize]);
+
+  const paginatedPurchases = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPurchases.slice(start, start + pageSize);
+  }, [filteredPurchases, currentPage, pageSize]);
 
   // Preset attribute suggestions for Quick Product Modal
   const attributePresets = [
@@ -1375,7 +1388,7 @@ export default function Purchases() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredPurchases.map((p) => (
+                {paginatedPurchases.map((p) => (
                   <tr key={p._id} className="hover:bg-slate-50/60 dark:hover:bg-zinc-800/40 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="font-bold text-slate-900 dark:text-white font-mono text-[13px]">
@@ -1440,9 +1453,9 @@ export default function Purchases() {
                             type="button"
                             onClick={() => handleOpenPayDue(p)}
                             title={lang === 'bn' ? 'বাকি পরিশোধ করুন' : 'Pay Due Balance'}
-                            className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-600 dark:text-amber-400 flex items-center justify-center transition-colors cursor-pointer border border-amber-500/20 shadow-xs"
+                            className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-600 dark:text-amber-400 flex items-center justify-center transition-colors cursor-pointer border border-amber-500/20 shadow-2xs shrink-0"
                           >
-                            <Wallet className="w-3.5 h-3.5" />
+                            <Wallet className="w-4 h-4" />
                           </button>
                         )}
 
@@ -1451,9 +1464,9 @@ export default function Purchases() {
                           type="button"
                           onClick={() => setSelectedInvoice(p)}
                           title={lang === 'bn' ? 'বিস্তারিত দেখুন' : 'View details'}
-                          className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-300 flex items-center justify-center transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 flex items-center justify-center transition-colors cursor-pointer border border-slate-200/80 dark:border-zinc-700/80 shadow-2xs shrink-0"
                         >
-                          <Eye className="w-3.5 h-3.5" />
+                          <Eye className="w-4 h-4" />
                         </button>
 
                         {/* Edit Purchase */}
@@ -1461,9 +1474,9 @@ export default function Purchases() {
                           type="button"
                           onClick={() => handleOpenEdit(p)}
                           title={lang === 'bn' ? 'সম্পাদনা করুন' : 'Edit purchase'}
-                          className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors cursor-pointer border border-blue-500/20 shadow-2xs shrink-0"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-4 h-4" />
                         </button>
 
                         {/* Print Barcode Labels */}
@@ -1471,9 +1484,9 @@ export default function Purchases() {
                           type="button"
                           onClick={() => handlePrintPurchaseLabels(p)}
                           title={lang === 'bn' ? 'বারকোড লেবেল প্রিন্ট করুন' : 'Print Barcode Labels for this purchase'}
-                          className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-600 dark:text-purple-400 flex items-center justify-center transition-colors cursor-pointer border border-purple-500/20"
+                          className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-600 dark:text-purple-400 flex items-center justify-center transition-colors cursor-pointer border border-purple-500/20 shadow-2xs shrink-0"
                         >
-                          <Barcode className="w-3.5 h-3.5" />
+                          <Barcode className="w-4 h-4" />
                         </button>
 
                         {/* Print Receipt */}
@@ -1481,9 +1494,9 @@ export default function Purchases() {
                           type="button"
                           onClick={() => handlePrintReceipt(p)}
                           title={lang === 'bn' ? 'রসিদ প্রিন্ট করুন' : 'Print receipt'}
-                          className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center transition-colors cursor-pointer border border-emerald-500/20 shadow-2xs shrink-0"
                         >
-                          <Printer className="w-3.5 h-3.5" />
+                          <Printer className="w-4 h-4" />
                         </button>
 
                         {/* Delete Purchase */}
@@ -1491,9 +1504,9 @@ export default function Purchases() {
                           type="button"
                           onClick={() => setDeleteTarget(p)}
                           title={lang === 'bn' ? 'মুছে ফেলুন' : 'Delete purchase'}
-                          className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center transition-colors cursor-pointer border border-rose-500/20 shadow-2xs shrink-0"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -1501,6 +1514,16 @@ export default function Purchases() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredPurchases.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

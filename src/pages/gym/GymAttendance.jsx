@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/context/LanguageContext';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import Pagination from '@/components/common/Pagination';
 import {
   Select,
   SelectTrigger,
@@ -86,63 +87,92 @@ export default function GymAttendance() {
     }
   };
 
-  const filteredLogs = logs.filter((l) =>
-    l.memberName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    l.method.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredLogs = useMemo(() => {
+    return logs.filter((l) =>
+      l.memberName.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [logs, searchQuery]);
 
-  const presentCount = logs.filter(l => l.status === 'Present').length;
-  const completedCount = logs.filter(l => l.status === 'Completed').length;
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedDate, pageSize]);
+
+  const paginatedLogs = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredLogs.slice(start, start + pageSize);
+  }, [filteredLogs, currentPage, pageSize]);
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans pb-12">
       
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
             <UserCheck className="w-6 h-6 text-[#00df89]" />
-            <span>{lang === 'bn' ? 'উপস্থিতি ও চেক-ইন ডেস্ক' : 'Gym Attendance & Check-In Desk'}</span>
+            <span>{lang === 'bn' ? 'সদস্য উপস্থিতি ও বায়োমেট্রিক লগ' : 'Athlete Attendance & Daily Logs'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
-            {lang === 'bn' ? 'দৈনিক সদস্য চেক-ইন ও অ্যাথলেট উপস্থিতি ট্র্যাকিং' : 'Real-time athlete check-in logs and workout durations'}
+            {lang === 'bn' ? 'দৈনিক এন্ট্রি, জিম ভিজিট ও ওয়ার্কআউট সেশন ট্র্যাকিং' : 'Realtime athlete check-ins, barcode scans and workout timestamps'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={() => setIsCheckInModalOpen(true)}
-            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs gap-1.5 shadow-xs"
-          >
-            <Plus className="w-4 h-4 stroke-[2]" />
-            <span>{lang === 'bn' ? 'চেক-ইন করুন' : 'Quick Check-In'}</span>
-          </Button>
-        </div>
+        <Button
+          onClick={() => setIsCheckInModalOpen(true)}
+          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2"
+        >
+          <Plus className="w-4 h-4 stroke-[2]" />
+          <span>{lang === 'bn' ? 'উপস্থিতি নথিভুক্ত করুন' : 'Quick Check-In'}</span>
+        </Button>
       </div>
 
-      {/* Stats row */}
+      {/* KPI METRICS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Total Check-ins ({selectedDate})</div>
-          <div className="text-2xl font-medium text-slate-900 dark:text-white mt-1">{logs.length}</div>
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Check-Ins</span>
+            <UserCheck className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : logs.length}
+          </div>
+          <div className="text-xs text-slate-400 mt-1">Visits logged for selected day</div>
         </Card>
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-emerald-600 dark:text-[#00df89]">Currently in Gym (Active)</div>
-          <div className="text-2xl font-medium text-emerald-600 dark:text-[#00df89] mt-1">{presentCount}</div>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Currently in Gym</span>
+            <Flame className="w-4 h-4 text-amber-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-amber-500 mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : logs.filter(l => l.status === 'Present').length}
+          </div>
+          <div className="text-xs text-amber-500 mt-1">Active floor occupants</div>
         </Card>
-        <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="text-xs text-slate-500 dark:text-zinc-400">Workouts Completed</div>
-          <div className="text-2xl font-medium text-slate-900 dark:text-white mt-1">{completedCount}</div>
+
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Completed Sessions</span>
+            <CheckCircle2 className="w-4 h-4 text-blue-500" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-blue-500 mt-2">
+            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : logs.filter(l => l.status === 'Completed').length}
+          </div>
+          <div className="text-xs text-blue-500 mt-1">Checked out athletes</div>
         </Card>
       </div>
 
-      {/* Filter and Date selector */}
+      {/* SEARCH AND DATE SELECTOR */}
       <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="w-full sm:w-80 relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder={lang === 'bn' ? 'অ্যাথলেটের নাম দিয়ে খুঁজুন...' : 'Search by athlete name...'}
+            placeholder={lang === 'bn' ? 'সদস্য খুঁজুন...' : 'Search athlete by name...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
@@ -187,7 +217,7 @@ export default function GymAttendance() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filteredLogs.map((log) => (
+                {paginatedLogs.map((log) => (
                   <tr key={log._id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40">
                     <td className="p-3.5 font-medium text-slate-900 dark:text-white flex items-center gap-2">
                       <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-medium text-xs">
@@ -209,7 +239,7 @@ export default function GymAttendance() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleCheckOut(log._id)}
-                          className="h-7 text-xs text-rose-500 hover:text-rose-600 gap-1"
+                          className="h-7 text-xs text-rose-500 hover:text-rose-600 gap-1 cursor-pointer"
                         >
                           <LogOut className="w-3 h-3" /> Check Out
                         </Button>
@@ -219,6 +249,16 @@ export default function GymAttendance() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filteredLogs.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>

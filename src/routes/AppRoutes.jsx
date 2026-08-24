@@ -2,7 +2,7 @@
  * @file AppRoutes.jsx
  * @description Central routing definitions for Shopo with distinct routes for New Sale (/sales/new), Sales (/sales), Products (/products), POS, and Accounting.
  */
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from '@/layouts/MainLayout';
 import AuthLayout from '@/layouts/AuthLayout';
 import DashboardLayout from '@/layouts/DashboardLayout';
@@ -13,7 +13,7 @@ import {
   Landing, Home, Pricing, Features, Testimonials, Contact,
   Login, Register, ForgotPassword, ResetPassword, VerifyEmail, AuthAction,
   CreateShop, BusinessCategory, ShopDetails, CompleteSetup,
-  Dashboard, Overview, Settings,
+  Dashboard, Overview, Settings, ProfileSettings, StoreSettings,
   Products, AddProduct, Categories, StockHistory,
   POS, Orders, NewSale, Transactions,
   Customers, CustomerDetails, Members,
@@ -71,7 +71,12 @@ export default function AppRoutes() {
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/overview" element={<Overview />} />
-          <Route path="/dashboard/settings" element={<PermissionGuard permission="settings"><Settings /></PermissionGuard>} />
+          <Route path="/settings/profile" element={<ProfileSettings />} />
+          <Route path="/profile" element={<Navigate to="/settings/profile" replace />} />
+          <Route path="/settings/store" element={<PermissionGuard permission="settings"><StoreSettings /></PermissionGuard>} />
+          <Route path="/store-settings" element={<Navigate to="/settings/store" replace />} />
+          <Route path="/dashboard/settings" element={<Navigate to="/settings/store" replace />} />
+          <Route path="/settings" element={<Navigate to="/settings/store" replace />} />
 
           {/* Dedicated Gym Business Module Routes */}
           <Route path="/gym/dashboard" element={<GymDashboard />} />
@@ -111,7 +116,8 @@ export default function AppRoutes() {
           <Route path="/suppliers" element={<PermissionGuard permission="suppliers"><Suppliers /></PermissionGuard>} />
           <Route path="/purchases" element={<PermissionGuard permission="purchases"><Purchases /></PermissionGuard>} />
 
-          <Route path="/accounting" element={<PermissionGuard permission="accounting"><ProfitLoss /></PermissionGuard>} />
+          <Route path="/financial-reports" element={<PermissionGuard permission="accounting"><ProfitLoss /></PermissionGuard>} />
+          <Route path="/accounting" element={<Navigate to="/financial-reports" replace />} />
 
           <Route path="/customers" element={<PermissionGuard permission="customers"><Customers /></PermissionGuard>} />
           <Route path="/customers/details" element={<PermissionGuard permission="customers"><CustomerDetails /></PermissionGuard>} />
@@ -121,6 +127,8 @@ export default function AppRoutes() {
           <Route path="/employees/salary" element={<PermissionGuard permission="employees"><Salary /></PermissionGuard>} />
           <Route path="/expenses" element={<PermissionGuard permission="expenses"><Expenses /></PermissionGuard>} />
           <Route path="/users" element={<PermissionGuard requireAdmin={true}><Users /></PermissionGuard>} />
+          <Route path="/users-devices" element={<Navigate to="/users" replace />} />
+          <Route path="/devices" element={<Navigate to="/users" replace />} />
           <Route path="/reports/sales" element={<PermissionGuard permission={['orders', 'accounting']}><SalesReport /></PermissionGuard>} />
           <Route path="/reports/profit-loss" element={<PermissionGuard permission="accounting"><ProfitLoss /></PermissionGuard>} />
           <Route path="/reports/analytics" element={<PermissionGuard permission="accounting"><Analytics /></PermissionGuard>} />

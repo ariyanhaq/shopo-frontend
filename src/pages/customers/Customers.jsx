@@ -21,12 +21,14 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import Pagination from '@/components/common/Pagination';
+import ReturnOrderModal from '@/components/sales/ReturnOrderModal';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   Users, Plus, Phone, Mail, MapPin, Search, Trash2, Edit2, Loader2,
   X, DollarSign, ShoppingBag, ArrowRight, FileText, Calendar,
   CreditCard, Banknote, Printer, ChevronRight, CheckCircle2, Clock,
-  Coins, Percent, Sparkles, UserCheck, AlertTriangle, Crown, Star, Award
+  Coins, Percent, Sparkles, UserCheck, AlertTriangle, Crown, Star, Award, Undo2
 } from 'lucide-react';
 
 const getTierBadgeStyle = (rawColor = '#10b981') => {
@@ -87,6 +89,9 @@ export default function Customers() {
   const [isEditSaleModalOpen, setIsEditSaleModalOpen] = useState(false);
   const [editingSale, setEditingSale] = useState(null);
 
+  // Return Sale / Invoice State
+  const [returningSale, setReturningSale] = useState(null);
+
   useBodyScrollLock(
     Boolean(
       isAddModalOpen ||
@@ -94,7 +99,8 @@ export default function Customers() {
       selectedCustomerId ||
       isCollectCustomerDueOpen ||
       isEditSaleModalOpen ||
-      customerVoucher
+      customerVoucher ||
+      returningSale
     )
   );
   const [isUpdatingSale, setIsUpdatingSale] = useState(false);
@@ -471,6 +477,19 @@ export default function Customers() {
     );
   }, [customers, searchTerm]);
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, pageSize]);
+
+  const paginatedCustomers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
+
   const totalSpentAll = customers.reduce((acc, c) => acc + (c.total_spent || c.total_purchases || 0), 0);
   const totalDuesAll = customers.reduce((acc, c) => acc + (c.total_due || 0), 0);
 
@@ -595,7 +614,7 @@ export default function Customers() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                {filtered.map((c) => {
+                {paginatedCustomers.map((c) => {
                   const spent = c.total_spent || c.total_purchases || 0;
                   const ordersCount = c.total_orders || (spent > 0 ? 1 : 0);
 
@@ -694,49 +713,46 @@ export default function Customers() {
                       </td>
 
                       <td className="p-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1 flex-nowrap">
+                        <div className="flex items-center justify-end gap-1.5 flex-nowrap">
                           {(c.total_due || 0) > 0 && (
-                            <Button
-                              size="sm"
+                            <button
+                              type="button"
                               onClick={(e) => handleOpenCollectCustomerDue(c, e)}
-                              className="h-7 text-xs px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1.5 shadow-2xs cursor-pointer mr-1 whitespace-nowrap shrink-0 inline-flex items-center"
+                              className="h-8 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0"
                               title="Collect Due Payment"
                             >
                               <Coins className="w-3.5 h-3.5 shrink-0" />
-                              <span className="whitespace-nowrap">{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Collect Due'}</span>
-                            </Button>
+                              <span>{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Collect Due'}</span>
+                            </button>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleOpenCustomerHistory(c);
                             }}
-                            className="h-7 text-xs px-2 text-[#00a86b] dark:text-[#00df89] hover:bg-emerald-500/10 gap-1 font-semibold shrink-0"
+                            className="h-8 px-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-[#00a86b] dark:text-[#00df89] border border-emerald-500/20 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs shrink-0"
                             title="View Purchases"
                           >
                             <span>View Purchases</span>
                             <ChevronRight className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          </button>
+                          <button
+                            type="button"
                             onClick={(e) => handleOpenEditCustomer(c, e)}
-                            className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500 shrink-0"
                             title="Edit Customer Profile"
+                            className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors cursor-pointer border border-blue-500/20 shadow-2xs shrink-0"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
                             onClick={(e) => handleDeleteCustomer(c, e)}
-                            className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
                             title="Delete Customer Profile"
+                            className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center transition-colors cursor-pointer border border-rose-500/20 shadow-2xs shrink-0"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -744,6 +760,16 @@ export default function Customers() {
                 })}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            <Pagination
+              currentPage={currentPage}
+              totalItems={filtered.length}
+              pageSize={pageSize}
+              pageSizeOptions={[10, 20, 50, 100]}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </Card>
@@ -879,37 +905,44 @@ export default function Customers() {
 
                           <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
                             {(sale.due_amount || 0) > 0 && (
-                              <Button
-                                size="sm"
+                              <button
+                                type="button"
                                 onClick={() => handleOpenCollectCustomerDue({
                                   ...customerHistory.customer,
                                   total_due: sale.due_amount,
                                 })}
-                                className="h-7 text-xs px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold gap-1.5 shadow-2xs cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center"
+                                className="h-8 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0"
                                 title="Collect this bill due"
                               >
                                 <Coins className="w-3.5 h-3.5 shrink-0" />
-                                <span className="whitespace-nowrap">{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Pay Due'}</span>
-                              </Button>
+                                <span>{lang === 'bn' ? 'বকেয়া গ্রহণ' : 'Pay Due'}</span>
+                              </button>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
+                            <button
+                              type="button"
+                              onClick={() => setReturningSale(sale)}
+                              className="h-8 px-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Return items & refund"
+                            >
+                              <Undo2 className="w-4 h-4" />
+                              <span>{lang === 'bn' ? 'রিটার্ন' : 'Return'}</span>
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleOpenEditSale(sale)}
-                              className="h-7 text-xs px-2 text-slate-600 dark:text-zinc-300 hover:text-amber-500 shrink-0"
                               title="Edit this sale transaction"
+                              className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors cursor-pointer border border-blue-500/20 shadow-2xs shrink-0"
                             >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleDeleteSale(sale._id, sale.invoice_number)}
-                              className="h-7 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
                               title="Delete sale & restore inventory"
+                              className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center transition-colors cursor-pointer border border-rose-500/20 shadow-2xs shrink-0"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
 
@@ -1810,6 +1843,21 @@ export default function Customers() {
         cancelText={lang === 'bn' ? 'বাতিল' : 'Cancel'}
         onConfirm={handleConfirmDeleteSale}
         onCancel={() => setConfirmSaleDelete({ isOpen: false, saleId: null, invoiceNumber: '' })}
+      />
+
+      {/* ---------------------------------------------------- */}
+      {/* RETURN & REFUND PRODUCT MODAL (FROM PURCHASES)       */}
+      {/* ---------------------------------------------------- */}
+      <ReturnOrderModal
+        isOpen={Boolean(returningSale)}
+        onClose={() => setReturningSale(null)}
+        order={returningSale}
+        onSuccess={() => {
+          fetchCustomers();
+          if (selectedCustomerId) {
+            reloadCustomerHistory(selectedCustomerId);
+          }
+        }}
       />
 
     </div>
