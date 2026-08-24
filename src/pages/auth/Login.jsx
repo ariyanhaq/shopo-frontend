@@ -23,7 +23,8 @@ export default function Login() {
   const navigateAfterAuth = (profile) => {
     const hasStore = Boolean(profile?.shop?._id || profile?.user?.shop_id || localStorage.getItem('shopo_has_shop') === 'true');
     const isGym = profile?.shop?.business_type === 'gym' || localStorage.getItem('shopo_business_type') === 'gym';
-    const defaultDashboard = isGym ? '/gym/dashboard' : '/dashboard';
+    const isRestaurant = profile?.shop?.business_type === 'restaurant' || localStorage.getItem('shopo_business_type') === 'restaurant';
+    const defaultDashboard = isGym ? '/gym/dashboard' : isRestaurant ? '/restaurant/dashboard' : '/dashboard';
     const target = hasStore
       ? (location.state?.from?.pathname?.startsWith('/onboarding') ? defaultDashboard : (location.state?.from?.pathname || defaultDashboard))
       : '/onboarding/business-data';

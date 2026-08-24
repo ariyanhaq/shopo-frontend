@@ -18,7 +18,7 @@ export default function PublicRoute() {
   if (currentUser && currentUser.emailVerified) {
     const hasStore = Boolean(mongoUser?.shop_id || mongoShop?._id || hasShop);
     const target = hasStore
-      ? (mongoShop?.business_type === 'gym' ? '/gym/dashboard' : '/dashboard')
+      ? (mongoShop?.business_type === 'gym' ? '/gym/dashboard' : mongoShop?.business_type === 'restaurant' ? '/restaurant/dashboard' : '/dashboard')
       : '/onboarding/business-data';
     return <Navigate to={target} replace />;
   }

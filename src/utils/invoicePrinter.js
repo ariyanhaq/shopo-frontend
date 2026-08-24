@@ -73,23 +73,86 @@ const extractItemVariantInfo = (item) => {
 };
 
 /**
- * Print a Sales Cash Memo / POS Receipt
+ * Print a Sales Cash Memo / POS Receipt with complete dynamic customizer support
  */
-export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
+export const printSaleReceipt = ({ order, shop, lang = 'en', customConfig = null }) => {
   if (!order) return;
 
   const isBn = lang === 'bn';
+  const cfg = customConfig || shop?.settings?.cash_memo_config || {};
+
+  // Configuration values with smart fallbacks
+  const template = cfg.template || 'modern'; // 'modern' | 'classic' | 'thermal' | 'minimal' | 'bold' | 'a4'
+  const accentColor = cfg.accent_color || '#00a86b';
+  const paperFormat = cfg.paper_format || shop?.settings?.paper_format || '80mm';
+  const customWidthMm = Number(cfg.custom_width_mm) || 80;
+  const fontSizeScale = cfg.font_size_scale || 'standard'; // 'compact' | 'standard' | 'large'
+  const spacingDensity = cfg.spacing_density || 'normal'; // 'tight' | 'normal' | 'relaxed'
+  const watermarkType = cfg.watermark_type || 'none'; // 'none' | 'paid' | 'original' | 'custom'
+  const watermarkText = cfg.watermark_text || (isBn ? 'পরিশোধিত' : 'PAID');
+  const headerNotice = cfg.header_notice || '';
+
+  const memoTitle = isBn
+    ? (cfg.memo_title_bn || 'ক্যাশ মেমো ও বিক্রয় চালান')
+    : (cfg.memo_title || 'CASH MEMO / INVOICE');
+  const headerSlogan = cfg.header_slogan || '';
+
+  const showLogo = cfg.show_logo !== false && Boolean(shop?.logo_url);
+  const showTagline = cfg.show_tagline !== false && Boolean(shop?.tagline);
+  const showAddress = cfg.show_address !== false;
+  const showPhone = cfg.show_phone !== false;
+  const showEmail = Boolean(cfg.show_email && shop?.email);
+  const showWebsite = Boolean(cfg.show_website && shop?.website);
+  const showSocialLinks = Boolean(cfg.show_social_links);
+  const showBinVat = cfg.show_bin_vat !== false && Boolean(shop?.bin_vat_number);
+
+  const showInvoiceTime = cfg.show_invoice_time !== false;
+  const showCashierName = cfg.show_cashier_name !== false;
+  const showCustomerPhone = cfg.show_customer_phone !== false;
+  const showCustomerAddress = Boolean(cfg.show_customer_address && (order.customer_address || order.customer_id?.address));
+  const showCustomerDue = cfg.show_customer_due !== false;
+
+  const showLineSerial = Boolean(cfg.show_line_serial);
+  const showItemSku = cfg.show_item_sku !== false;
+  const showItemUnit = Boolean(cfg.show_item_unit);
+  const showItemDiscount = cfg.show_item_discount !== false;
+  const showTaxBreakdown = Boolean(cfg.show_tax_breakdown);
+  const showDeliveryFee = Boolean(cfg.show_delivery_fee && (order.delivery_fee || order.shipping_fee));
+
+  const showBarcode = cfg.show_barcode !== false;
+  const showQrCode = cfg.show_qr_code !== false;
+  const qrCodeType = cfg.qr_code_type || 'invoice';
+  const showSignatureLine = Boolean(cfg.show_signature_line);
+  const signatureLabel = isBn ? (cfg.signature_label_bn || 'কর্তৃপক্ষের স্বাক্ষর') : (cfg.signature_label || 'Authorized Signature');
+
+  const showReturnPolicy = cfg.show_return_policy !== false;
+  const returnPolicyText = isBn
+    ? (cfg.return_policy_text_bn || 'বিক্রিত পণ্য মেমোসহ ৭ দিনের মধ্যে পরিবর্তনযোগ্য।')
+    : (cfg.return_policy_text || 'Goods once sold can only be exchanged within 7 days with valid receipt.');
+
+  const footerNote = isBn
+    ? (cfg.footer_note_bn || shop?.settings?.receipt_footer || 'আমাদের সাথে কেনাকাটা করার জন্য ধন্যবাদ! আবার আসবেন।')
+    : (cfg.footer_note || shop?.settings?.receipt_footer || 'Thank you for shopping with us! Please come again.');
+  const showPoweredBy = cfg.show_powered_by !== false;
+
+  // Shop Details
   const shopName = shop?.name || 'Shopo Store';
   const shopAddress = shop?.address?.line1 || shop?.address_line1 || '';
   const shopCity = shop?.address?.city || shop?.city || '';
   const fullAddress = [shopAddress, shopCity].filter(Boolean).join(', ');
   const shopPhone = shop?.phone || '';
+  const shopEmail = shop?.email || '';
+  const shopWebsite = shop?.website || '';
+  const binVatNo = shop?.bin_vat_number || '';
 
-  const invoiceNo = order.invoice_number || order.invoiceNumber || order.id || 'N/A';
+  // Order Details
+  const invoiceNo = order.invoice_number || order.invoiceNumber || order.id || 'INV-2026-001';
   const dateStr = formatDate(order.created_at || order.createdAt || order.date);
+  const cashierName = order.created_by?.name || order.cashierName || 'Cashier Desk';
 
   const customerName = order.customer_id?.name || order.customer_name || (isBn ? 'খুচরা ক্রেতা' : 'Walk-in Customer');
   const customerPhone = order.customer_id?.phone || order.customer_phone || '';
+  const customerAddress = order.customer_id?.address || order.customer_address || '';
   const isMember = Boolean(order.isMember || order.customer_id?.is_member);
   const memberTier = order.memberTier || order.customer_id?.membership_tier || 'Regular';
   const tierDiscountPercent = Number(order.tierDiscountPercent || order.tier_discount_percent || 0);
@@ -98,17 +161,60 @@ export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
   const rewardPointsRedeemed = Number(order.rewardPointsRedeemed || order.reward_points_redeemed || 0);
   const rewardDiscountAmount = Number(order.rewardDiscountAmount || order.reward_discount_amount || 0);
   const paymentMethod = (order.payment_method || order.paymentMethod || 'cash').toUpperCase();
+  const deliveryFee = Number(order.delivery_fee || order.shipping_fee || 0);
 
   const items = Array.isArray(order.items) ? order.items : [];
   const subtotal = Number(order.subtotal || order.total || 0);
   const discount = Number(order.discount || 0);
-  const total = Number(order.total || (subtotal - discount - tierDiscountAmount - rewardDiscountAmount));
+  const taxRate = Number(shop?.settings?.tax_rate || 0);
+  const taxName = shop?.settings?.tax_name || 'VAT';
+  const taxAmount = Number(order.tax_amount || (taxRate > 0 ? (subtotal * taxRate) / 100 : 0));
+  const total = Number(order.total || (subtotal - discount - tierDiscountAmount - rewardDiscountAmount + taxAmount + deliveryFee));
   const paid = Number(order.paid_amount !== undefined ? order.paid_amount : (order.paid !== undefined ? order.paid : total));
   const due = Number(order.due_amount !== undefined ? order.due_amount : (order.due || Math.max(0, total - paid)));
   const customerTotalDue = Number(order.customer_id?.total_due || 0);
 
   const cashReceived = Number(order.tendered_amount || order.cashReceived || 0);
   const changeReturned = Number(order.change_amount || order.changeToReturn || 0);
+
+  // Dynamic QR Code payload
+  let qrPayload = `Shop: ${shopName} | Invoice: ${invoiceNo} | Total: ৳${total} | Date: ${dateStr}`;
+  if (qrCodeType === 'bkash') {
+    qrPayload = `https://shopo.com.bd/pay/bkash?merchant=${encodeURIComponent(shopPhone)}&amount=${total}&ref=${invoiceNo}`;
+  } else if (qrCodeType === 'website') {
+    qrPayload = shopWebsite || `https://shopo.com.bd/store/${encodeURIComponent(shopName)}`;
+  }
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(qrPayload)}`;
+
+  // Barcode URL (Code 128)
+  const barcodeUrl = `https://barcodeapi.org/api/128/${encodeURIComponent(invoiceNo)}`;
+
+  // Paper width CSS
+  const maxWidthCss = paperFormat === '58mm'
+    ? '54mm'
+    : paperFormat === 'A4'
+    ? '190mm'
+    : paperFormat === 'A5'
+    ? '135mm'
+    : paperFormat === 'custom'
+    ? `${customWidthMm}mm`
+    : '76mm';
+
+  const isA4A5 = paperFormat === 'A4' || paperFormat === 'A5';
+
+  // Font size scale
+  const baseFontSize = fontSizeScale === 'compact'
+    ? (isA4A5 ? '11px' : '9.5px')
+    : fontSizeScale === 'large'
+    ? (isA4A5 ? '15px' : '12.5px')
+    : (isA4A5 ? '13px' : paperFormat === '58mm' ? '10px' : '11px');
+
+  // Padding / Density
+  const cellPadding = spacingDensity === 'tight'
+    ? (isA4A5 ? '3px 4px' : '2px 2px')
+    : spacingDensity === 'relaxed'
+    ? (isA4A5 ? '8px 10px' : '5px 4px')
+    : (isA4A5 ? '6px 8px' : '3.5px 3px');
 
   const html = `<!DOCTYPE html>
 <html>
@@ -117,8 +223,8 @@ export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
   <title>${isBn ? 'ক্যাশ মেমো' : 'Cash Memo'} - ${invoiceNo}</title>
   <style>
     @page {
-      margin: 4mm;
-      size: auto;
+      margin: ${isA4A5 ? '10mm' : '2.5mm'};
+      size: ${paperFormat === 'A4' ? 'A4 portrait' : paperFormat === 'A5' ? 'A5 portrait' : 'auto'};
     }
     * {
       box-sizing: border-box;
@@ -127,13 +233,14 @@ export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
     }
     body {
       font-family: 'Hind Siliguri', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #000000;
+      color: #111827;
       background: #ffffff;
-      padding: 8px 10px;
-      font-size: 11px;
+      padding: ${isA4A5 ? '16px 20px' : '6px 8px'};
+      font-size: ${baseFontSize};
       line-height: 1.35;
-      max-width: 80mm;
+      max-width: ${maxWidthCss};
       margin: 0 auto;
+      position: relative;
     }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
@@ -141,166 +248,302 @@ export const printSaleReceipt = ({ order, shop, lang = 'en' }) => {
     .font-bold { font-weight: 700; }
     .font-black { font-weight: 900; }
     .uppercase { text-transform: uppercase; }
-    .border-t { border-top: 1px solid #000; }
-    .border-b { border-bottom: 1px solid #000; }
-    .border-b-2 { border-bottom: 2px solid #000; }
-    .border-dashed { border-top: 1px dashed #777; }
-    .my-1 { margin-top: 4px; margin-bottom: 4px; }
-    .my-2 { margin-top: 6px; margin-bottom: 6px; }
-    .py-1 { padding-top: 3px; padding-bottom: 3px; }
-    .py-2 { padding-top: 5px; padding-bottom: 5px; }
     .flex { display: flex; }
     .justify-between { justify-content: space-between; }
     .items-center { align-items: center; }
-    table { width: 100%; border-collapse: collapse; margin: 4px 0; }
-    th { padding: 4px 2px; font-size: 10.5px; border-bottom: 1px solid #000; text-align: left; }
-    td { padding: 3px 2px; font-size: 10.5px; border-bottom: 1px dashed #ddd; }
-    .shop-title { font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; }
-    .receipt-title { display: inline-block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; border: 1px solid #000; padding: 2px 8px; border-radius: 4px; margin-top: 4px; }
-    .badge { font-weight: bold; font-size: 9px; padding: 1px 4px; border: 1px solid #000; border-radius: 3px; }
-    .totals-row { display: flex; justify-content: space-between; padding: 1.5px 0; font-size: 11px; }
-    .grand-total { display: flex; justify-content: space-between; font-size: 13px; font-weight: 900; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; padding: 3px 0; margin-top: 3px; }
-    .footer-note { text-align: center; font-size: 9.5px; color: #333; margin-top: 10px; padding-top: 6px; border-top: 1px dashed #777; }
+    .items-start { align-items: flex-start; }
+    .gap-2 { gap: 8px; }
+
+    /* Watermark */
+    ${watermarkType !== 'none' ? `
+      .watermark-overlay {
+        position: absolute;
+        top: 45%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(-30deg);
+        font-size: ${isA4A5 ? '68px' : '36px'};
+        font-weight: 900;
+        color: rgba(0, 0, 0, 0.06);
+        text-transform: uppercase;
+        letter-spacing: 4px;
+        pointer-events: none;
+        z-index: 0;
+        white-space: nowrap;
+        user-select: none;
+      }
+    ` : ''}
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; margin: 6px 0; position: relative; z-index: 1; }
+    th {
+      padding: ${cellPadding};
+      font-size: ${baseFontSize};
+      font-weight: 700;
+      text-align: left;
+      border-bottom: 1.5px solid ${template === 'modern' || template === 'bold' ? accentColor : '#000000'};
+      ${template === 'bold' ? `background-color: ${accentColor}; color: #ffffff;` : ''}
+    }
+    td {
+      padding: ${cellPadding};
+      font-size: ${baseFontSize};
+      border-bottom: 1px dashed #e5e7eb;
+    }
+
+    /* Template Variations */
+    ${template === 'classic' ? `
+      .receipt-container { border: 2px solid #000000; padding: 8px; }
+      .header-box { border-bottom: 2px double #000000; padding-bottom: 6px; }
+      .title-badge { border: 1.5px solid #000; font-weight: 800; padding: 2px 8px; display: inline-block; margin-top: 4px; }
+    ` : template === 'bold' ? `
+      .header-banner { background-color: ${accentColor}; color: #ffffff; padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; }
+      .title-badge { background-color: #ffffff; color: ${accentColor}; font-weight: 900; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-top: 4px; }
+    ` : template === 'thermal' ? `
+      body { font-family: 'Courier New', Courier, monospace; }
+      .border-dashed { border-top: 1px dashed #000; border-bottom: 1px dashed #000; }
+    ` : `
+      /* Modern Minimalist */
+      .title-badge { background-color: ${accentColor}18; color: ${accentColor}; font-weight: 800; padding: 2px 10px; border-radius: 9999px; display: inline-block; margin-top: 4px; font-size: 10px; border: 1px solid ${accentColor}40; }
+    `}
+
+    .shop-title {
+      font-size: ${isA4A5 ? '22px' : '16px'};
+      font-weight: 900;
+      color: ${template === 'bold' ? '#ffffff' : template === 'modern' ? accentColor : '#000000'};
+      letter-spacing: 0.5px;
+    }
+    .totals-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: ${baseFontSize}; position: relative; z-index: 1; }
+    .grand-total {
+      display: flex;
+      justify-content: space-between;
+      font-size: ${isA4A5 ? '16px' : '13.5px'};
+      font-weight: 900;
+      color: ${template === 'modern' || template === 'bold' ? accentColor : '#000000'};
+      border-top: 1.5px solid ${template === 'modern' || template === 'bold' ? accentColor : '#000000'};
+      border-bottom: 1.5px solid ${template === 'modern' || template === 'bold' ? accentColor : '#000000'};
+      padding: 4px 0;
+      margin-top: 4px;
+      position: relative;
+      z-index: 1;
+    }
+    .footer-section { text-align: center; font-size: 9.5px; color: #4b5563; margin-top: 12px; padding-top: 8px; border-top: 1px dashed #d1d5db; position: relative; z-index: 1; }
   </style>
 </head>
 <body>
-  <!-- Header -->
-  <div class="text-center pb-2 border-b-2">
-    <div class="shop-title">${shopName}</div>
-    ${fullAddress ? `<div style="font-size: 10px; color: #333; margin-top: 2px;">${fullAddress}</div>` : ''}
-    ${shopPhone ? `<div style="font-size: 10px; color: #333;">${isBn ? 'মোবাইল' : 'Phone'}: ${shopPhone}</div>` : ''}
-    <div><span class="receipt-title">${isBn ? 'ক্যাশ মেমো / রশিদ' : 'CASH MEMO / INVOICE'}</span></div>
-  </div>
+  <div class="${template === 'classic' ? 'receipt-container' : ''}">
+    
+    ${watermarkType !== 'none' ? `<div class="watermark-overlay">${watermarkText}</div>` : ''}
 
-  <!-- Meta Info -->
-  <div style="font-size: 10.5px; margin-top: 6px; margin-bottom: 6px; line-height: 1.4;">
-    <div class="flex justify-between">
-      <span><span class="font-bold">${isBn ? 'চালান নং' : 'Invoice'}:</span> #${invoiceNo}</span>
-      <span><span class="font-bold">${isBn ? 'মাধ্যম' : 'Pay'}:</span> ${paymentMethod}</span>
-    </div>
-    <div class="flex justify-between">
-      <span><span class="font-bold">${isBn ? 'তারিখ' : 'Date'}:</span> ${dateStr}</span>
-    </div>
-    <div style="margin-top: 2px; padding-top: 2px; border-top: 1px dashed #ddd;">
-      <div class="flex justify-between items-center">
-        <span><span class="font-bold">${isBn ? 'ক্রেতা' : 'Customer'}:</span> ${customerName}</span>
-        ${isMember ? `<span class="badge" style="background:#fef3c7; border-color:#d97706; color:#92400e;">👑 ${memberTier}</span>` : ''}
+    <!-- FLASH HEADER NOTICE -->
+    ${headerNotice ? `
+      <div style="text-align: center; font-size: 9px; font-weight: 700; background: ${accentColor}15; color: ${accentColor}; padding: 3px 6px; border-radius: 4px; margin-bottom: 4px; border: 1px dashed ${accentColor}40;">
+        ⚡ ${headerNotice}
       </div>
-      ${customerPhone ? `<div><span class="font-bold">${isBn ? 'ফোন' : 'Phone'}:</span> ${customerPhone}</div>` : ''}
-    </div>
-  </div>
+    ` : ''}
 
-  <!-- Items Table -->
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 45%;">${isBn ? 'বিবরণ' : 'Item'}</th>
-        <th class="text-right" style="width: 25%;">${isBn ? 'দর × পরিমাণ' : 'Rate × Qty'}</th>
-        <th class="text-right" style="width: 30%;">${isBn ? 'মোট' : 'Total'}</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${items.map((it) => {
-        const { baseName, variantName, sku } = extractItemVariantInfo(it);
-        const price = Number(it.unit_price || it.price || 0);
-        const qty = Number(it.quantity || it.qty || 1);
-        const lineTotal = Number(it.subtotal || (price * qty));
-        return `
-          <tr>
-            <td>
-              <div class="font-bold">${baseName}</div>
-              ${variantName ? `
-                <div style="font-size: 9.5px; font-weight: 700; color: #111; margin-top: 1.5px;">
-                  <span style="display: inline-block; padding: 0.5px 5px; border: 1px solid #777; border-radius: 3px; background: #f3f4f6;">
-                    ${variantName}
-                  </span>
-                </div>
-              ` : ''}
-              ${sku ? `<div style="font-size: 8.5px; color: #555; font-family: 'Hind Siliguri', 'Inter', sans-serif; margin-top: 1px;">SKU: ${sku}</div>` : ''}
-            </td>
-            <td class="text-right">${price.toLocaleString()} × ${qty}</td>
-            <td class="text-right font-bold">৳${lineTotal.toLocaleString()}</td>
-          </tr>
-        `;
-      }).join('')}
-    </tbody>
-  </table>
-
-  <!-- Calculation Breakdown -->
-  <div style="margin-top: 4px;">
-    <div class="totals-row">
-      <span>${isBn ? 'উপমোট (Subtotal):' : 'Subtotal:'}</span>
-      <span>৳${subtotal.toLocaleString()}</span>
+    <!-- HEADER -->
+    <div class="${template === 'bold' ? 'header-banner text-center' : template === 'classic' ? 'header-box text-center' : 'text-center pb-2'}" style="${template === 'modern' ? `border-bottom: 1.5px solid ${accentColor}30; padding-bottom: 6px;` : ''}">
+      ${headerSlogan ? `<div style="font-size: 9.5px; opacity: 0.85; margin-bottom: 2px;">${headerSlogan}</div>` : ''}
+      ${showLogo ? `<div style="margin-bottom: 4px;"><img src="${shop.logo_url}" alt="Logo" style="max-height: 42px; max-width: 120px; object-fit: contain;" /></div>` : ''}
+      <div class="shop-title uppercase">${shopName}</div>
+      ${showTagline ? `<div style="font-size: 9.5px; font-style: italic; opacity: 0.85; margin-top: 1px;">${shop.tagline}</div>` : ''}
+      
+      ${showAddress && fullAddress ? `<div style="font-size: 10px; margin-top: 2px; opacity: 0.9;">${fullAddress}</div>` : ''}
+      ${showPhone && shopPhone ? `<div style="font-size: 10px; opacity: 0.9;">${isBn ? 'ফোন / হেল্পলাইন' : 'Phone'}: <strong>${shopPhone}</strong></div>` : ''}
+      ${showEmail ? `<div style="font-size: 9.5px; opacity: 0.9;">${shopEmail}</div>` : ''}
+      ${showWebsite ? `<div style="font-size: 9.5px; opacity: 0.9;">${shopWebsite}</div>` : ''}
+      ${showBinVat ? `<div style="font-size: 9.5px; margin-top: 1px; font-weight: 700;">BIN/VAT Reg: ${binVatNo}</div>` : ''}
+      
+      <div><span class="title-badge uppercase">${memoTitle}</span></div>
     </div>
 
-    ${discount > 0 ? `
-      <div class="totals-row" style="color: #b91c1c;">
-        <span>${isBn ? 'ছাড় (Discount):' : 'Discount:'}</span>
-        <span>- ৳${discount.toLocaleString()}</span>
+    <!-- META INFO (INVOICE & CUSTOMER) -->
+    <div style="font-size: ${baseFontSize}; margin-top: 6px; margin-bottom: 6px; line-height: 1.45; position: relative; z-index: 1;">
+      <div class="flex justify-between">
+        <span><span class="font-bold">${isBn ? 'চালান নং' : 'Invoice #'}:</span> ${invoiceNo}</span>
+        <span><span class="font-bold">${isBn ? 'পেমেন্ট' : 'Pay'}:</span> ${paymentMethod}</span>
       </div>
-    ` : ''}
-
-    ${tierDiscountAmount > 0 ? `
-      <div class="totals-row" style="color: #047857; font-weight: 700;">
-        <span>${isBn ? `টিয়ার ছাড় (${memberTier} ${tierDiscountPercent}%):` : `Tier Discount (${memberTier} ${tierDiscountPercent}%):`}</span>
-        <span>- ৳${tierDiscountAmount.toLocaleString()}</span>
+      <div class="flex justify-between">
+        <span><span class="font-bold">${isBn ? 'তারিখ' : 'Date'}:</span> ${showInvoiceTime ? dateStr : dateStr.split(' ')[0]}</span>
+        ${showCashierName ? `<span><span class="font-bold">${isBn ? 'ক্যাশিয়ার' : 'Billed By'}:</span> ${cashierName}</span>` : ''}
       </div>
-    ` : ''}
 
-    ${rewardDiscountAmount > 0 ? `
-      <div class="totals-row" style="color: #b45309; font-weight: 700;">
-        <span>${isBn ? 'মেম্বার পয়েন্ট ছাড় (Points Discount):' : 'Reward Points Discount:'}</span>
-        <span>- ৳${rewardDiscountAmount.toLocaleString()}</span>
+      <div style="margin-top: 3px; padding-top: 3px; border-top: 1px dashed #e5e7eb;">
+        <div class="flex justify-between items-center">
+          <span><span class="font-bold">${isBn ? 'ক্রেতার নাম' : 'Customer'}:</span> ${customerName}</span>
+          ${isMember ? `<span style="font-size: 9px; font-weight: 700; background: #fef3c7; color: #b45309; padding: 1px 5px; border-radius: 4px;">👑 ${memberTier}</span>` : ''}
+        </div>
+        ${showCustomerPhone && customerPhone ? `<div><span class="font-bold">${isBn ? 'মোবাইল' : 'Phone'}:</span> ${customerPhone}</div>` : ''}
+        ${showCustomerAddress && customerAddress ? `<div><span class="font-bold">${isBn ? 'ঠিকানা' : 'Address'}:</span> ${customerAddress}</div>` : ''}
       </div>
-    ` : ''}
-
-    <div class="grand-total">
-      <span>${isBn ? 'সর্বমোট বিল (Net Total):' : 'Grand Total:'}</span>
-      <span>৳${total.toLocaleString()}</span>
     </div>
 
-    <div class="totals-row" style="margin-top: 3px;">
-      <span>${isBn ? 'পরিশোধ (Paid):' : 'Paid Amount:'}</span>
-      <span class="font-bold">৳${paid.toLocaleString()}</span>
+    <!-- ITEMS TABLE -->
+    <table>
+      <thead>
+        <tr>
+          ${showLineSerial ? `<th style="width: 8%;">#</th>` : ''}
+          <th style="width: ${showLineSerial ? '38%' : showItemSku ? '42%' : '48%'};">${isBn ? 'পণ্যের বিবরণ' : 'Item Description'}</th>
+          <th class="text-right" style="width: 26%;">${isBn ? 'দর × পরিমাণ' : 'Price × Qty'}</th>
+          <th class="text-right" style="width: 26%;">${isBn ? 'মোট' : 'Total'}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((it, idx) => {
+          const { baseName, variantName, sku } = extractItemVariantInfo(it);
+          const price = Number(it.unit_price || it.price || 0);
+          const qty = Number(it.quantity || it.qty || 1);
+          const unit = it.unit || 'pc';
+          const lineTotal = Number(it.subtotal || (price * qty));
+          return `
+            <tr>
+              ${showLineSerial ? `<td>${idx + 1}</td>` : ''}
+              <td>
+                <div class="font-bold">${baseName}</div>
+                ${variantName ? `
+                  <div style="font-size: 9px; font-weight: 700; color: #374151; margin-top: 1px;">
+                    <span style="display: inline-block; padding: 0.5px 4px; border: 1px solid #d1d5db; border-radius: 3px; background: #f9fafb;">
+                      ${variantName}
+                    </span>
+                  </div>
+                ` : ''}
+                ${showItemSku && sku ? `<div style="font-size: 8.5px; color: #6b7280; margin-top: 1px;">SKU: ${sku}</div>` : ''}
+              </td>
+              <td class="text-right">
+                ৳${price.toLocaleString()} × ${qty}${showItemUnit ? ` ${unit}` : ''}
+              </td>
+              <td class="text-right font-bold">৳${lineTotal.toLocaleString()}</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+
+    <!-- CALCULATION BREAKDOWN -->
+    <div style="margin-top: 4px;">
+      <div class="totals-row">
+        <span>${isBn ? 'উপমোট (Subtotal):' : 'Subtotal:'}</span>
+        <span>৳${subtotal.toLocaleString()}</span>
+      </div>
+
+      ${discount > 0 ? `
+        <div class="totals-row" style="color: #dc2626;">
+          <span>${isBn ? 'ছাড় (Discount):' : 'Discount:'}</span>
+          <span>- ৳${discount.toLocaleString()}</span>
+        </div>
+      ` : ''}
+
+      ${tierDiscountAmount > 0 ? `
+        <div class="totals-row" style="color: #059669; font-weight: 700;">
+          <span>${isBn ? `টিয়ার ছাড় (${memberTier} ${tierDiscountPercent}%):` : `Tier Discount (${memberTier} ${tierDiscountPercent}%):`}</span>
+          <span>- ৳${tierDiscountAmount.toLocaleString()}</span>
+        </div>
+      ` : ''}
+
+      ${rewardDiscountAmount > 0 ? `
+        <div class="totals-row" style="color: #d97706; font-weight: 700;">
+          <span>${isBn ? 'পয়েন্ট ছাড় (Reward Discount):' : 'Reward Points Discount:'}</span>
+          <span>- ৳${rewardDiscountAmount.toLocaleString()}</span>
+        </div>
+      ` : ''}
+
+      ${(showTaxBreakdown && taxAmount > 0) ? `
+        <div class="totals-row" style="color: #4b5563;">
+          <span>${isBn ? `${taxName} (${taxRate}%):` : `${taxName} (${taxRate}%):`}</span>
+          <span>+ ৳${taxAmount.toLocaleString()}</span>
+        </div>
+      ` : ''}
+
+      ${(showDeliveryFee && deliveryFee > 0) ? `
+        <div class="totals-row" style="color: #4b5563;">
+          <span>${isBn ? 'ডেলিভারি চার্জ (Delivery):' : 'Delivery / Shipping:'}</span>
+          <span>+ ৳${deliveryFee.toLocaleString()}</span>
+        </div>
+      ` : ''}
+
+      <div class="grand-total">
+        <span>${isBn ? 'সর্বমোট বিল (Net Payable):' : 'Grand Total:'}</span>
+        <span>৳${total.toLocaleString()}</span>
+      </div>
+
+      <div class="totals-row" style="margin-top: 2px;">
+        <span>${isBn ? 'পরিশোধ (Paid):' : 'Paid Amount:'}</span>
+        <span class="font-bold">৳${paid.toLocaleString()}</span>
+      </div>
+
+      ${due > 0 ? `
+        <div class="totals-row font-bold" style="color: #d97706; border-top: 1px dashed #d1d5db; padding-top: 2px;">
+          <span>${isBn ? 'এই রশিদের বকেয়া (Due):' : 'Invoice Due:'}</span>
+          <span>৳${due.toLocaleString()}</span>
+        </div>
+      ` : ''}
+
+      ${showCustomerDue && customerTotalDue > 0 ? `
+        <div class="totals-row" style="font-size: 10px; color: #dc2626;">
+          <span>${isBn ? 'গ্রাহকের মোট বকেয়া ব্যালেন্স:' : 'Total Outstanding Balance:'}</span>
+          <span class="font-bold">৳${customerTotalDue.toLocaleString()}</span>
+        </div>
+      ` : ''}
+
+      ${paymentMethod === 'CASH' && cashReceived > 0 && due === 0 ? `
+        <div class="totals-row" style="font-size: 10px; border-top: 1px dashed #e5e7eb; padding-top: 2px; margin-top: 2px;">
+          <span>${isBn ? 'নগদ গ্রহণ (Cash Tendered):' : 'Cash Tendered:'}</span>
+          <span>৳${cashReceived.toLocaleString()}</span>
+        </div>
+        <div class="totals-row font-bold" style="font-size: 10.5px;">
+          <span>${isBn ? 'ফেরত দেওয়া হয়েছে (Change):' : 'Change Returned:'}</span>
+          <span>৳${changeReturned.toLocaleString()}</span>
+        </div>
+      ` : ''}
+
+      ${(rewardPointsEarned > 0 || rewardPointsRedeemed > 0) ? `
+        <div style="margin-top: 4px; padding: 4px 6px; background: #fefce8; border: 1px dashed #ca8a04; border-radius: 4px; font-size: 10px;">
+          ${rewardPointsRedeemed > 0 ? `<div>⭐ ${isBn ? 'পয়েন্ট রিডিম:' : 'Points Redeemed:'} <strong>-${rewardPointsRedeemed} pts</strong></div>` : ''}
+          ${rewardPointsEarned > 0 ? `<div>⭐ ${isBn ? 'অর্জিত পয়েন্ট:' : 'Points Earned:'} <strong>+${rewardPointsEarned} pts</strong></div>` : ''}
+        </div>
+      ` : ''}
     </div>
 
-    ${due > 0 ? `
-      <div class="totals-row font-bold" style="color: #b45309; border-top: 1px dashed #777; padding-top: 2px;">
-        <span>${isBn ? 'এই বিলের বকেয়া (Due):' : 'Current Due:'}</span>
-        <span>৳${due.toLocaleString()}</span>
+    <!-- BARCODE -->
+    ${showBarcode ? `
+      <div style="text-align: center; margin-top: 8px; padding-top: 6px; border-top: 1px dashed #e5e7eb;">
+        <img src="${barcodeUrl}" alt="Barcode" style="max-height: 28px; max-width: 140px; display: block; margin: 0 auto 2px;" />
+        <span style="font-size: 8px; font-family: monospace; letter-spacing: 1px; color: #4b5563;">*${invoiceNo}*</span>
       </div>
     ` : ''}
 
-    ${customerTotalDue > 0 ? `
-      <div class="totals-row" style="font-size: 10px; color: #666;">
-        <span>${isBn ? 'কাস্টমারের মোট বকেয়া:' : 'Total Outstanding Due:'}</span>
-        <span class="font-bold">৳${customerTotalDue.toLocaleString()}</span>
+    <!-- RETURN POLICY & TERMS -->
+    ${showReturnPolicy && returnPolicyText ? `
+      <div style="margin-top: 8px; padding: 4px 6px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 8.5px; color: #4b5563; text-align: center;">
+        <strong>${isBn ? 'শর্তাবলী / রিটার্ন পলিসি:' : 'Terms & Return Policy:'}</strong> ${returnPolicyText}
       </div>
     ` : ''}
 
-    ${paymentMethod === 'CASH' && cashReceived > 0 && due === 0 ? `
-      <div class="totals-row" style="font-size: 10px; border-top: 1px dashed #ddd; padding-top: 2px; margin-top: 2px;">
-        <span>${isBn ? 'নগদ গ্রহণ (Cash Received):' : 'Cash Received:'}</span>
-        <span>৳${cashReceived.toLocaleString()}</span>
-      </div>
-      <div class="totals-row font-bold" style="font-size: 10.5px;">
-        <span>${isBn ? 'ফেরত দেওয়া হয়েছে (Change):' : 'Change Returned:'}</span>
-        <span>৳${changeReturned.toLocaleString()}</span>
+    <!-- QR CODE & SIGNATURE SECTION -->
+    ${(showQrCode || showSignatureLine) ? `
+      <div class="flex justify-between items-center" style="margin-top: 12px; padding-top: 6px; border-top: 1px dashed #e5e7eb;">
+        ${showQrCode ? `
+          <div class="text-center" style="font-size: 8px; color: #6b7280;">
+            <img src="${qrUrl}" alt="QR" style="width: 48px; height: 48px; display: block; margin: 0 auto 2px;" />
+            <span>${qrCodeType === 'bkash' ? (isBn ? 'বিকাশ পে' : 'bKash Pay') : qrCodeType === 'website' ? (isBn ? 'ওয়েবসাইট' : 'Visit Web') : (isBn ? 'ডিজিটাল যাচাই' : 'Scan to Verify')}</span>
+          </div>
+        ` : '<div></div>'}
+
+        ${showSignatureLine ? `
+          <div class="text-center" style="min-width: 110px;">
+            <div style="border-top: 1px solid #374151; margin-top: 26px; padding-top: 2px; font-size: 9px; font-weight: 700;">
+              ${signatureLabel}
+            </div>
+          </div>
+        ` : ''}
       </div>
     ` : ''}
 
-    ${(rewardPointsEarned > 0 || rewardPointsRedeemed > 0) ? `
-      <div style="margin-top: 4px; padding: 4px 6px; background: #fefce8; border: 1px dashed #ca8a04; border-radius: 4px; font-size: 10px;">
-        ${rewardPointsRedeemed > 0 ? `<div>⭐ ${isBn ? 'পয়েন্ট রিডিম করা হয়েছে:' : 'Points Redeemed:'} <strong>-${rewardPointsRedeemed} pts</strong></div>` : ''}
-        ${rewardPointsEarned > 0 ? `<div>⭐ ${isBn ? 'নতুন অর্জিত পয়েন্ট:' : 'Points Earned on Sale:'} <strong>+${rewardPointsEarned} pts</strong></div>` : ''}
-      </div>
-    ` : ''}
-  </div>
+    <!-- FOOTER GREETING -->
+    <div class="footer-section">
+      <div class="font-bold">${footerNote}</div>
+      ${showPoweredBy ? `<div style="font-size: 8px; color: #9ca3af; margin-top: 3px;">Powered by Shopo Retail Platform (shopo.com.bd)</div>` : ''}
+    </div>
 
-  <!-- Footer -->
-  <div class="footer-note">
-    <div class="font-bold">${isBn ? 'আমাদের সাথে কেনাকাটা করার জন্য ধন্যবাদ!' : 'Thank you for shopping with us!'}</div>
-    <div style="font-size: 8.5px; color: #777; margin-top: 2px;">Powered by Shopo (shopo.com.bd)</div>
   </div>
 </body>
 </html>`;

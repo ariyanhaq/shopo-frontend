@@ -24,6 +24,9 @@ import {
   GymPackages, GymAttendance, GymPayments, GymTrainers,
   GymWorkouts, GymClasses, GymEquipment, GymExpenses,
   GymReports, GymSettings, GymProducts, GymSales, GymAccounting,
+  RestaurantDashboard, RestaurantTables, RestaurantPOS, RestaurantKDS,
+  RestaurantMenu, RestaurantRecipes, RestaurantInventory, RestaurantReservations,
+  RestaurantOrders, RestaurantStaff, RestaurantReports, RestaurantSettings,
   NotFound
 } from '@/pages';
 
@@ -96,6 +99,20 @@ export default function AppRoutes() {
           <Route path="/gym/expenses" element={<PermissionGuard permission="expenses"><GymExpenses /></PermissionGuard>} />
           <Route path="/gym/reports" element={<PermissionGuard permission="accounting"><GymReports /></PermissionGuard>} />
           <Route path="/gym/settings" element={<PermissionGuard permission="settings"><GymSettings /></PermissionGuard>} />
+
+          {/* Dedicated Restaurant & Cafe Business Module Routes */}
+          <Route path="/restaurant/dashboard" element={<RestaurantDashboard />} />
+          <Route path="/restaurant/tables" element={<PermissionGuard permission="orders"><RestaurantTables /></PermissionGuard>} />
+          <Route path="/restaurant/pos" element={<PermissionGuard permission={['orders', 'pos']}><RestaurantPOS /></PermissionGuard>} />
+          <Route path="/restaurant/kds" element={<PermissionGuard permission="orders"><RestaurantKDS /></PermissionGuard>} />
+          <Route path="/restaurant/menu" element={<PermissionGuard permission="products"><RestaurantMenu /></PermissionGuard>} />
+          <Route path="/restaurant/recipes" element={<PermissionGuard permission="products"><RestaurantRecipes /></PermissionGuard>} />
+          <Route path="/restaurant/inventory" element={<PermissionGuard permission="products"><RestaurantInventory /></PermissionGuard>} />
+          <Route path="/restaurant/reservations" element={<PermissionGuard permission="customers"><RestaurantReservations /></PermissionGuard>} />
+          <Route path="/restaurant/orders" element={<PermissionGuard permission="orders"><RestaurantOrders /></PermissionGuard>} />
+          <Route path="/restaurant/staff" element={<PermissionGuard permission="employees"><RestaurantStaff /></PermissionGuard>} />
+          <Route path="/restaurant/reports" element={<PermissionGuard permission="accounting"><RestaurantReports /></PermissionGuard>} />
+          <Route path="/restaurant/settings" element={<PermissionGuard permission="settings"><RestaurantSettings /></PermissionGuard>} />
 
           {/* Distinct Core Feature Routes */}
           <Route path="/sales" element={<PermissionGuard permission={['orders', 'pos']}><Orders /></PermissionGuard>} />

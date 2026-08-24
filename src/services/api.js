@@ -563,6 +563,150 @@ export const api = {
         }),
     },
   },
+
+  // Restaurant Management Module
+  restaurant: {
+    getDashboard: () => request('/restaurant/dashboard'),
+    getAnalytics: () => request('/restaurant/analytics'),
+
+    tables: {
+      list: (params) => {
+        const qs = params ? new URLSearchParams(params).toString() : '';
+        return request(`/restaurant/tables${qs ? `?${qs}` : ''}`);
+      },
+      create: (data) =>
+        request('/restaurant/tables', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      update: (id, data) =>
+        request(`/restaurant/tables/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        }),
+      delete: (id) =>
+        request(`/restaurant/tables/${id}`, {
+          method: 'DELETE',
+        }),
+      occupy: (id, data) =>
+        request(`/restaurant/tables/${id}/occupy`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      free: (id) =>
+        request(`/restaurant/tables/${id}/free`, {
+          method: 'POST',
+        }),
+      transfer: (data) =>
+        request('/restaurant/tables/transfer', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+    },
+
+    menu: {
+      list: (params) => {
+        const qs = params ? new URLSearchParams(params).toString() : '';
+        return request(`/restaurant/menu${qs ? `?${qs}` : ''}`);
+      },
+      create: (data) =>
+        request('/restaurant/menu', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      update: (id, data) =>
+        request(`/restaurant/menu/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        }),
+      delete: (id) =>
+        request(`/restaurant/menu/${id}`, {
+          method: 'DELETE',
+        }),
+    },
+
+    orders: {
+      list: (params) => {
+        const qs = params ? new URLSearchParams(params).toString() : '';
+        return request(`/restaurant/orders${qs ? `?${qs}` : ''}`);
+      },
+      getById: (id) => request(`/restaurant/orders/${id}`),
+      create: (data) =>
+        request('/restaurant/orders', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      appendItems: (id, data) =>
+        request(`/restaurant/orders/${id}/append`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      complete: (id, data) =>
+        request(`/restaurant/orders/${id}/complete`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+    },
+
+    kds: {
+      getTickets: (station) => {
+        const qs = station ? `?station=${station}` : '';
+        return request(`/restaurant/kds${qs}`);
+      },
+      updateItemStatus: (data) =>
+        request('/restaurant/kds/item-status', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+    },
+
+    rawMaterials: {
+      list: (params) => {
+        const qs = params ? new URLSearchParams(params).toString() : '';
+        return request(`/restaurant/raw-materials${qs ? `?${qs}` : ''}`);
+      },
+      create: (data) =>
+        request('/restaurant/raw-materials', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      update: (id, data) =>
+        request(`/restaurant/raw-materials/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        }),
+      restock: (id, data) =>
+        request(`/restaurant/raw-materials/${id}/restock`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      delete: (id) =>
+        request(`/restaurant/raw-materials/${id}`, {
+          method: 'DELETE',
+        }),
+    },
+
+    reservations: {
+      list: (params) => {
+        const qs = params ? new URLSearchParams(params).toString() : '';
+        return request(`/restaurant/reservations${qs ? `?${qs}` : ''}`);
+      },
+      create: (data) =>
+        request('/restaurant/reservations', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      update: (id, data) =>
+        request(`/restaurant/reservations/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        }),
+      delete: (id) =>
+        request(`/restaurant/reservations/${id}`, {
+          method: 'DELETE',
+        }),
+    },
+  },
 };
 
 export const apiClient = api;

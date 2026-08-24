@@ -31,7 +31,7 @@ const PRESET_AVATARS = [
 
 export default function ProfileSettings() {
   const { lang } = useLanguage();
-  const { currentUser, mongoUser, userShops, syncBackendProfile } = useAuth();
+  const { currentUser, mongoUser, mongoShop, userShops, switchShop, syncBackendProfile } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const avatarInputId = useId();
@@ -430,29 +430,56 @@ export default function ProfileSettings() {
                 <span>{lang === 'bn' ? `আপনার মালিকানাধীন দোকানসমূহ (${userShops.length})` : `Your Registered Outlets (${userShops.length})`}</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {userShops.map((shop) => (
-                  <div
-                    key={shop._id}
-                    className="p-3 rounded-xl bg-slate-50/80 dark:bg-zinc-800/40 border border-slate-200/60 dark:border-zinc-800 flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-[#00df89]/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-bold text-xs shrink-0">
-                        {shop.name[0]?.toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                          {shop.name}
+                {userShops.map((shop) => {
+                  const isCurrent = mongoShop?._id && String(mongoShop._id) === String(shop._id);
+                  return (
+                    <div
+                      key={shop._id}
+                      onClick={async () => {
+                        if (isCurrent) return;
+                        try {
+                          await switchShop(shop._id);
+                          toast.success(
+                            lang === 'bn'
+                              ? `'${shop.name}' দোকানে সুইচ করা হয়েছে!`
+                              : `Switched to '${shop.name}'!`
+                          );
+                        } catch (err) {
+                          toast.error(err.message || 'Failed to switch store');
+                        }
+                      }}
+                      className={`p-3 rounded-xl border flex items-center justify-between transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-emerald-500/10 border-emerald-500/30'
+                          : 'bg-slate-50/80 dark:bg-zinc-800/40 border-slate-200/60 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-[#00df89]/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-bold text-xs shrink-0">
+                          {shop.name[0]?.toUpperCase()}
                         </div>
-                        <div className="text-[10px] text-slate-500 dark:text-zinc-400 capitalize truncate">
-                          {shop.business_type} • {shop.address?.city || 'Dhaka'}
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {shop.name}
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-zinc-400 capitalize truncate">
+                            {shop.business_type} • {shop.address?.city || 'Dhaka'}
+                          </div>
                         </div>
                       </div>
+                      <Badge
+                        variant={isCurrent ? 'default' : 'outline'}
+                        className={`text-[10px] ${
+                          isCurrent
+                            ? 'bg-[#00df89] text-slate-950 font-bold'
+                            : 'text-slate-600 dark:text-zinc-400'
+                        }`}
+                      >
+                        {isCurrent ? (lang === 'bn' ? 'বর্তমান' : 'Active') : (lang === 'bn' ? 'সুইচ করুন' : 'Switch')}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="text-[10px] text-slate-600 dark:text-zinc-400">
-                      Active
-                    </Badge>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

@@ -127,6 +127,8 @@ export default function CreateShopModal({ isOpen, onClose }) {
       // Navigate to corresponding dashboard
       if (selectedType === 'gym') {
         navigate('/gym/dashboard');
+      } else if (selectedType === 'restaurant') {
+        navigate('/restaurant/dashboard');
       } else {
         navigate('/dashboard');
       }

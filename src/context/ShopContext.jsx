@@ -27,13 +27,16 @@ export function ShopProvider({ children }) {
     if (mongoShop?.business_type) {
       setSelectedShopId(mongoShop.business_type);
     }
-  }, [mongoShop?.business_type]);
+  }, [mongoShop?._id, mongoShop?.business_type]);
 
   useEffect(() => {
-    const shop = getShopTypeById(selectedShopId);
-    setActiveShop(shop);
+    const shopMeta = getShopTypeById(selectedShopId);
+    setActiveShop({
+      ...shopMeta,
+      ...(mongoShop ? { name: mongoShop.name, _id: mongoShop._id, business_type: mongoShop.business_type } : {}),
+    });
     localStorage.setItem('shopo_selected_shop_id', selectedShopId);
-  }, [selectedShopId]);
+  }, [selectedShopId, mongoShop?._id, mongoShop?.name, mongoShop?.business_type]);
 
   useEffect(() => {
     localStorage.setItem('shopo_theme', theme);

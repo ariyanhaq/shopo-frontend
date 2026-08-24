@@ -31,7 +31,8 @@ export default function ProtectedRoute() {
 
   const isOnboardingRoute = location.pathname.startsWith('/onboarding');
   const isGym = mongoShop?.business_type === 'gym' || localStorage.getItem('shopo_business_type') === 'gym';
-  const dashboardTarget = isGym ? '/gym/dashboard' : '/dashboard';
+  const isRestaurant = mongoShop?.business_type === 'restaurant' || localStorage.getItem('shopo_business_type') === 'restaurant';
+  const dashboardTarget = isGym ? '/gym/dashboard' : isRestaurant ? '/restaurant/dashboard' : '/dashboard';
 
   // Rule 1: If user already has given business data, block access to onboarding and redirect to dashboard
   if (isOnboardingRoute && hasShop) {

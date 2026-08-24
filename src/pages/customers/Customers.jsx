@@ -138,7 +138,7 @@ export default function Customers() {
     is_member: false,
     membership_tier: 'Regular',
     member_code: '',
-    reward_points: 20,
+    reward_points: 0,
   });
 
   const fetchCustomers = async () => {
@@ -241,7 +241,7 @@ export default function Customers() {
         is_member: false,
         membership_tier: 'Regular',
         member_code: '',
-        reward_points: membershipConfig?.welcome_bonus_points ?? 20,
+        reward_points: 0,
       });
       fetchCustomers();
     } catch (err) {
@@ -1428,7 +1428,17 @@ export default function Customers() {
                     <input
                       type="checkbox"
                       checked={form.is_member || false}
-                      onChange={(e) => setForm({ ...form, is_member: e.target.checked })}
+                      onChange={(e) => {
+                        const isMember = e.target.checked;
+                        const defTier = activeTiers[0];
+                        const isPercent = Number(defTier?.extra_discount_percent) > 0;
+                        const defaultPoints = isMember ? (isPercent ? 0 : (defTier?.welcome_bonus_points ?? membershipConfig?.welcome_bonus_points ?? 20)) : 0;
+                        setForm({
+                          ...form,
+                          is_member: isMember,
+                          reward_points: defaultPoints,
+                        });
+                      }}
                       className="w-4 h-4 text-[#00df89] rounded border-slate-300 focus:ring-[#00df89]"
                     />
                     <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5 text-xs">

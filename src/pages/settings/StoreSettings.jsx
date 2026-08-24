@@ -14,6 +14,7 @@ import { Card, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import CashMemoDesigner from './CashMemoDesigner';
 import {
   Store, Building2, Phone, Mail, Globe, MapPin,
   Save, Loader2, Sparkles, Check, CheckCircle2,
@@ -43,6 +44,42 @@ export default function StoreSettings() {
   const [isSaving, setIsSaving] = useState(false);
   const [typeSearch, setTypeSearch] = useState('');
   const logoInputId = useId();
+
+  // Cash Memo Designer Custom Config State
+  const [memoConfig, setMemoConfig] = useState({
+    template: 'modern',
+    accent_color: '#00a86b',
+    memo_title: 'CASH MEMO / INVOICE',
+    memo_title_bn: 'ক্যাশ মেমো ও বিক্রয় চালান',
+    header_slogan: '',
+    show_logo: true,
+    show_tagline: true,
+    show_address: true,
+    show_phone: true,
+    show_email: false,
+    show_website: false,
+    show_bin_vat: true,
+    show_invoice_time: true,
+    show_cashier_name: true,
+    show_customer_phone: true,
+    show_customer_address: true,
+    show_customer_due: true,
+    show_item_sku: true,
+    show_item_unit: false,
+    show_item_discount: true,
+    show_qr_code: true,
+    qr_code_type: 'invoice',
+    show_signature_line: true,
+    signature_label: 'Authorized Signature',
+    signature_label_bn: 'কর্তৃপক্ষের স্বাক্ষর',
+    show_return_policy: true,
+    return_policy_text: 'Goods once sold can only be exchanged within 7 days with valid receipt.',
+    return_policy_text_bn: 'বিক্রিত পণ্য মেমোসহ ৭ দিনের মধ্যে পরিবর্তনযোগ্য।',
+    footer_note: 'Thank you for shopping with us! Please come again.',
+    footer_note_bn: 'আমাদের সাথে কেনাকাটা করার জন্য ধন্যবাদ! আবার আসবেন।',
+    show_powered_by: true,
+    paper_format: '80mm',
+  });
 
   // Comprehensive Store Form State
   const [form, setForm] = useState({
@@ -90,6 +127,13 @@ export default function StoreSettings() {
 
   useEffect(() => {
     if (mongoShop) {
+      if (mongoShop.settings?.cash_memo_config) {
+        setMemoConfig((prev) => ({
+          ...prev,
+          ...mongoShop.settings.cash_memo_config,
+        }));
+      }
+
       setForm({
         name: mongoShop.name || '',
         business_type: mongoShop.business_type || 'grocery',
@@ -202,6 +246,7 @@ export default function StoreSettings() {
           opening_time: form.opening_time,
           closing_time: form.closing_time,
           weekly_off_day: form.weekly_off_day,
+          cash_memo_config: memoConfig,
         },
       };
 
@@ -223,10 +268,16 @@ export default function StoreSettings() {
           : `Store settings for (${form.name}) saved successfully!`
       );
 
-      // If business type changed to/from gym, transition layout
+      // If business type changed to/from gym or restaurant, transition layout
       if (form.business_type === 'gym') {
         navigate('/gym/dashboard', { replace: true });
-      } else if (mongoShop?.business_type === 'gym' && form.business_type !== 'gym') {
+      } else if (form.business_type === 'restaurant') {
+        navigate('/restaurant/dashboard', { replace: true });
+      } else if (
+        (mongoShop?.business_type === 'gym' || mongoShop?.business_type === 'restaurant') &&
+        form.business_type !== 'gym' &&
+        form.business_type !== 'restaurant'
+      ) {
         navigate('/dashboard', { replace: true });
       }
     } catch (err) {
@@ -240,14 +291,14 @@ export default function StoreSettings() {
   const tabs = [
     { id: 'general', labelEn: 'General & Branding', labelBn: 'সাধারণ ও ব্র্যান্ডিং', icon: Store },
     { id: 'address', labelEn: 'Address & Contact', labelBn: 'ঠিকানা ও যোগাযোগ', icon: MapPin },
-    { id: 'invoicing', labelEn: 'Invoicing & POS', labelBn: 'রশিদ ও পিওএস সেটিংস', icon: Receipt },
+    { id: 'invoicing', labelEn: 'Cash Memo & POS Invoicing', labelBn: 'ক্যাশ মেমো ও পিওএস প্রিন্টিং', icon: Receipt },
     { id: 'inventory', labelEn: 'Inventory Controls', labelBn: 'মজুত ও স্টক কন্ট্রোল', icon: Package },
     { id: 'schedule', labelEn: 'Localization & Hours', labelBn: 'লোকেশন ও সময়সূচি', icon: Clock },
     { id: 'danger', labelEn: 'Danger Zone', labelBn: 'ডেঞ্জার জোন', icon: ShieldAlert },
   ];
 
   return (
-    <div className="max-w-4xl space-y-6 font-sans pb-16">
+    <div className="max-w-6xl space-y-6 font-sans pb-16">
       
       {/* ---------------------------------------------------- */}
       {/* HEADER SECTION                                       */}
@@ -606,137 +657,16 @@ export default function StoreSettings() {
         )}
 
         {/* ==================================================== */}
-        {/* TAB 3: INVOICING & POS                               */}
+        {/* TAB 3: CASH MEMO & POS INVOICING STUDIO              */}
         {/* ==================================================== */}
         {activeTab === 'invoicing' && (
-          <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs rounded-2xl animate-in fade-in-50 duration-200">
-            <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
-              <Receipt className="w-4 h-4 text-emerald-500" />
-              <span>{lang === 'bn' ? 'রশিদ ও পিওএস প্রিন্টিং সেটিংস' : 'Invoice & POS Print Settings'}</span>
-            </CardTitle>
-            <CardDescription className="text-xs text-slate-500 dark:text-zinc-400 mb-6">
-              {lang === 'bn'
-                ? 'থার্মাল প্রিন্টার সাইজ, ক্যাশ মেমোর হেডার/ফুটার এবং ডিফল্ট ভ্যাট রেট কনফিগার করুন।'
-                : 'Configure receipt paper sizing, VAT rates, return policy notes, and barcode visibility.'}
-            </CardDescription>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
-              {/* Paper Format */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1.5">
-                  {lang === 'bn' ? 'ডিফল্ট প্রিন্টিং পেপার সাইজ' : 'Default Receipt Paper Size'}
-                </label>
-                <select
-                  value={form.paper_format}
-                  onChange={(e) => setForm({ ...form, paper_format: e.target.value })}
-                  className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#00df89]"
-                >
-                  <option value="80mm">80mm POS Thermal Receipt (Standard POS)</option>
-                  <option value="58mm">58mm Mini Thermal Receipt (Compact)</option>
-                  <option value="A4">A4 Full Page Commercial Invoice</option>
-                  <option value="A5">A5 Half Page Cash Memo Voucher</option>
-                </select>
-              </div>
-
-              {/* Default Payment Method */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1.5">
-                  {lang === 'bn' ? 'ডিফল্ট পেমেন্ট মাধ্যম' : 'Default POS Payment Method'}
-                </label>
-                <select
-                  value={form.default_payment_method}
-                  onChange={(e) => setForm({ ...form, default_payment_method: e.target.value })}
-                  className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#00df89]"
-                >
-                  <option value="Cash">Cash (নগদ)</option>
-                  <option value="bKash">bKash (বিকাশ)</option>
-                  <option value="Nagad">Nagad (নগদ)</option>
-                  <option value="Rocket">Rocket (রকেট)</option>
-                  <option value="Card">Credit/Debit Card (কার্ড)</option>
-                  <option value="Bank Transfer">Bank Transfer (ব্যাংক ট্রান্সফার)</option>
-                </select>
-              </div>
-
-              {/* Tax / VAT Name */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1.5">
-                  {lang === 'bn' ? 'ট্যাক্সের শিরোনাম' : 'Tax / Levy Name'}
-                </label>
-                <Input
-                  value={form.tax_name}
-                  onChange={(e) => setForm({ ...form, tax_name: e.target.value })}
-                  placeholder="VAT"
-                  className="text-xs h-10"
-                />
-              </div>
-
-              {/* Default Tax / VAT Rate % */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1.5">
-                  {lang === 'bn' ? 'ডিফল্ট ভ্যাট / ট্যাক্স হার (%)' : 'Default Tax / VAT Rate (%)'}
-                </label>
-                <div className="relative">
-                  <Percent className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={form.tax_rate}
-                    onChange={(e) => setForm({ ...form, tax_rate: e.target.value })}
-                    placeholder="0"
-                    className="pl-9 text-xs h-10 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Receipt Header Message */}
-              <div className="sm:col-span-2">
-                <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1.5">
-                  {lang === 'bn' ? 'রশিদের হেডার নোটিশ (ঐচ্ছিক)' : 'Receipt Header Notice (Optional)'}
-                </label>
-                <Input
-                  value={form.receipt_header}
-                  onChange={(e) => setForm({ ...form, receipt_header: e.target.value })}
-                  placeholder={lang === 'bn' ? 'যেমন: শুভ উদ্বোধন অফার চলমান' : 'e.g. Special Holiday Offers Valid This Week'}
-                  className="text-xs h-10"
-                />
-              </div>
-
-              {/* Receipt Footer Message / Policy */}
-              <div className="sm:col-span-2">
-                <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1.5">
-                  {lang === 'bn' ? 'রশিদের ফুটার বা রিটার্ন পলিসি' : 'Receipt Footer / Return Policy Note'}
-                </label>
-                <Input
-                  value={form.receipt_footer}
-                  onChange={(e) => setForm({ ...form, receipt_footer: e.target.value })}
-                  placeholder="Thank you for shopping with us! Please come again."
-                  className="text-xs h-10"
-                />
-              </div>
-
-              {/* Show Barcode Toggle */}
-              <div className="sm:col-span-2 p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/80 dark:border-zinc-700/60 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">
-                    {lang === 'bn' ? 'মেমোতে বারকোড প্রিন্ট করুন' : 'Print Barcode on Sales Invoices'}
-                  </div>
-                  <div className="text-[11px] text-slate-500 dark:text-zinc-400">
-                    {lang === 'bn' ? 'দ্রুত স্ক্যান ও পণ্য ফেরতের জন্য ইনভয়েস বারকোড জেনারেট হবে।' : 'Generates scan barcode for speedy order lookup and returns.'}
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={form.show_barcode_on_receipt}
-                  onChange={(e) => setForm({ ...form, show_barcode_on_receipt: e.target.checked })}
-                  className="w-5 h-5 accent-[#00df89] rounded cursor-pointer"
-                />
-              </div>
-
-            </div>
-          </Card>
+          <CashMemoDesigner
+            memoConfig={memoConfig}
+            setMemoConfig={setMemoConfig}
+            shop={mongoShop}
+            form={form}
+            setForm={setForm}
+          />
         )}
 
         {/* ==================================================== */}

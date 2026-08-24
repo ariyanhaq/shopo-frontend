@@ -1,0 +1,12 @@
+export { default as RestaurantDashboard } from './RestaurantDashboard';
+export { default as RestaurantTables } from './RestaurantTables';
+export { default as RestaurantPOS } from './RestaurantPOS';
+export { default as RestaurantKDS } from './RestaurantKDS';
+export { default as RestaurantMenu } from './RestaurantMenu';
+export { default as RestaurantRecipes } from './RestaurantRecipes';
+export { default as RestaurantInventory } from './RestaurantInventory';
+export { default as RestaurantReservations } from './RestaurantReservations';
+export { default as RestaurantOrders } from './RestaurantOrders';
+export { default as RestaurantStaff } from './RestaurantStaff';
+export { default as RestaurantReports } from './RestaurantReports';
+export { default as RestaurantSettings } from './RestaurantSettings';

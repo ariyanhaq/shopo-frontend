@@ -161,6 +161,44 @@ export const SHOP_TYPES = [
     ],
     widgets: ['gym_members_queue', 'gym_overview_stats', 'gym_membership_expiry'],
     sampleInventory: []
+  },
+  {
+    id: 'restaurant',
+    name: 'Restaurant & Cafe',
+    nameBn: 'রেস্তোরাঁ ও ক্যাফে',
+    category: 'food',
+    iconName: 'UtensilsCrossed',
+    accentColor: '#f97316',
+    tagline: 'Table floor plan, live KDS, KOT printing, recipe BOM & reservations',
+    taglineBn: 'টেবিল ম্যানেজমেন্ট, কিচেন ডিসপ্লে (KDS), কেওটি ও রেসিপি',
+    description: 'Complete restaurant POS with visual table occupancy, live kitchen tickets, recipe inventory & guest bookings.',
+    descriptionBn: 'ফ্লোর টেবিল লেআউট, লাইভ কিচেন স্ক্রিন, রেসিপি খাদ্য খরচ ও টেবিল বুকিং।',
+    features: ['Table Floor Plan & QR', 'Live Kitchen Display (KDS)', 'Dine-In & Takeaway POS', 'Recipe BOM & Food Costing', 'Table Reservations'],
+    featuresBn: ['টেবিল ফ্লোর প্ল্যান ও কিউআর', 'লাইভ কিচেন ডিসপ্লে (KDS)', 'ডাইন-ইন ও পার্সেল পিওএস', 'রেসিপি ও কাঁচামাল স্টক', 'টেবিল রিজার্ভেশন'],
+    popular: true,
+    stats: [
+      { id: 'sales', label: "Today's Food Sales", value: '৳ 38,400', change: '+16.8%', isPositive: true },
+      { id: 'revenue', label: 'Monthly Revenue', value: '৳ 980,000', change: '+12.4%', isPositive: true },
+      { id: 'tables', label: 'Occupied Tables', value: '8 / 14', change: '57% Full', isPositive: true },
+      { id: 'kds', label: 'Active Kitchen Orders', value: '6 Tickets', change: 'Avg 12 min', isPositive: true },
+      { id: 'covers', label: "Today's Covers", value: '84 Guests', change: '+18 today', isPositive: true },
+      { id: 'topItem', label: 'Best Seller Dish', value: 'Kacchi Biryani Special', change: '42 portions', isPositive: true },
+      { id: 'foodCost', label: 'Food Cost Ratio', value: '31.5%', change: 'Target 30%', isPositive: true },
+      { id: 'reservations', label: 'Upcoming Bookings', value: '4 Tables', change: 'Tonight', isPositive: true }
+    ],
+    quickActions: [
+      { id: 'open_pos', label: 'Restaurant POS', icon: 'ShoppingCart', color: 'bg-emerald-500/10 text-emerald-600 font-medium' },
+      { id: 'open_kds', label: 'Kitchen Screen (KDS)', icon: 'Flame', color: 'bg-amber-500/10 text-amber-600 font-medium' },
+      { id: 'table_plan', label: 'Floor Plan & Tables', icon: 'LayoutGrid', color: 'bg-blue-500/10 text-blue-600 font-medium' },
+      { id: 'add_menu', label: 'Add Menu Dish', icon: 'Utensils', color: 'bg-purple-500/10 text-purple-600 font-medium' },
+      { id: 'reservations', label: 'Book Reservation', icon: 'Calendar', color: 'bg-rose-500/10 text-rose-600 font-medium' }
+    ],
+    widgets: ['restaurant_floor_overview', 'restaurant_live_kds_queue', 'restaurant_top_dishes'],
+    sampleInventory: [
+      { id: 'R-101', name: 'Kacchi Biryani Special', category: 'Biryani & Rice', stock: 45, unit: 'Portions', price: '৳ 450', status: 'In Stock' },
+      { id: 'R-102', name: 'Crispy Gourmet Beef Burger', category: 'Fast Food', stock: 24, unit: 'Pcs', price: '৳ 320', status: 'In Stock' },
+      { id: 'R-103', name: 'BBQ Chicken Quarter Platter', category: 'Platters', stock: 18, unit: 'Platters', price: '৳ 390', status: 'In Stock' }
+    ]
   }
 ];
 

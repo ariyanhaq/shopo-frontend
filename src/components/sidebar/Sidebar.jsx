@@ -19,7 +19,7 @@ import {
   Wallet, HelpCircle, Layers, Building2, Sparkles, FolderPlus,
   ArrowLeftRight, Dumbbell, CreditCard, Calendar, Flame, Activity,
   Wrench, DollarSign, Award, Clock, LogOut, User, PlusCircle, Crown,
-  Check, FileBarChart
+  Check, FileBarChart, Utensils, LayoutGrid, Receipt
 } from 'lucide-react';
 
 export default function Sidebar({ collapsed }) {
@@ -34,6 +34,7 @@ export default function Sidebar({ collapsed }) {
   const sb = t?.dashboard?.sidebar || {};
 
   const isGym = (mongoShop?.business_type || activeShop?.id) === 'gym';
+  const isRestaurant = (mongoShop?.business_type || activeShop?.id) === 'restaurant';
 
   const handleSwitchShop = async (shop) => {
     if (mongoShop?._id && String(mongoShop._id) === String(shop._id)) return;
@@ -46,6 +47,8 @@ export default function Sidebar({ collapsed }) {
       );
       if (shop.business_type === 'gym') {
         navigate('/gym/dashboard');
+      } else if (shop.business_type === 'restaurant') {
+        navigate('/restaurant/dashboard');
       } else {
         navigate('/dashboard');
       }
@@ -108,7 +111,28 @@ export default function Sidebar({ collapsed }) {
     }
   ];
 
-  const rawMenuSections = isGym ? gymMenuSections : defaultMenuSections;
+  const restaurantMenuSections = [
+    {
+      title: lang === 'bn' ? 'রেস্তোরাঁ ম্যানেজমেন্ট' : 'Restaurant Management',
+      items: [
+        { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', path: '/restaurant/dashboard', icon: LayoutDashboard },
+        { label: lang === 'bn' ? 'টেবিল ও ফ্লোর প্ল্যান' : 'Floor & Tables', path: '/restaurant/tables', icon: LayoutGrid, hasChevron: true, perm: 'orders' },
+        { label: lang === 'bn' ? 'রেস্তোরাঁ পিওএস (POS)' : 'Restaurant POS', path: '/restaurant/pos', icon: ShoppingCart, hasChevron: true, perm: 'orders' },
+        { label: lang === 'bn' ? 'কিচেন ডিসপ্লে (KDS)' : 'Kitchen Screen (KDS)', path: '/restaurant/kds', icon: Flame, hasChevron: true, perm: 'orders' },
+        { label: lang === 'bn' ? 'খাবার মেনু ও আইটেম' : 'Food Menu', path: '/restaurant/menu', icon: Utensils, hasChevron: true, perm: 'products' },
+        { label: lang === 'bn' ? 'রেসিপি ও খাদ্য খরচ' : 'Recipe BOM', path: '/restaurant/recipes', icon: Layers, hasChevron: true, perm: 'products' },
+        { label: lang === 'bn' ? 'কাঁচামাল ও প্যান্ট্রি' : 'Raw Materials', path: '/restaurant/inventory', icon: Package, hasChevron: true, perm: 'products' },
+        { label: lang === 'bn' ? 'টেবিল রিজার্ভেশন' : 'Table Bookings', path: '/restaurant/reservations', icon: Calendar, hasChevron: true, perm: 'customers' },
+        { label: lang === 'bn' ? 'অর্ডার ও চালান ইতিহাস' : 'Restaurant Orders', path: '/restaurant/orders', icon: Receipt, hasChevron: true, perm: 'orders' },
+        { label: lang === 'bn' ? 'ওয়েটার ও স্টাফ' : 'Waiters & Staff', path: '/restaurant/staff', icon: UserCheck, hasChevron: true, perm: 'employees' },
+        { label: lang === 'bn' ? 'রেস্তোরাঁ রিপোর্ট' : 'Restaurant Reports', path: '/restaurant/reports', icon: FileBarChart, hasChevron: true, perm: 'accounting' },
+        { label: lang === 'bn' ? 'রেস্তোরাঁ সেটিংস' : 'Restaurant Settings', path: '/restaurant/settings', icon: Settings, hasChevron: true, perm: 'settings' },
+        { label: lang === 'bn' ? 'দোকানের মূল সেটিংস' : 'Store Settings', path: '/settings/store', icon: Store, hasChevron: true, perm: 'settings' },
+      ]
+    }
+  ];
+
+  const rawMenuSections = isGym ? gymMenuSections : isRestaurant ? restaurantMenuSections : defaultMenuSections;
   const menuSections = rawMenuSections.map((sec) => ({
     ...sec,
     items: sec.items.filter((item) => hasPermission(item.perm)),

@@ -52,7 +52,8 @@ export default function BusinessCategory() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const isGym = (mongoShop?.business_type || localStorage.getItem('shopo_business_type')) === 'gym';
-  const dashboardTarget = isGym ? '/gym/dashboard' : '/dashboard';
+  const isRestaurant = (mongoShop?.business_type || localStorage.getItem('shopo_business_type')) === 'restaurant';
+  const dashboardTarget = isGym ? '/gym/dashboard' : isRestaurant ? '/restaurant/dashboard' : '/dashboard';
 
   // If user already has a shop in DB, strictly prevent accessing onboarding and redirect to dashboard
   useEffect(() => {
@@ -144,7 +145,11 @@ export default function BusinessCategory() {
       await syncBackendProfile();
 
       // 5. Navigate directly to dashboard
-      const target = (selectedId === 'gym' || shop?.business_type === 'gym') ? '/gym/dashboard' : '/dashboard';
+      const target = (selectedId === 'gym' || shop?.business_type === 'gym')
+        ? '/gym/dashboard'
+        : (selectedId === 'restaurant' || shop?.business_type === 'restaurant')
+        ? '/restaurant/dashboard'
+        : '/dashboard';
       navigate(target, { replace: true });
     } catch (err) {
       console.error('Error creating shop on backend:', err);

@@ -174,9 +174,9 @@ export default function DashboardLayout() {
 
         </header>
 
-        {/* PAGE CONTENT ROUTE OUTLET */}
+        {/* PAGE CONTENT ROUTE OUTLET - Keyed on mongoShop._id to automatically reset and reload all data on shop switch */}
         <main className="flex-1 p-4 sm:p-6 pb-24 md:pb-8">
-          <Outlet />
+          <Outlet key={mongoShop?._id || 'shop-root'} />
         </main>
 
       </div>
