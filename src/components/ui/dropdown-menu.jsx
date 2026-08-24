@@ -2,7 +2,7 @@
  * @file dropdown-menu.jsx
  * @description Smooth, modern Shadcn-style Dropdown Menu component with Framer Motion animations, dark mode support, and keyboard/click-outside handlers.
  */
-import { useState, useRef, useEffect, createContext, useContext } from 'react';
+import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -28,7 +28,7 @@ export function DropdownMenu({ children, className }) {
 
   return (
     <DropdownContext.Provider value={{ isOpen, setIsOpen }}>
-      <div ref={menuRef} className={cn("relative block text-left w-full max-w-full", className)}>
+      <div ref={menuRef} className={cn("relative inline-block text-left", className)}>
         {children}
       </div>
     </DropdownContext.Provider>
@@ -38,10 +38,26 @@ export function DropdownMenu({ children, className }) {
 export function DropdownMenuTrigger({ children, asChild, className, ...props }) {
   const { isOpen, setIsOpen } = useContext(DropdownContext);
 
+  const handleClick = (e) => {
+    if (props.onClick) props.onClick(e);
+    setIsOpen(!isOpen);
+  };
+
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children, {
+      onClick: (e) => {
+        if (children.props.onClick) children.props.onClick(e);
+        handleClick(e);
+      },
+      'aria-expanded': isOpen,
+      className: cn(children.props.className, className),
+    });
+  }
+
   return (
     <button
       type="button"
-      onClick={() => setIsOpen(!isOpen)}
+      onClick={handleClick}
       className={cn("w-full inline-flex items-center justify-center cursor-pointer outline-none", className)}
       aria-expanded={isOpen}
       {...props}
