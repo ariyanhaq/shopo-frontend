@@ -435,7 +435,7 @@ export default function Sidebar({ collapsed, isMobileOpen = false, onCloseMobile
       {/* 2. MOBILE SMOOTH SLIDE-OVER DRAWER (< md) */}
       <AnimatePresence>
         {isMobileOpen && (
-          <div className="md:hidden fixed inset-0 z-50 flex pointer-events-auto">
+          <div className="md:hidden fixed inset-0 z-50 flex pointer-events-auto mobile-sidebar-drawer-container">
             {/* Backdrop: Blocks all clicks/scrolls to background */}
             <motion.div
               initial={{ opacity: 0 }}

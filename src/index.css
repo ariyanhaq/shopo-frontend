@@ -62,11 +62,11 @@
 
 /* Mobile Responsive Modal Height & Scrollable Optimization (< 640px) */
 @media (max-width: 639px) {
-  /* Overlay positioning with safe area bounds */
-  .fixed.inset-0.z-50:not(.pointer-events-none),
-  .fixed.inset-0.z-\[50\]:not(.pointer-events-none),
-  .fixed.inset-0.z-\[100000\]:not(.pointer-events-none),
-  div[role="dialog"] {
+  /* Overlay positioning with safe area bounds for modals only */
+  .fixed.inset-0.z-50:not(.pointer-events-none):not(.mobile-sidebar-drawer-container),
+  .fixed.inset-0.z-\[50\]:not(.pointer-events-none):not(.mobile-sidebar-drawer-container),
+  .fixed.inset-0.z-\[100000\]:not(.pointer-events-none):not(.mobile-sidebar-drawer-container),
+  div[role="dialog"]:not(.mobile-sidebar-drawer-container) {
     padding: 0.75rem !important;
     padding-top: max(calc(env(safe-area-inset-top, 0px) + 0.75rem), 1.25rem) !important;
     padding-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 0.75rem), 1.25rem) !important;
@@ -75,9 +75,9 @@
   }
 
   /* Modal Cards: Cap height to ~78vh / safe mobile bounds and make container flex column */
-  .fixed.inset-0:not(.pointer-events-none) > div:not(aside):not(.fixed):not(.drawer-panel),
-  .fixed.inset-0:not(.pointer-events-none) > [role="dialog"],
-  .fixed.inset-0:not(.pointer-events-none) > div[class*="max-w-"],
+  .fixed.inset-0:not(.pointer-events-none):not(.mobile-sidebar-drawer-container) > div:not(aside):not(.fixed):not(.drawer-panel),
+  .fixed.inset-0:not(.pointer-events-none):not(.mobile-sidebar-drawer-container) > [role="dialog"],
+  .fixed.inset-0:not(.pointer-events-none):not(.mobile-sidebar-drawer-container) > div[class*="max-w-"],
   .modal-dialog-content {
     max-height: min(78vh, calc(100dvh - 5.5rem)) !important;
     display: flex !important;
@@ -87,10 +87,10 @@
   }
 
   /* Modal Content Body/Form: Enable smooth vertical scrolling inside modal on mobile */
-  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) form,
-  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) .overflow-y-auto,
-  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) > div:nth-child(2),
-  .fixed.inset-0:not(.pointer-events-none) form.overflow-y-auto {
+  .fixed.inset-0:not(.pointer-events-none):not(.mobile-sidebar-drawer-container) > div:not(aside) form,
+  .fixed.inset-0:not(.pointer-events-none):not(.mobile-sidebar-drawer-container) > div:not(aside) .overflow-y-auto,
+  .fixed.inset-0:not(.pointer-events-none):not(.mobile-sidebar-drawer-container) > div:not(aside) > div:nth-child(2),
+  .fixed.inset-0:not(.pointer-events-none):not(.mobile-sidebar-drawer-container) form.overflow-y-auto {
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
     overscroll-behavior: contain !important;
@@ -99,10 +99,28 @@
   }
 
   /* Header and Action Footer stay pinned cleanly */
-  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) > div:first-child,
-  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) .modal-header,
-  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) .modal-footer {
+  .fixed.inset-0:not(.pointer-events-none):not(.mobile-sidebar-drawer-container) > div:not(aside) > div:first-child,
+  .fixed.inset-0:not(.pointer-events-none):not(.mobile-sidebar-drawer-container) > div:not(aside) .modal-header,
+  .fixed.inset-0:not(.pointer-events-none):not(.mobile-sidebar-drawer-container) > div:not(aside) .modal-footer {
     flex-shrink: 0 !important;
+  }
+
+  /* Mobile Sidebar Drawer: Always pinned full-height to the absolute left */
+  .mobile-sidebar-drawer-container,
+  .mobile-sidebar-drawer-container.fixed.inset-0 {
+    padding: 0px !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    margin: 0px !important;
+  }
+
+  .mobile-sidebar-drawer-container aside {
+    height: 100% !important;
+    max-height: 100% !important;
+    max-height: 100dvh !important;
+    border-radius: 0px !important;
+    margin: 0px !important;
+    align-self: stretch !important;
   }
 }
 
