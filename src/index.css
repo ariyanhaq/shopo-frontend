@@ -60,6 +60,52 @@
   overscroll-behavior: contain;
 }
 
+/* Mobile Responsive Modal Height & Scrollable Optimization (< 640px) */
+@media (max-width: 639px) {
+  /* Overlay positioning with safe area bounds */
+  .fixed.inset-0.z-50:not(.pointer-events-none),
+  .fixed.inset-0.z-\[50\]:not(.pointer-events-none),
+  .fixed.inset-0.z-\[100000\]:not(.pointer-events-none),
+  div[role="dialog"] {
+    padding: 0.75rem !important;
+    padding-top: max(calc(env(safe-area-inset-top, 0px) + 0.75rem), 1.25rem) !important;
+    padding-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 0.75rem), 1.25rem) !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* Modal Cards: Cap height to ~78vh / safe mobile bounds and make container flex column */
+  .fixed.inset-0:not(.pointer-events-none) > div:not(aside):not(.fixed):not(.drawer-panel),
+  .fixed.inset-0:not(.pointer-events-none) > [role="dialog"],
+  .fixed.inset-0:not(.pointer-events-none) > div[class*="max-w-"],
+  .modal-dialog-content {
+    max-height: min(78vh, calc(100dvh - 5.5rem)) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    border-radius: 1.25rem !important;
+  }
+
+  /* Modal Content Body/Form: Enable smooth vertical scrolling inside modal on mobile */
+  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) form,
+  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) .overflow-y-auto,
+  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) > div:nth-child(2),
+  .fixed.inset-0:not(.pointer-events-none) form.overflow-y-auto {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+  }
+
+  /* Header and Action Footer stay pinned cleanly */
+  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) > div:first-child,
+  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) .modal-header,
+  .fixed.inset-0:not(.pointer-events-none) > div:not(aside) .modal-footer {
+    flex-shrink: 0 !important;
+  }
+}
+
 
 
 /* Hide scrollbars globally for no-scrollbar containers */
