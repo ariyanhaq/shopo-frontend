@@ -26,7 +26,7 @@ import {
   Edit2, Loader2, X, CheckCircle2, ShieldCheck, Briefcase, Clock,
   Award, Sparkles, Receipt, Printer, FileText, Banknote, CreditCard,
   Building2, UserCheck, AlertCircle, Eye, History, Check, ArrowRight,
-  ChevronRight
+  ChevronRight, Settings, FolderKanban, FolderPlus, Tag, ArrowUpDown
 } from 'lucide-react';
 
 const DEPARTMENTS = ['General', 'Sales', 'Management', 'Inventory', 'Logistics', 'Accounts'];
@@ -59,9 +59,25 @@ export default function Employees() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  // Custom Departments State
+  const [customDepartments, setCustomDepartments] = useState(() => {
+    try {
+      const saved = localStorage.getItem('shopo_custom_employee_departments');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isAddingDept, setIsAddingDept] = useState(false);
+  const [newDeptInput, setNewDeptInput] = useState('');
+  const [isManageDeptsModalOpen, setIsManageDeptsModalOpen] = useState(false);
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [salaryStatusFilter, setSalaryStatusFilter] = useState('all'); // 'all' | 'paid' | 'pending'
+  const [departmentFilter, setDepartmentFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('pending_first'); // 'pending_first' | 'paid_first' | 'name_asc' | 'name_desc' | 'salary_desc' | 'salary_asc'
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -85,20 +101,117 @@ export default function Employees() {
       isEditModalOpen ||
       isPayModalOpen ||
       selectedPaySlip ||
-      confirmDeactivate.isOpen
+      confirmDeactivate.isOpen ||
+      isManageDeptsModalOpen
     )
   );
+
+  // Consolidated Departments List
+  const allDepartmentsList = useMemo(() => {
+    const list = DEPARTMENTS.map((d) => ({
+      id: d,
+      label: d,
+      isCustom: false,
+    }));
+    const registered = new Set(DEPARTMENTS.map((d) => d.toLowerCase()));
+
+    customDepartments.forEach((d) => {
+      if (d && typeof d === 'string' && !registered.has(d.toLowerCase())) {
+        list.push({
+          id: d,
+          label: d,
+          isCustom: true,
+        });
+        registered.add(d.toLowerCase());
+      }
+    });
+
+    employees.forEach((e) => {
+      if (e.department && typeof e.department === 'string' && !registered.has(e.department.toLowerCase())) {
+        list.push({
+          id: e.department,
+          label: e.department,
+          isCustom: true,
+        });
+        registered.add(e.department.toLowerCase());
+      }
+    });
+
+    return list;
+  }, [customDepartments, employees]);
+
+  const handleAddNewDepartment = () => {
+    const trimmed = newDeptInput.trim();
+    if (!trimmed) {
+      toast.error(lang === 'bn' ? 'অনুগ্রহ করে বিভাগের নাম লিখুন।' : 'Please enter a department name.');
+      return;
+    }
+
+    const existsInDefault = DEPARTMENTS.some((d) => d.toLowerCase() === trimmed.toLowerCase());
+    const existsInCustom = customDepartments.some((d) => d.toLowerCase() === trimmed.toLowerCase());
+
+    if (!existsInCustom && !existsInDefault) {
+      const updated = [...customDepartments, trimmed];
+      setCustomDepartments(updated);
+      try {
+        localStorage.setItem('shopo_custom_employee_departments', JSON.stringify(updated));
+      } catch (err) {
+        console.warn('Could not save custom departments to localStorage:', err);
+      }
+      toast.success(
+        lang === 'bn'
+          ? `'${trimmed}' বিভাগ সফলভাবে যোগ হয়েছে!`
+          : `Department '${trimmed}' added successfully!`
+      );
+    } else {
+      toast.success(
+        lang === 'bn'
+          ? `'${trimmed}' বিভাগ নির্বাচন করা হয়েছে।`
+          : `Selected department '${trimmed}'.`
+      );
+    }
+
+    setEmpForm((prev) => ({ ...prev, department: trimmed }));
+    setIsAddingDept(false);
+    setNewDeptInput('');
+  };
+
+  const handleDeleteDepartment = (deptName) => {
+    if (!deptName) return;
+    const updated = customDepartments.filter(
+      (d) => d.toLowerCase() !== String(deptName).toLowerCase()
+    );
+    setCustomDepartments(updated);
+    try {
+      localStorage.setItem('shopo_custom_employee_departments', JSON.stringify(updated));
+    } catch (err) {
+      console.warn('Could not update custom departments in localStorage:', err);
+    }
+
+    setEmpForm((prev) => {
+      if (prev.department?.toLowerCase() === String(deptName).toLowerCase()) {
+        return { ...prev, department: 'General' };
+      }
+      return prev;
+    });
+
+    toast.success(
+      lang === 'bn'
+        ? `'${deptName}' বিভাগ মুছে ফেলা হয়েছে!`
+        : `Department '${deptName}' deleted!`
+    );
+  };
 
   // Employee Form
   const [empForm, setEmpForm] = useState({
     name: '',
     phone: '',
     email: '',
-    role: 'Sales Associate',
-    department: 'Sales',
-    salary: 18000,
-    working_hours: '8 hrs/day (9:00 AM - 5:00 PM)',
-    work_days: '6 days/week',
+    role: '',
+    department: '',
+    salary: '',
+    working_hours: '',
+    work_days: '',
     joining_date: new Date().toISOString().split('T')[0],
     nid: '',
     address: '',
@@ -169,15 +282,17 @@ export default function Employees() {
 
   // Open Add Employee Modal
   const handleOpenAdd = () => {
+    setIsAddingDept(false);
+    setNewDeptInput('');
     setEmpForm({
       name: '',
       phone: '',
       email: '',
-      role: 'Sales Associate',
-      department: 'Sales',
-      salary: 18000,
-      working_hours: '8 hrs/day (9:00 AM - 5:00 PM)',
-      work_days: '6 days/week',
+      role: '',
+      department: '',
+      salary: '',
+      working_hours: '',
+      work_days: '',
       joining_date: new Date().toISOString().split('T')[0],
       nid: '',
       address: '',
@@ -190,16 +305,18 @@ export default function Employees() {
 
   // Open Edit Employee Modal
   const handleOpenEdit = (emp) => {
+    setIsAddingDept(false);
+    setNewDeptInput('');
     setCurrentEmployee(emp);
     setEmpForm({
       name: emp.name || '',
       phone: emp.phone || '',
       email: emp.email || '',
-      role: emp.role || 'Staff',
-      department: emp.department || 'General',
-      salary: emp.salary || 0,
-      working_hours: emp.working_hours || '8 hrs/day (9:00 AM - 5:00 PM)',
-      work_days: emp.work_days || '6 days/week',
+      role: emp.role || '',
+      department: emp.department || '',
+      salary: emp.salary ?? '',
+      working_hours: emp.working_hours || '',
+      work_days: emp.work_days || '',
       joining_date: emp.joining_date || new Date().toISOString().split('T')[0],
       nid: emp.nid || '',
       address: emp.address || '',
@@ -294,9 +411,78 @@ export default function Employees() {
     }
   };
 
+  const currentMonthName = useMemo(() => {
+    return new Date().toLocaleString('default', { month: 'long' });
+  }, []);
+
+  const currentYearNumber = useMemo(() => {
+    return new Date().getFullYear();
+  }, []);
+
+  // Map employee_id -> salaryPayment record for current month/year
+  const currentMonthPaymentMap = useMemo(() => {
+    const currentM = currentMonthName.toLowerCase();
+    const currentY = currentYearNumber;
+    const map = new Map();
+
+    salaryHistory.forEach((sal) => {
+      const salMonth = (sal.month || '').toLowerCase();
+      const salYear = Number(sal.year) || (sal.payment_date ? new Date(sal.payment_date).getFullYear() : currentY);
+      const empId = typeof sal.employee_id === 'object' ? sal.employee_id?._id : sal.employee_id;
+
+      if (salMonth === currentM && salYear === currentY && empId) {
+        map.set(String(empId), sal);
+      }
+    });
+
+    return map;
+  }, [salaryHistory, currentMonthName, currentYearNumber]);
+
+  // Check if chosen employee in Pay Modal has already been paid for payForm.month & payForm.year
+  const isSelectedEmpMonthAlreadyPaid = useMemo(() => {
+    if (!payForm.employee_id || !payForm.month || !payForm.year) return null;
+    const targetM = (payForm.month || '').toLowerCase().trim();
+    const targetY = Number(payForm.year) || currentYearNumber;
+
+    return salaryHistory.find((sal) => {
+      const salEmpId = typeof sal.employee_id === 'object' ? sal.employee_id?._id : sal.employee_id;
+      const salM = (sal.month || '').toLowerCase().trim();
+      const salY = Number(sal.year) || (sal.payment_date ? new Date(sal.payment_date).getFullYear() : targetY);
+      return String(salEmpId) === String(payForm.employee_id) && salM === targetM && salY === targetY;
+    }) || null;
+  }, [payForm.employee_id, payForm.month, payForm.year, salaryHistory, currentYearNumber]);
+
+  const salaryStatusCounts = useMemo(() => {
+    let paidCount = 0;
+    let pendingCount = 0;
+
+    employees.forEach((emp) => {
+      if (currentMonthPaymentMap.has(String(emp._id))) {
+        paidCount++;
+      } else {
+        pendingCount++;
+      }
+    });
+
+    return {
+      total: employees.length,
+      paid: paidCount,
+      pending: pendingCount,
+    };
+  }, [employees, currentMonthPaymentMap]);
+
   const handleSubmitPaySalary = async (e) => {
     e.preventDefault();
     if (!payForm.employee_id) return;
+
+    if (isSelectedEmpMonthAlreadyPaid) {
+      toast.error(
+        lang === 'bn'
+          ? `এই কর্মীর ${payForm.month} ${payForm.year}-এর বেতন ইতোমধ্যে পরিশোধ করা হয়েছে!`
+          : `Salary for this employee for ${payForm.month} ${payForm.year} is already paid!`
+      );
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -356,7 +542,7 @@ export default function Employees() {
   }, [payForm.base_salary, payForm.bonus, payForm.deductions]);
 
   const filteredEmployees = useMemo(() => {
-    return employees.filter((e) => {
+    let list = employees.filter((e) => {
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -365,12 +551,50 @@ export default function Employees() {
         (e.role && e.role.toLowerCase().includes(q)) ||
         (e.department && e.department.toLowerCase().includes(q));
 
+      const isPaid = currentMonthPaymentMap.has(String(e._id));
+      const matchesSalaryStatus =
+        salaryStatusFilter === 'all' ||
+        (salaryStatusFilter === 'paid' && isPaid) ||
+        (salaryStatusFilter === 'pending' && !isPaid);
+
+      const matchesDept =
+        departmentFilter === 'all' ||
+        (e.department && e.department.toLowerCase() === departmentFilter.toLowerCase());
+
       const matchesStatus =
         statusFilter === 'all' || e.status?.toLowerCase() === statusFilter.toLowerCase();
 
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesSalaryStatus && matchesDept && matchesStatus;
     });
-  }, [employees, searchQuery, statusFilter]);
+
+    list = [...list].sort((a, b) => {
+      const aPaid = currentMonthPaymentMap.has(String(a._id));
+      const bPaid = currentMonthPaymentMap.has(String(b._id));
+
+      if (sortBy === 'pending_first') {
+        if (!aPaid && bPaid) return -1;
+        if (aPaid && !bPaid) return 1;
+        return a.name.localeCompare(b.name);
+      }
+      if (sortBy === 'paid_first') {
+        if (aPaid && !bPaid) return -1;
+        if (!aPaid && bPaid) return 1;
+        return a.name.localeCompare(b.name);
+      }
+      if (sortBy === 'salary_desc') {
+        return (Number(b.salary) || 0) - (Number(a.salary) || 0);
+      }
+      if (sortBy === 'salary_asc') {
+        return (Number(a.salary) || 0) - (Number(b.salary) || 0);
+      }
+      if (sortBy === 'name_desc') {
+        return b.name.localeCompare(a.name);
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    return list;
+  }, [employees, searchQuery, salaryStatusFilter, departmentFilter, statusFilter, sortBy, currentMonthPaymentMap]);
 
   // Directory Pagination
   const [empPage, setEmpPage] = useState(1);
@@ -378,21 +602,37 @@ export default function Employees() {
 
   useEffect(() => {
     setEmpPage(1);
-  }, [searchQuery, statusFilter, empPageSize]);
+  }, [searchQuery, statusFilter, salaryStatusFilter, departmentFilter, sortBy, empPageSize]);
 
   const paginatedEmployees = useMemo(() => {
     const start = (empPage - 1) * empPageSize;
     return filteredEmployees.slice(start, start + empPageSize);
   }, [filteredEmployees, empPage, empPageSize]);
 
-  // Payroll History Pagination
+  // Payroll History Filter & Pagination
   const [payPage, setPayPage] = useState(1);
   const [payPageSize, setPayPageSize] = useState(10);
 
+  const filteredSalaryHistory = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return salaryHistory;
+    return salaryHistory.filter((p) => {
+      const name = (p.employee_name || '').toLowerCase();
+      const ref = (p.reference_no || '').toLowerCase();
+      const month = (p.month || '').toLowerCase();
+      const method = (p.payment_method || '').toLowerCase();
+      return name.includes(q) || ref.includes(q) || month.includes(q) || method.includes(q);
+    });
+  }, [salaryHistory, searchQuery]);
+
   const paginatedSalaryHistory = useMemo(() => {
     const start = (payPage - 1) * payPageSize;
-    return salaryHistory.slice(start, start + payPageSize);
-  }, [salaryHistory, payPage, payPageSize]);
+    return filteredSalaryHistory.slice(start, start + payPageSize);
+  }, [filteredSalaryHistory, payPage, payPageSize]);
+
+  useEffect(() => {
+    setPayPage(1);
+  }, [searchQuery, payPageSize]);
 
   return (
     <div className="space-y-6 font-sans pb-12">
@@ -413,7 +653,17 @@ export default function Employees() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsManageDeptsModalOpen(true)}
+            className="h-10 px-3 text-xs sm:text-sm font-semibold gap-1.5 cursor-pointer border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] hover:bg-slate-50 dark:hover:bg-zinc-900 shadow-2xs"
+          >
+            <FolderKanban className="w-4 h-4 text-[#00df89]" />
+            <span>{lang === 'bn' ? 'বিভাগ পরিচালনা' : 'Departments'}</span>
+          </Button>
+
           <Button
             variant="outline"
             onClick={() => handleOpenPaySalary()}
@@ -459,7 +709,9 @@ export default function Employees() {
           <div className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400 mt-2">
             {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${safeMoney(stats.total_paid_this_month)}`}
           </div>
-          <div className="text-xs text-purple-500 mt-1">{new Date().toLocaleString('default', { month: 'long' })} disbursed</div>
+          <div className="text-xs text-purple-500 mt-1">
+            {salaryStatusCounts.paid} / {salaryStatusCounts.total} staff paid ({currentMonthName})
+          </div>
         </Card>
 
         <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
@@ -472,36 +724,201 @@ export default function Employees() {
       </div>
 
       {/* ---------------------------------------------------- */}
+      {/* VIEW TABS NAVIGATION                                 */}
+      {/* ---------------------------------------------------- */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-slate-100 dark:bg-[#121215] p-1 rounded-xl flex items-center border border-slate-200/80 dark:border-zinc-800 shadow-2xs w-fit">
+          <button
+            type="button"
+            onClick={() => setActiveTab('directory')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'directory'
+                ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Users className="w-4 h-4 text-[#00a86b] dark:text-[#00df89]" />
+            <span>{lang === 'bn' ? 'কর্মী তালিকা' : 'Staff Directory'}</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-slate-200/80 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300">
+              {employees.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('payroll')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'payroll'
+                ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Receipt className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            <span>{lang === 'bn' ? 'বেতন পরিশোধের হিস্ট্রি' : 'Salary History'}</span>
+            {salaryHistory.length > 0 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-purple-500/15 text-purple-600 dark:text-purple-400">
+                {salaryHistory.length}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ---------------------------------------------------- */}
       {/* FILTER & SEARCH BAR                                  */}
       {/* ---------------------------------------------------- */}
-      <Card className="p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="w-full sm:w-80 relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder={lang === 'bn' ? 'নাম, পদবি বা মোবাইল নম্বর খুঁজুন...' : 'Search by name, role or phone...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89]"
-            />
+      <Card className="p-3.5 sm:p-4 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          {/* Left: Search Input & Department Filter */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-xl">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder={
+                  activeTab === 'directory'
+                    ? (lang === 'bn' ? 'নাম, পদবি বা মোবাইল নম্বর...' : 'Search staff by name, role, phone...')
+                    : (lang === 'bn' ? 'নাম, ভাউচার বা মাস খুঁজুন...' : 'Search slips by name, voucher, month...')
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#00df89] transition-all"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 p-0.5 rounded cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {activeTab === 'directory' && (
+              <div className="w-full sm:w-44 shrink-0">
+                <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                  <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full h-9 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-medium">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <FolderKanban className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <SelectValue placeholder={lang === 'bn' ? 'সকল বিভাগ' : 'All Depts'} />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent align="start" className="min-w-[170px]">
+                    <SelectItem value="all">
+                      {lang === 'bn' ? 'সকল বিভাগ' : 'All Departments'}
+                    </SelectItem>
+                    {allDepartmentsList.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
-          <div className="w-full sm:w-48">
-            <Select value={activeTab} onValueChange={setActiveTab}>
-              <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full h-9.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-semibold">
-                <SelectValue placeholder={lang === 'bn' ? 'কর্মী তালিকা' : 'Staff Directory'} />
-              </SelectTrigger>
-              <SelectContent className="min-w-[180px]">
-                <SelectItem value="directory">
-                  {lang === 'bn' ? 'কর্মী তালিকা' : 'Staff Directory'}
-                </SelectItem>
-                <SelectItem value="payroll">
-                  {lang === 'bn' ? 'বেতন হিস্ট্রি' : 'Salary History'}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Right: Salary Status Filter Buttons & Sort Dropdown */}
+          {activeTab === 'directory' && (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 shrink-0">
+              {/* Quick Salary Status Buttons */}
+              <div className="inline-flex items-center p-1 bg-slate-100 dark:bg-zinc-800/80 rounded-xl border border-slate-200/80 dark:border-zinc-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSalaryStatusFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                    salaryStatusFilter === 'all'
+                      ? 'bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-xs font-bold'
+                      : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <span>{lang === 'bn' ? 'সকল কর্মী' : 'All Staff'}</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-slate-200/80 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300">
+                    {salaryStatusCounts.total}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSalaryStatusFilter('pending')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer ${
+                    salaryStatusFilter === 'pending'
+                      ? 'bg-amber-500 text-white shadow-xs font-bold'
+                      : 'text-amber-700 dark:text-amber-400 hover:bg-amber-500/10'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>{lang === 'bn' ? 'বকেয়া' : 'Pending'}</span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
+                    salaryStatusFilter === 'pending'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-amber-500/20 text-amber-800 dark:text-amber-300'
+                  }`}>
+                    {salaryStatusCounts.pending}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSalaryStatusFilter('paid')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer ${
+                    salaryStatusFilter === 'paid'
+                      ? 'bg-[#00df89] text-[#011812] shadow-xs font-bold'
+                      : 'text-[#00a86b] dark:text-[#00df89] hover:bg-emerald-500/10'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{lang === 'bn' ? 'পরিশোধিত' : 'Paid'}</span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${
+                    salaryStatusFilter === 'paid'
+                      ? 'bg-[#00c97b] text-[#011812]'
+                      : 'bg-emerald-500/20 text-emerald-800 dark:text-emerald-300'
+                  }`}>
+                    {salaryStatusCounts.paid}
+                  </span>
+                </button>
+              </div>
+
+              {/* Sort Dropdown */}
+              <div className="w-full sm:w-48 shrink-0">
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full h-9 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-medium">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <SelectValue />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent align="end" className="min-w-[180px]">
+                    <SelectItem value="pending_first">
+                      {lang === 'bn' ? 'বকেয়া বেতন আগে' : 'Pending First'}
+                    </SelectItem>
+                    <SelectItem value="paid_first">
+                      {lang === 'bn' ? 'পরিশোধিত বেতন আগে' : 'Paid First'}
+                    </SelectItem>
+                    <SelectItem value="name_asc">
+                      {lang === 'bn' ? 'নাম (A - Z)' : 'Name (A - Z)'}
+                    </SelectItem>
+                    <SelectItem value="name_desc">
+                      {lang === 'bn' ? 'নাম (Z - A)' : 'Name (Z - A)'}
+                    </SelectItem>
+                    <SelectItem value="salary_desc">
+                      {lang === 'bn' ? 'বেতন: বেশি থেকে কম' : 'Salary: High to Low'}
+                    </SelectItem>
+                    <SelectItem value="salary_asc">
+                      {lang === 'bn' ? 'বেতন: কম থেকে বেশি' : 'Salary: Low to High'}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'payroll' && (
+            <div className="text-xs text-slate-500 dark:text-zinc-400 font-medium">
+              {lang === 'bn' ? `মোট ভাউচার রেকর্ড: ${filteredSalaryHistory.length}` : `Showing ${filteredSalaryHistory.length} disbursement records`}
+            </div>
+          )}
         </div>
       </Card>
 
@@ -523,7 +940,7 @@ export default function Employees() {
                 {lang === 'bn' ? 'কোনো কর্মী পাওয়া যায়নি' : 'No Employees Found'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400">
-                {lang === 'bn' ? 'নতুন কর্মচারী যোগ করতে উপরের বাটনে ক্লিক করুন।' : 'Add your shop staff, cashiers and managers.'}
+                {lang === 'bn' ? 'ফিল্টার পরিবর্তন করুন অথবা নতুন কর্মী যোগ করুন।' : 'Try changing your search filters or add a new employee.'}
               </p>
               <Button size="sm" onClick={handleOpenAdd} className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold">
                 <Plus className="w-3.5 h-3.5 mr-1" />
@@ -539,110 +956,162 @@ export default function Employees() {
                     <th className="p-3.5 text-xs font-semibold">{lang === 'bn' ? 'মোবাইল ও ইমেইল' : 'Contact Details'}</th>
                     <th className="p-3.5 text-xs font-semibold">{lang === 'bn' ? 'কাজের সময় ও দিন' : 'Work Hours & Shift'}</th>
                     <th className="p-3.5 text-xs font-semibold">{lang === 'bn' ? 'মাসিক বেতন' : 'Base Salary'}</th>
+                    <th className="p-3.5 text-xs font-semibold">{lang === 'bn' ? `চলতি মাসের বেতন (${currentMonthName})` : `${currentMonthName} Salary`}</th>
                     <th className="p-3.5 text-xs font-semibold">{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
                     <th className="p-3.5 pr-4 sm:pr-6 text-xs font-semibold text-right">{lang === 'bn' ? 'অ্যাকশন' : 'Actions'}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {paginatedEmployees.map((emp) => (
-                    <tr key={emp._id} className="hover:bg-slate-50/70 dark:hover:bg-zinc-900/40 transition-colors">
-                      <td className="p-3.5 pl-4 sm:pl-6 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-bold text-xs border border-emerald-500/20 shrink-0">
-                            {emp.name.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="font-bold text-slate-900 dark:text-zinc-100 text-xs">
-                              {emp.name}
+                  {paginatedEmployees.map((emp) => {
+                    const isPaidThisMonth = currentMonthPaymentMap.has(String(emp._id));
+                    const thisMonthPaymentRecord = currentMonthPaymentMap.get(String(emp._id));
+
+                    return (
+                      <tr key={emp._id} className="hover:bg-slate-50/70 dark:hover:bg-zinc-900/40 transition-colors">
+                        <td className="p-3.5 pl-4 sm:pl-6 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center font-bold text-xs border border-emerald-500/20 shrink-0">
+                              {emp.name.slice(0, 2).toUpperCase()}
                             </div>
-                            <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                              <span className="text-[#00a86b] dark:text-[#00df89] font-medium">{emp.role || 'Staff'}</span>
-                              <span>•</span>
-                              <span>{emp.department || 'General'}</span>
+                            <div>
+                              <div className="font-bold text-slate-900 dark:text-zinc-100 text-xs">
+                                {emp.name}
+                              </div>
+                              <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[#00a86b] dark:text-[#00df89] font-medium">{emp.role || 'Staff'}</span>
+                                <span>•</span>
+                                <span>{emp.department || 'General'}</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="p-3.5 whitespace-nowrap text-xs text-slate-600 dark:text-zinc-400">
-                        <div className="flex items-center gap-1.5 font-mono">
-                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>{emp.phone}</span>
-                        </div>
-                        {emp.email && (
-                          <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 truncate max-w-48">
-                            <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span className="truncate">{emp.email}</span>
+                        <td className="p-3.5 whitespace-nowrap text-xs text-slate-600 dark:text-zinc-400">
+                          <div className="flex items-center gap-1.5 font-mono">
+                            <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{emp.phone}</span>
                           </div>
-                        )}
-                      </td>
+                          {emp.email && (
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5 truncate max-w-48">
+                              <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate">{emp.email}</span>
+                            </div>
+                          )}
+                        </td>
 
-                      <td className="p-3.5 whitespace-nowrap text-xs">
-                        <div className="font-medium text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                          <span>{emp.working_hours || '8 hrs/day'}</span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
-                          {emp.work_days || '6 days/week'}
-                        </div>
-                      </td>
+                        <td className="p-3.5 whitespace-nowrap text-xs">
+                          <div className="font-medium text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            <span>{emp.working_hours || '8 hrs/day'}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            {emp.work_days || '6 days/week'}
+                          </div>
+                        </td>
 
-                      <td className="p-3.5 whitespace-nowrap font-bold text-[#00a86b] dark:text-[#00df89] text-xs font-mono">
-                        ৳ {safeMoney(emp.salary)} / mo
-                      </td>
+                        <td className="p-3.5 whitespace-nowrap font-bold text-[#00a86b] dark:text-[#00df89] text-xs font-mono">
+                          ৳ {safeMoney(emp.salary)} / mo
+                        </td>
 
-                      <td className="p-3.5 whitespace-nowrap">
-                        <Badge
-                          variant="secondary"
-                          className={`text-[10px] font-bold ${
-                            emp.status === 'Active'
-                              ? 'bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] border-emerald-500/20'
-                              : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                          }`}
-                        >
-                          {emp.status || 'Active'}
-                        </Badge>
-                      </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          {isPaidThisMonth ? (
+                            <div className="space-y-1">
+                              <Badge
+                                variant="secondary"
+                                className="bg-emerald-500/15 text-[#00a86b] dark:text-[#00df89] border-emerald-500/30 text-[10px] font-bold gap-1 py-0.5 px-2"
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>{lang === 'bn' ? 'পরিশোধিত' : 'Paid'}</span>
+                              </Badge>
+                              {thisMonthPaymentRecord && (
+                                <div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedPaySlip(thisMonthPaymentRecord)}
+                                    className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-mono font-medium cursor-pointer"
+                                  >
+                                    <Receipt className="w-3 h-3" />
+                                    <span>{thisMonthPaymentRecord.reference_no || 'View Slip'}</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <Badge
+                              variant="secondary"
+                              className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px] font-bold gap-1 py-0.5 px-2"
+                            >
+                              <Clock className="w-3 h-3" />
+                              <span>{lang === 'bn' ? 'বকেয়া' : 'Pending'}</span>
+                            </Badge>
+                          )}
+                        </td>
 
-                      <td className="p-3.5 pr-4 sm:pr-6 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenPaySalary(emp)}
-                            title={lang === 'bn' ? 'বেতন পরিশোধ করুন' : 'Pay Salary'}
-                            className="h-8 px-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-[#00a86b] dark:text-[#00df89] border border-emerald-500/20 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0"
+                        <td className="p-3.5 whitespace-nowrap">
+                          <Badge
+                            variant="secondary"
+                            className={`text-[10px] font-bold ${
+                              emp.status === 'Active'
+                                ? 'bg-emerald-500/10 text-[#00a86b] dark:text-[#00df89] border-emerald-500/20'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                            }`}
                           >
-                            <Banknote className="w-4 h-4 stroke-[2]" />
-                            <span>{lang === 'bn' ? 'বেতন দিন' : 'Pay Salary'}</span>
-                          </button>
+                            {emp.status || 'Active'}
+                          </Badge>
+                        </td>
 
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(emp)}
-                            title={lang === 'bn' ? 'সম্পাদনা করুন' : 'Edit Details'}
-                            className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors cursor-pointer border border-blue-500/20 shadow-2xs shrink-0"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
+                        <td className="p-3.5 pr-4 sm:pr-6 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {isPaidThisMonth ? (
+                              <button
+                                type="button"
+                                disabled
+                                title={lang === 'bn' ? `${currentMonthName} মাসের বেতন ইতোমধ্যে পরিশোধ করা হয়েছে` : `Salary for ${currentMonthName} already paid`}
+                                className="h-8 px-2.5 rounded-lg bg-slate-100 dark:bg-zinc-800/80 text-slate-400 dark:text-zinc-500 border border-slate-200 dark:border-zinc-700 text-xs font-semibold flex items-center gap-1.5 cursor-not-allowed opacity-80 shrink-0"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                <span>{lang === 'bn' ? 'পরিশোধিত' : 'Paid'}</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPaySalary(emp)}
+                                title={lang === 'bn' ? 'বেতন পরিশোধ করুন' : 'Pay Salary'}
+                                className="h-8 px-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-[#00a86b] dark:text-[#00df89] border border-emerald-500/20 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              >
+                                <Banknote className="w-4 h-4 stroke-[2]" />
+                                <span>{lang === 'bn' ? 'বেতন দিন' : 'Pay Salary'}</span>
+                              </button>
+                            )}
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setConfirmDeactivate({
-                                isOpen: true,
-                                id: emp._id,
-                                name: emp.name,
-                              })
-                            }
-                            title={lang === 'bn' ? 'নিষ্ক্রিয় / মুছে ফেলুন' : 'Deactivate Employee'}
-                            className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center transition-colors cursor-pointer border border-rose-500/20 shadow-2xs shrink-0"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(emp)}
+                              title={lang === 'bn' ? 'সম্পাদনা করুন' : 'Edit Details'}
+                              className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors cursor-pointer border border-blue-500/20 shadow-2xs shrink-0"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setConfirmDeactivate({
+                                  isOpen: true,
+                                  id: emp._id,
+                                  name: emp.name,
+                                })
+                              }
+                              title={lang === 'bn' ? 'নিষ্ক্রিয় / মুছে ফেলুন' : 'Deactivate Employee'}
+                              className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center transition-colors cursor-pointer border border-rose-500/20 shadow-2xs shrink-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 
@@ -799,12 +1268,34 @@ export default function Employees() {
                   <SelectTrigger className="h-9 text-xs bg-slate-50 dark:bg-[#09090b] border-slate-200 dark:border-zinc-800">
                     <SelectValue placeholder="Select Staff" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {employees.map((emp) => (
-                      <SelectItem key={emp._id} value={emp._id}>
-                        {emp.name} ({emp.role || 'Staff'}) — Base: ৳{safeMoney(emp.salary)}
-                      </SelectItem>
-                    ))}
+                  <SelectContent className="max-h-60">
+                    {employees.map((emp) => {
+                      const isEmpPaidForSelectedMonth = salaryHistory.some((sal) => {
+                        const salEmpId = typeof sal.employee_id === 'object' ? sal.employee_id?._id : sal.employee_id;
+                        const salM = (sal.month || '').toLowerCase().trim();
+                        const salY = Number(sal.year) || (sal.payment_date ? new Date(sal.payment_date).getFullYear() : Number(payForm.year));
+                        return (
+                          String(salEmpId) === String(emp._id) &&
+                          salM === (payForm.month || '').toLowerCase().trim() &&
+                          salY === Number(payForm.year)
+                        );
+                      });
+
+                      return (
+                        <SelectItem key={emp._id} value={emp._id}>
+                          <div className="flex items-center justify-between w-full pr-1">
+                            <span>{emp.name} ({emp.role || 'Staff'}) — ৳{safeMoney(emp.salary)}</span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ml-2 ${
+                              isEmpPaidForSelectedMonth
+                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                            }`}>
+                              {isEmpPaidForSelectedMonth ? '✓ Paid' : '⏳ Pending'}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -843,6 +1334,23 @@ export default function Employees() {
                   />
                 </div>
               </div>
+
+              {/* Already Paid Warning Alert */}
+              {isSelectedEmpMonthAlreadyPaid && (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 shadow-2xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="font-bold">
+                      {lang === 'bn' ? 'এই মাসের বেতন ইতোমধ্যে পরিশোধ করা হয়েছে!' : 'Salary Already Paid for This Month!'}
+                    </p>
+                    <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 leading-relaxed">
+                      {lang === 'bn'
+                        ? `${payForm.employee_name || 'এই কর্মীর'} ${payForm.month} ${payForm.year}-এর বেতন ৳${safeMoney(isSelectedEmpMonthAlreadyPaid.net_paid)} তারিখে (${safeDate(isSelectedEmpMonthAlreadyPaid.payment_date)}) পরিশোধ করা হয়েছে। ভাউচার: ${isSelectedEmpMonthAlreadyPaid.reference_no || 'N/A'}। একই মাসের জন্য পুনরায় বেতন দেওয়া যাবে না।`
+                        : `${payForm.employee_name || 'This employee'} was already paid ৳${safeMoney(isSelectedEmpMonthAlreadyPaid.net_paid)} for ${payForm.month} ${payForm.year} on ${safeDate(isSelectedEmpMonthAlreadyPaid.payment_date)} (Voucher: ${isSelectedEmpMonthAlreadyPaid.reference_no || 'N/A'}). You cannot pay twice for the same month.`}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -986,12 +1494,18 @@ export default function Employees() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || Boolean(isSelectedEmpMonthAlreadyPaid)}
                   size="sm"
-                  className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold cursor-pointer"
+                  className={`${
+                    isSelectedEmpMonthAlreadyPaid
+                      ? 'bg-slate-200 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 cursor-not-allowed'
+                      : 'bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold cursor-pointer'
+                  }`}
                 >
                   {isSubmitting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : isSelectedEmpMonthAlreadyPaid ? (
+                    lang === 'bn' ? 'ইতোমধ্যে পরিশোধিত' : 'Already Paid for This Month'
                   ) : (
                     lang === 'bn' ? 'বেতন পরিশোধ নিশ্চিত করুন' : 'Confirm Payout'
                   )}
@@ -1058,37 +1572,125 @@ export default function Employees() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'পদবি / রোল' : 'Designation / Role'}
-                  </label>
+                  <div className="flex items-center mb-1 h-5">
+                    <label className="block font-medium text-slate-700 dark:text-zinc-300">
+                      {lang === 'bn' ? 'পদবি / রোল' : 'Designation / Role'}
+                    </label>
+                  </div>
                   <input
                     type="text"
                     placeholder="e.g. Store Manager, Cashier"
                     value={empForm.role}
                     onChange={(e) => setEmpForm({ ...empForm, role: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                    className="w-full h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-2 focus:ring-[#00df89]"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'বিভাগ (Department)' : 'Department'}
-                  </label>
-                  <Select
-                    value={empForm.department}
-                    onValueChange={(val) => setEmpForm({ ...empForm, department: val })}
-                  >
-                    <SelectTrigger className="h-9 text-xs bg-slate-50 dark:bg-[#09090b] border-slate-200 dark:border-zinc-800">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEPARTMENTS.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d}
+                  <div className="flex items-center justify-between mb-1 h-5">
+                    <label className="block font-medium text-slate-700 dark:text-zinc-300">
+                      {lang === 'bn' ? 'বিভাগ (Department)' : 'Department'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsManageDeptsModalOpen(true)}
+                      className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Settings className="w-3 h-3" />
+                      <span>{lang === 'bn' ? 'পরিচালনা' : 'Manage'}</span>
+                    </button>
+                  </div>
+
+                  {isAddingDept ? (
+                    <div className="relative flex items-center h-9">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder={lang === 'bn' ? 'যেমন: কাস্টমার সাপোর্ট, মার্কেটিং' : 'e.g. Support, Marketing'}
+                        value={newDeptInput}
+                        onChange={(e) => setNewDeptInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddNewDepartment();
+                          }
+                          if (e.key === 'Escape') {
+                            setIsAddingDept(false);
+                            setNewDeptInput('');
+                          }
+                        }}
+                        className="w-full h-9 pl-3 pr-16 rounded-xl bg-slate-50 dark:bg-[#09090b] border-2 border-[#00df89] text-xs outline-none text-slate-900 dark:text-white font-medium focus:ring-1 focus:ring-[#00df89]"
+                      />
+                      <div className="absolute right-1 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={handleAddNewDepartment}
+                          title={lang === 'bn' ? 'যোগ করুন' : 'Add department'}
+                          className="h-7 w-7 rounded-lg bg-[#00df89] hover:bg-[#00c97b] text-[#011812] flex items-center justify-center cursor-pointer shadow-xs transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingDept(false);
+                            setNewDeptInput('');
+                          }}
+                          title={lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                          className="h-7 w-7 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 flex items-center justify-center cursor-pointer transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Select
+                      value={empForm.department}
+                      onValueChange={(val) => {
+                        if (val === '__add_new__') {
+                          setIsAddingDept(true);
+                        } else if (val === '__manage_depts__') {
+                          setIsManageDeptsModalOpen(true);
+                        } else {
+                          setEmpForm({ ...empForm, department: val });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-xs bg-slate-50 dark:bg-[#09090b] border-slate-200 dark:border-zinc-800 focus:ring-[#00df89]">
+                        <SelectValue placeholder={lang === 'bn' ? 'বিভাগ নির্বাচন করুন' : 'Select Department'} />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {allDepartmentsList.map((d) => (
+                          <SelectItem
+                            key={d.id}
+                            value={d.id}
+                            onDelete={d.isCustom ? () => handleDeleteDepartment(d.id) : undefined}
+                            deleteTitle={lang === 'bn' ? `'${d.id}' মুছে ফেলুন` : `Delete '${d.id}'`}
+                          >
+                            {d.label}
+                          </SelectItem>
+                        ))}
+                        <SelectItem
+                          value="__add_new__"
+                          className="font-bold text-[#00a86b] dark:text-[#00df89] border-t border-slate-100 dark:border-zinc-800 mt-1 pt-1.5 focus:bg-emerald-500/10 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>{lang === 'bn' ? '+ নতুন বিভাগ যোগ করুন...' : '+ Add New Department...'}</span>
+                          </div>
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        <SelectItem
+                          value="__manage_depts__"
+                          className="text-slate-600 dark:text-zinc-300 font-semibold focus:bg-slate-500/10 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <Settings className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{lang === 'bn' ? 'বিভাগ মুছুন বা পরিচালনা...' : 'Manage / Delete Departments...'}</span>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
 
@@ -1101,10 +1703,10 @@ export default function Employees() {
                     type="number"
                     min="0"
                     required
-                    placeholder="20000"
+                    placeholder="0.00"
                     value={empForm.salary}
                     onChange={(e) => setEmpForm({ ...empForm, salary: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none font-mono text-xs"
+                    className="w-full h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none font-mono text-xs focus:ring-2 focus:ring-[#00df89]"
                   />
                 </div>
 
@@ -1114,10 +1716,10 @@ export default function Employees() {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. 8 hrs/day"
+                    placeholder={lang === 'bn' ? 'যেমন: ৮ ঘণ্টা/দিন (৯টা - ৫টা)' : 'e.g. 8 hrs/day (9:00 AM - 5:00 PM)'}
                     value={empForm.working_hours}
                     onChange={(e) => setEmpForm({ ...empForm, working_hours: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                    className="w-full h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-2 focus:ring-[#00df89]"
                   />
                 </div>
 
@@ -1127,10 +1729,10 @@ export default function Employees() {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. 6 days/week"
+                    placeholder={lang === 'bn' ? 'যেমন: ৬ দিন/সপ্তাহ' : 'e.g. 6 days/week'}
                     value={empForm.work_days}
                     onChange={(e) => setEmpForm({ ...empForm, work_days: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs"
+                    className="w-full h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-2 focus:ring-[#00df89]"
                   />
                 </div>
               </div>
@@ -1336,6 +1938,135 @@ export default function Employees() {
                 className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold gap-1 cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" /> {lang === 'bn' ? 'ভাউচার প্রিন্ট' : 'Print Slip'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* MANAGE DEPARTMENTS MODAL                             */}
+      {/* ---------------------------------------------------- */}
+      {isManageDeptsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-md w-full p-5 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00a86b] dark:text-[#00df89]">
+                  <FolderKanban className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                    {lang === 'bn' ? 'কর্মচারী বিভাগ পরিচালনা' : 'Manage Departments'}
+                  </h2>
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                    {lang === 'bn' ? 'কাস্টম বিভাগ তৈরি বা মুছে ফেলুন' : 'Create or delete staff departments'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsManageDeptsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Add Inside Manager */}
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? '+ নতুন বিভাগ যুক্ত করুন' : '+ Add New Department'}
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  placeholder={lang === 'bn' ? 'যেমন: কাস্টমার কেয়ার, সিকিউরিটি' : 'e.g. Support, Security'}
+                  value={newDeptInput}
+                  onChange={(e) => setNewDeptInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddNewDepartment();
+                    }
+                  }}
+                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-2 focus:ring-[#00df89] text-slate-900 dark:text-white"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleAddNewDepartment}
+                  className="h-8 px-3 bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold cursor-pointer shrink-0"
+                >
+                  {lang === 'bn' ? 'যোগ' : 'Add'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Department List */}
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 px-1 pt-1">
+                {lang === 'bn' ? 'সকল বিভাগ তালিকা' : 'All Departments List'} ({allDepartmentsList.length})
+              </div>
+
+              {allDepartmentsList.map((d) => {
+                const usageCount = employees.filter(
+                  (e) => e.department?.toLowerCase() === d.id.toLowerCase()
+                ).length;
+
+                return (
+                  <div
+                    key={d.id}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 dark:bg-zinc-900/50 border border-slate-100 dark:border-zinc-800/80 text-xs"
+                  >
+                    <div className="flex items-center gap-2 truncate pr-2">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <div className="truncate">
+                        <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                          {d.label}
+                        </span>
+                        {usageCount > 0 && (
+                          <span className="text-[10px] text-slate-400 ml-1.5">
+                            ({usageCount} {lang === 'bn' ? 'জন কর্মী' : 'staff'})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {d.isCustom ? (
+                        <>
+                          <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] px-1.5 py-0.5">
+                            {lang === 'bn' ? 'কাস্টম' : 'Custom'}
+                          </Badge>
+                          <button
+                            type="button"
+                            title={lang === 'bn' ? `'${d.id}' মুছে ফেলুন` : `Delete '${d.id}'`}
+                            onClick={() => handleDeleteDepartment(d.id)}
+                            className="h-7 px-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>{lang === 'bn' ? 'মুছুন' : 'Delete'}</span>
+                          </button>
+                        </>
+                      ) : (
+                        <Badge variant="secondary" className="bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-[10px] px-1.5 py-0.5">
+                          {lang === 'bn' ? 'সিস্টেম' : 'Default'}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-zinc-800">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setIsManageDeptsModalOpen(false)}
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs cursor-pointer"
+              >
+                {lang === 'bn' ? 'সম্পন্ন' : 'Done'}
               </Button>
             </div>
           </Card>

@@ -19,7 +19,7 @@ import {
   Store, Search, Plus, Minus, Trash2, CheckCircle2,
   Printer, ArrowLeft, RefreshCw, Loader2, Sparkles, Package,
   Percent, Coins, X, User, UserCheck, Phone, Layers,
-  Crown, Star, Gift, Award
+  Crown, Star, Gift, Award, Check
 } from 'lucide-react';
 
 const getTierBadgeStyle = (rawColor = '#10b981') => {
@@ -47,6 +47,8 @@ export default function POS() {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [discountType, setDiscountType] = useState('flat'); // 'flat' | 'percentage'
   const [discountValue, setDiscountValue] = useState('');
+  const [discountScope, setDiscountScope] = useState('all'); // 'all' | 'selected'
+  const [selectedDiscountItemIds, setSelectedDiscountItemIds] = useState([]);
   const [cashGiven, setCashGiven] = useState('');
   const [duePaidAmount, setDuePaidAmount] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -182,11 +184,30 @@ export default function POS() {
 
   const addToCart = (prod) => {
     if (prod.has_variants && Array.isArray(prod.variants) && prod.variants.length > 0) {
+      const totalVarStock = prod.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0);
+      if (totalVarStock <= 0) {
+        toast.error(lang === 'bn' ? `দুঃখিত! '${prod.name}' স্টকে নেই (Out of stock)` : `Sorry! '${prod.name}' is out of stock.`);
+        return;
+      }
       setVariantPickerProduct(prod);
       return;
     }
+
+    const availableStock = Number(prod.stock_quantity ?? prod.stock ?? 0);
+    if (availableStock <= 0) {
+      toast.error(lang === 'bn' ? `দুঃখিত! '${prod.name}' স্টকে নেই (Out of stock)` : `Sorry! '${prod.name}' is out of stock.`);
+      return;
+    }
+
     const cartKey = String(prod._id);
     const exists = cart.find(c => c.cart_id === cartKey || c.id === cartKey);
+    const currentQty = exists ? (Number(exists.qty) || 0) : 0;
+
+    if (currentQty + 1 > availableStock) {
+      toast.error(lang === 'bn' ? `স্টকে মাত্র ${availableStock} টি রয়েছে!` : `Only ${availableStock} units available in stock!`);
+      return;
+    }
+
     if (exists) {
       setCart(cart.map(c => (c.cart_id === cartKey || c.id === cartKey) ? { ...c, qty: c.qty + 1 } : c));
     } else {
@@ -197,16 +218,30 @@ export default function POS() {
         name: prod.name,
         price: prod.selling_price,
         qty: 1,
+        max_stock: availableStock,
         unit: prod.unit || 'pcs'
       }]);
     }
   };
 
   const addVariantToCart = (parentProd, variant) => {
+    const availableStock = Number(variant.stock_quantity ?? 0);
+    if (availableStock <= 0) {
+      toast.error(lang === 'bn' ? `দুঃখিত! '${variant.name}' স্টকে নেই (Out of stock)` : `Sorry! '${variant.name}' is out of stock.`);
+      return;
+    }
+
     const parentId = parentProd._id || parentProd.id;
     const variantId = variant._id || variant.id;
     const cartKey = `${parentId}_${variantId}`;
     const exists = cart.find(c => c.cart_id === cartKey || c.id === cartKey);
+    const currentQty = exists ? (Number(exists.qty) || 0) : 0;
+
+    if (currentQty + 1 > availableStock) {
+      toast.error(lang === 'bn' ? `স্টকে মাত্র ${availableStock} টি রয়েছে!` : `Only ${availableStock} units available in stock!`);
+      return;
+    }
+
     if (exists) {
       setCart(cart.map(c => (c.cart_id === cartKey || c.id === cartKey) ? { ...c, qty: c.qty + 1 } : c));
     } else {
@@ -219,6 +254,7 @@ export default function POS() {
         name: `${parentProd.name} (${variant.name})`,
         price: variant.selling_price || parentProd.selling_price,
         qty: 1,
+        max_stock: availableStock,
         unit: parentProd.unit || 'pcs',
       }]);
     }
@@ -232,27 +268,82 @@ export default function POS() {
     updateQty(cartKey, delta);
   };
 
+  const setItemQty = (id, newQty) => {
+    setCart((prev) =>
+      prev.map((c) => {
+        if (c.cart_id === id || c.id === id) {
+          if (newQty === '') return { ...c, qty: '' };
+          let q = Math.max(1, parseInt(newQty, 10) || 1);
+          if (c.max_stock && q > c.max_stock) {
+            q = c.max_stock;
+            toast.error(lang === 'bn' ? `স্টকে মাত্র ${c.max_stock} টি রয়েছে!` : `Only ${c.max_stock} units available in stock!`);
+          }
+          return { ...c, qty: q };
+        }
+        return c;
+      })
+    );
+  };
+
   const updateQty = (id, delta) => {
-    setCart(cart.map(c => {
-      if (c.cart_id === id || c.id === id) {
-        const n = c.qty + delta;
-        return n > 0 ? { ...c, qty: n } : null;
-      }
-      return c;
-    }).filter(Boolean));
+    setCart((prev) =>
+      prev
+        .map((c) => {
+          if (c.cart_id === id || c.id === id) {
+            const currentQty = typeof c.qty === 'number' ? c.qty : (parseInt(c.qty, 10) || 1);
+            const n = currentQty + delta;
+            if (delta > 0 && c.max_stock && n > c.max_stock) {
+              toast.error(lang === 'bn' ? `স্টকে মাত্র ${c.max_stock} টি রয়েছে!` : `Only ${c.max_stock} units available in stock!`);
+              return c;
+            }
+            return n > 0 ? { ...c, qty: n } : null;
+          }
+          return c;
+        })
+        .filter(Boolean)
+    );
+  };
+
+  // Sync selected discount item IDs cleanly
+  const toggleDiscountItem = (id) => {
+    setSelectedDiscountItemIds((prev) => {
+      const currentIds = cart.map((c) => c.cart_id || c.id);
+      const activeList = prev.length > 0 ? prev.filter((x) => currentIds.includes(x)) : currentIds;
+      return activeList.includes(id) ? activeList.filter((x) => x !== id) : [...activeList, id];
+    });
+  };
+
+  const selectAllDiscountItems = () => {
+    setSelectedDiscountItemIds(cart.map((c) => c.cart_id || c.id));
+  };
+
+  const clearAllDiscountItems = () => {
+    setSelectedDiscountItemIds([]);
   };
 
   const subtotal = useMemo(() => {
-    return cart.reduce((acc, c) => acc + (c.price * c.qty), 0);
+    return cart.reduce((acc, c) => acc + c.price * (Number(c.qty) || 1), 0);
   }, [cart]);
+
+  const eligibleSubtotal = useMemo(() => {
+    if (discountScope === 'all') return subtotal;
+    const currentIds = new Set(cart.map((c) => c.cart_id || c.id));
+    const effectiveSelected = selectedDiscountItemIds.length > 0
+      ? selectedDiscountItemIds.filter((id) => currentIds.has(id))
+      : [];
+    return cart
+      .filter((c) => effectiveSelected.includes(c.cart_id || c.id))
+      .reduce((acc, c) => acc + c.price * (Number(c.qty) || 1), 0);
+  }, [cart, subtotal, discountScope, selectedDiscountItemIds]);
 
   const discountAmount = useMemo(() => {
     const val = parseFloat(discountValue) || 0;
+    if (val <= 0 || eligibleSubtotal <= 0) return 0;
     if (discountType === 'percentage') {
-      return (subtotal * val) / 100;
+      return (eligibleSubtotal * val) / 100;
     }
-    return Math.min(val, subtotal);
-  }, [subtotal, discountType, discountValue]);
+    return Math.min(val, eligibleSubtotal);
+  }, [eligibleSubtotal, discountType, discountValue]);
 
   // Reward Points Calculations for POS
   const memberPointsAvailable = useMemo(() => {
@@ -503,72 +594,85 @@ export default function POS() {
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 max-h-[65vh] overflow-y-auto pr-1">
-              {filtered.map((p) => (
-                <Card
-                  key={p._id}
-                  onClick={() => addToCart(p)}
-                  className="p-3.5 rounded-2xl border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] cursor-pointer hover:border-[#00df89] hover:shadow-md transition-all flex flex-col justify-between"
-                >
-                  <div className="space-y-2.5">
-                    {/* Consistent Image Container with Fallback */}
-                    <div className="w-full h-28 sm:h-32 rounded-xl overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60 border border-slate-200/60 dark:border-zinc-800/60 flex items-center justify-center relative group">
-                      {p.image_url ? (
-                        <img
-                          src={p.image_url}
-                          alt={p.name}
-                          className="w-full h-full object-contain p-1.5 transition-transform duration-200 group-hover:scale-105"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            if (e.target.nextSibling) {
-                              e.target.nextSibling.style.display = 'flex';
-                            }
-                          }}
-                        />
-                      ) : null}
-                      
-                      <div
-                        className={`w-full h-full flex flex-col items-center justify-center gap-1.5 text-slate-400 dark:text-zinc-600 ${
-                          p.image_url ? 'hidden' : 'flex'
-                        }`}
-                      >
-                        <Package className="w-8 h-8 stroke-[1.25] text-slate-300 dark:text-zinc-600" />
-                        <span className="text-[10px] font-medium text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
-                          {p.category_id?.name || 'General'}
-                        </span>
+              {filtered.map((p) => {
+                const hasVariants = p.has_variants && Array.isArray(p.variants) && p.variants.length > 0;
+                const totalStock = hasVariants
+                  ? p.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0)
+                  : (Number(p.stock_quantity ?? p.stock) || 0);
+                const isOutOfStock = totalStock <= 0;
+
+                return (
+                  <Card
+                    key={p._id}
+                    onClick={() => addToCart(p)}
+                    className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between relative overflow-hidden dark:bg-[#121215] ${
+                      isOutOfStock
+                        ? 'opacity-60 bg-slate-50/70 dark:bg-zinc-900/40 border-slate-200/60 dark:border-zinc-800/60 cursor-not-allowed hover:border-rose-300'
+                        : 'border-slate-200/90 dark:border-zinc-800/80 cursor-pointer hover:border-[#00df89] hover:shadow-md'
+                    }`}
+                  >
+                    {isOutOfStock && (
+                      <div className="absolute top-2.5 right-2.5 z-10 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold shadow-xs">
+                        {lang === 'bn' ? 'স্টক শেষ' : 'Out of Stock'}
+                      </div>
+                    )}
+
+                    <div className="space-y-2.5">
+                      {/* Consistent Image Container with Fallback */}
+                      <div className="w-full h-28 sm:h-32 rounded-xl overflow-hidden bg-slate-100/70 dark:bg-zinc-900/60 border border-slate-200/60 dark:border-zinc-800/60 flex items-center justify-center relative group">
+                        {p.image_url ? (
+                          <img
+                            src={p.image_url}
+                            alt={p.name}
+                            className="w-full h-full object-contain p-1.5 transition-transform duration-200 group-hover:scale-105"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.nextSibling) {
+                                e.target.nextSibling.style.display = 'flex';
+                              }
+                            }}
+                          />
+                        ) : null}
+                        
+                        <div
+                          className={`w-full h-full flex flex-col items-center justify-center gap-1.5 text-slate-400 dark:text-zinc-600 ${
+                            p.image_url ? 'hidden' : 'flex'
+                          }`}
+                        >
+                          <Package className="w-8 h-8 stroke-[1.25] text-slate-300 dark:text-zinc-600" />
+                          <span className="text-[10px] font-medium text-slate-400 dark:text-zinc-500 uppercase tracking-wider">
+                            {p.category_id?.name || 'General'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[11px] text-slate-400 font-mono block truncate tracking-wide">{p.sku || 'SKU'}</span>
+                        <h4 className="text-sm sm:text-[15px] font-bold text-slate-900 dark:text-white line-clamp-2 leading-snug">{p.name}</h4>
                       </div>
                     </div>
 
-                    <div className="space-y-1">
-                      <span className="text-[11px] text-slate-400 font-mono block truncate tracking-wide">{p.sku || 'SKU'}</span>
-                      <h4 className="text-sm sm:text-[15px] font-bold text-slate-900 dark:text-white line-clamp-2 leading-snug">{p.name}</h4>
+                    <div className="pt-2.5 mt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-1">
+                      <span className="text-sm sm:text-base font-bold text-[#00a86b] dark:text-[#00df89]">৳ {p.selling_price.toLocaleString()}</span>
+                      {hasVariants ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`text-[11px] font-semibold ${totalStock <= 0 ? 'text-rose-500 font-bold' : 'text-slate-500 dark:text-zinc-400'}`}>
+                            {totalStock} {p.unit ? (p.unit === 'piece' ? 'pcs' : p.unit) : 'left'}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30 flex items-center gap-1">
+                            <Layers className="w-2.5 h-2.5" />
+                            <span>{p.variants.length} Variants</span>
+                          </span>
+                        </div>
+                      ) : (
+                        <span className={`text-xs font-semibold ${totalStock <= 0 ? 'text-rose-500 font-bold' : 'text-slate-400 dark:text-zinc-400'}`}>
+                          {totalStock} {p.unit ? (p.unit === 'piece' ? 'pcs' : p.unit) : 'left'}
+                        </span>
+                      )}
                     </div>
-                  </div>
-
-                  <div className="pt-2.5 mt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-1">
-                    <span className="text-sm sm:text-base font-bold text-[#00a86b] dark:text-[#00df89]">৳ {p.selling_price.toLocaleString()}</span>
-                    {p.has_variants && Array.isArray(p.variants) && p.variants.length > 0 ? (
-                      (() => {
-                        const totalVarStock = p.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0);
-                        return (
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className={`text-[11px] font-semibold ${totalVarStock <= 0 ? 'text-rose-500 font-bold' : 'text-slate-500 dark:text-zinc-400'}`}>
-                              {totalVarStock} {p.unit ? (p.unit === 'piece' ? 'pcs' : p.unit) : 'left'}
-                            </span>
-                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30 flex items-center gap-1">
-                              <Layers className="w-2.5 h-2.5" />
-                              <span>{p.variants.length} Variants</span>
-                            </span>
-                          </div>
-                        );
-                      })()
-                    ) : (
-                      <span className={`text-xs font-semibold ${(p.stock_quantity || 0) <= 0 ? 'text-rose-500 font-bold' : 'text-slate-400 dark:text-zinc-400'}`}>
-                        {p.stock_quantity || 0} {p.unit ? (p.unit === 'piece' ? 'pcs' : p.unit) : 'left'}
-                      </span>
-                    )}
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
           )}
         </div>
@@ -586,26 +690,93 @@ export default function POS() {
               </div>
             ) : (
               <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
-                {cart.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between text-xs bg-slate-50 dark:bg-[#09090b] p-2 rounded-xl border border-slate-100 dark:border-zinc-800">
-                    <div className="flex-1 min-w-0 pr-2">
-                      <div className="font-semibold truncate text-slate-900 dark:text-white">{c.name}</div>
-                      <div className="text-[10px] text-slate-400">৳ {c.price} x {c.qty}</div>
+                {cart.map((c) => {
+                  const itemId = c.cart_id || c.id;
+                  const isDiscountEligible = selectedDiscountItemIds.includes(itemId);
+
+                  return (
+                    <div
+                      key={itemId}
+                      className={`flex items-center justify-between text-xs p-2 rounded-xl border transition-colors ${
+                        discountScope === 'selected' && isDiscountEligible
+                          ? 'bg-purple-500/5 dark:bg-purple-500/10 border-purple-500/30'
+                          : 'bg-slate-50 dark:bg-[#09090b] border-slate-100 dark:border-zinc-800'
+                      }`}
+                    >
+                      {discountScope === 'selected' && (
+                        <button
+                          type="button"
+                          onClick={() => toggleDiscountItem(itemId)}
+                          className={`w-3.5 h-3.5 mr-1.5 rounded flex items-center justify-center border transition-colors cursor-pointer shrink-0 ${
+                            isDiscountEligible
+                              ? 'bg-purple-600 border-purple-600 text-white'
+                              : 'border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900'
+                          }`}
+                        >
+                          {isDiscountEligible && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                        </button>
+                      )}
+
+                      <div className="flex-1 min-w-0 pr-2">
+                        <div className="font-semibold truncate text-slate-900 dark:text-white flex items-center gap-1">
+                          <span>{c.name}</span>
+                          {discountScope === 'selected' && isDiscountEligible && (
+                            <span className="text-[8px] font-bold px-1 rounded bg-purple-500/20 text-purple-600 dark:text-purple-400">
+                              %
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400">৳ {c.price} x {c.qty}</div>
+                      </div>
+
+                      {/* Quantity Input Box with +/- buttons (STRICTLY CAPPED BY STOCK) */}
+                      <div className="flex items-center gap-0.5 bg-white dark:bg-zinc-800 rounded-lg p-0.5 border border-slate-200 dark:border-zinc-700">
+                        <button
+                          type="button"
+                          onClick={() => updateQty(itemId, -1)}
+                          className="w-5 h-5 flex items-center justify-center text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-zinc-700 cursor-pointer"
+                        >
+                          <Minus className="w-2.5 h-2.5" />
+                        </button>
+
+                        <input
+                          type="number"
+                          min="1"
+                          max={c.max_stock}
+                          value={c.qty}
+                          onChange={(e) => setItemQty(itemId, e.target.value)}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (isNaN(val) || val < 1) {
+                              setItemQty(itemId, 1);
+                            } else if (c.max_stock && val > c.max_stock) {
+                              setItemQty(itemId, c.max_stock);
+                            }
+                          }}
+                          className="w-8 text-center font-bold font-mono text-xs bg-transparent border-0 outline-none text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none p-0 focus:ring-1 focus:ring-[#00df89] rounded"
+                        />
+
+                        <button
+                          type="button"
+                          disabled={c.max_stock !== undefined && (Number(c.qty) || 1) >= c.max_stock}
+                          onClick={() => updateQty(itemId, 1)}
+                          title={c.max_stock !== undefined && (Number(c.qty) || 1) >= c.max_stock ? `Maximum stock reached (${c.max_stock})` : 'Increase quantity'}
+                          className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
+                            c.max_stock !== undefined && (Number(c.qty) || 1) >= c.max_stock
+                              ? 'opacity-30 text-slate-300 dark:text-zinc-600 cursor-not-allowed'
+                              : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-700 cursor-pointer'
+                          }`}
+                        >
+                          <Plus className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+
+                      <div className="w-14 text-right font-bold text-slate-900 dark:text-white font-mono">
+                        ৳ {(c.price * (Number(c.qty) || 1)).toLocaleString()}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => updateQty(c.id, -1)} className="w-5 h-5 flex items-center justify-center bg-white dark:bg-zinc-800 rounded cursor-pointer">
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="w-5 text-center font-bold">{c.qty}</span>
-                      <button onClick={() => updateQty(c.id, 1)} className="w-5 h-5 flex items-center justify-center bg-white dark:bg-zinc-800 rounded cursor-pointer">
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
-                    <div className="w-14 text-right font-bold text-slate-900 dark:text-white">
-                      ৳ {(c.price * c.qty).toLocaleString()}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -857,8 +1028,8 @@ export default function POS() {
               )}
             </div>
 
-            {/* DISCOUNT INPUT (FLAT / PERCENT) */}
-            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-xs">
+            {/* DISCOUNT INPUT (FLAT / PERCENT & ALL CART VS SELECTED ITEMS) */}
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2 text-xs">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1">
                   <Percent className="w-3 h-3 text-[#00df89]" /> Discount:
@@ -880,13 +1051,83 @@ export default function POS() {
                   </button>
                 </div>
               </div>
-              <input
-                type="number"
-                placeholder={discountType === 'flat' ? 'Discount Amount (৳)' : 'Discount (%)'}
-                value={discountValue}
-                onChange={(e) => setDiscountValue(e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-1 focus:ring-[#00df89]"
-              />
+
+              {/* Discount Scope Toggle */}
+              <div className="grid grid-cols-2 gap-1 bg-slate-200/70 dark:bg-zinc-800/80 p-0.5 rounded-md text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setDiscountScope('all')}
+                  className={`py-0.5 px-1 rounded font-semibold transition-all ${
+                    discountScope === 'all'
+                      ? 'bg-white dark:bg-zinc-900 text-[#00a86b] dark:text-[#00df89] shadow-xs'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  All Items
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscountScope('selected')}
+                  className={`py-0.5 px-1 rounded font-semibold transition-all ${
+                    discountScope === 'selected'
+                      ? 'bg-white dark:bg-zinc-900 text-purple-600 dark:text-purple-400 shadow-xs'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  Selected ({selectedDiscountItemIds.length})
+                </button>
+              </div>
+
+              {/* Selected Items Dropdown/List when 'selected' mode is active */}
+              {discountScope === 'selected' && cart.length > 0 && (
+                <div className="p-1.5 rounded-md bg-purple-500/5 dark:bg-purple-500/10 border border-purple-500/20 space-y-1 text-[10px]">
+                  <div className="flex justify-between items-center text-purple-700 dark:text-purple-300 font-semibold">
+                    <span>Items ({selectedDiscountItemIds.length}/{cart.length})</span>
+                    <div className="flex items-center gap-1.5">
+                      <button type="button" onClick={selectAllDiscountItems} className="hover:underline">All</button>
+                      <span>&middot;</span>
+                      <button type="button" onClick={clearAllDiscountItems} className="hover:underline text-slate-400">Clear</button>
+                    </div>
+                  </div>
+                  <div className="max-h-20 overflow-y-auto space-y-0.5 pr-0.5">
+                    {cart.map((c) => {
+                      const itemId = c.cart_id || c.id;
+                      const isSel = selectedDiscountItemIds.includes(itemId);
+                      return (
+                        <div
+                          key={itemId}
+                          onClick={() => toggleDiscountItem(itemId)}
+                          className={`flex justify-between items-center p-1 rounded cursor-pointer ${
+                            isSel ? 'bg-purple-500/15 font-medium' : 'bg-white dark:bg-zinc-900 text-slate-400'
+                          }`}
+                        >
+                          <span className="truncate">{c.name}</span>
+                          <span className="font-mono font-bold">৳{(c.price * (Number(c.qty) || 1)).toLocaleString()}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between pt-0.5 border-t border-purple-500/20 text-purple-700 dark:text-purple-300">
+                    <span>Eligible:</span>
+                    <span className="font-mono font-bold">৳{eligibleSubtotal.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="relative">
+                <input
+                  type="number"
+                  placeholder={discountType === 'flat' ? 'Discount Amount (৳)' : 'Discount (%)'}
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-1 focus:ring-[#00df89]"
+                />
+                {discountAmount > 0 && (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-rose-500">
+                    - ৳{discountAmount.toLocaleString()}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* PAYMENT METHOD TABS */}

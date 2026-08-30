@@ -142,31 +142,32 @@ export default function Dashboard() {
       </div>
 
       {/* ---------------------------------------------------- */}
-      {/* TOP STAT CARDS ROW (4 Columns)                       */}
       {/* ---------------------------------------------------- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* TOP STAT CARDS ROW (2 Columns on Mobile, 4 on Desktop) */}
+      {/* ---------------------------------------------------- */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {statCardsData.map((stat, idx) => {
           const Icon = stat.icon;
           return (
-            <Card key={idx} className="p-5 hover:shadow-xs transition-shadow border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-              <div className="flex items-center justify-between">
-                <span className="text-xs sm:text-sm font-medium text-slate-600 dark:text-zinc-400">
+            <Card key={idx} className="p-3.5 sm:p-5 hover:shadow-xs transition-shadow border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-1.5">
+                <span className="text-[11px] sm:text-sm font-medium text-slate-600 dark:text-zinc-400 truncate">
                   {stat.title}
                 </span>
-                <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800/80 text-slate-500 dark:text-zinc-400 flex items-center justify-center">
-                  <Icon className="w-4 h-4" />
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-100 dark:bg-zinc-800/80 text-slate-500 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
               </div>
 
-              <div className="mt-3 space-y-1">
-                <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+              <div className="mt-2.5 sm:mt-3 space-y-1">
+                <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
                   {isLoadingMetrics ? (
                     <div className="h-8 w-24 bg-slate-200 dark:bg-zinc-800 animate-pulse rounded-md" />
                   ) : (
                     stat.value
                   )}
                 </div>
-                <div className="flex items-center gap-1 text-xs font-medium">
+                <div className="flex items-center gap-1 text-[10px] sm:text-xs font-medium truncate">
                   <span className={stat.isPositive ? 'text-[#00a86b] dark:text-[#00df89]' : 'text-amber-500'}>
                     {stat.change}
                   </span>
@@ -340,17 +341,17 @@ export default function Dashboard() {
             ))}
           </div>
         ) : recentProducts.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
+          <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
+            <table className="w-full text-xs text-left min-w-[700px]">
               <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-500 border-b border-slate-200 dark:border-zinc-800">
                 <tr>
-                  <th className="p-3">{lang === 'bn' ? 'পণ্যের নাম' : 'Product Name'}</th>
-                  <th className="p-3">{lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}</th>
-                  <th className="p-3">{lang === 'bn' ? 'এসকেইউ (SKU)' : 'SKU'}</th>
-                  <th className="p-3">{lang === 'bn' ? 'বিক্রয় মূল্য' : 'Selling Price'}</th>
-                  <th className="p-3">{lang === 'bn' ? 'স্টক সংখ্যা' : 'Stock Level'}</th>
-                  <th className="p-3">{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
-                  <th className="p-3 text-right">{lang === 'bn' ? 'অ্যাকশন' : 'Action'}</th>
+                  <th className="p-3 whitespace-nowrap">{lang === 'bn' ? 'পণ্যের নাম' : 'Product Name'}</th>
+                  <th className="p-3 whitespace-nowrap">{lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}</th>
+                  <th className="p-3 whitespace-nowrap">{lang === 'bn' ? 'এসকেইউ (SKU)' : 'SKU'}</th>
+                  <th className="p-3 whitespace-nowrap">{lang === 'bn' ? 'বিক্রয় মূল্য' : 'Selling Price'}</th>
+                  <th className="p-3 whitespace-nowrap">{lang === 'bn' ? 'স্টক সংখ্যা' : 'Stock Level'}</th>
+                  <th className="p-3 whitespace-nowrap">{lang === 'bn' ? 'স্ট্যাটাস' : 'Status'}</th>
+                  <th className="p-3 whitespace-nowrap text-right">{lang === 'bn' ? 'অ্যাকশন' : 'Action'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
@@ -359,7 +360,7 @@ export default function Dashboard() {
                   const isOut = p.stock_quantity <= 0;
                   return (
                     <tr key={p._id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                      <td className="p-3 font-semibold text-slate-900 dark:text-white flex items-center gap-2.5">
+                      <td className="p-3 font-semibold text-slate-900 dark:text-white flex items-center gap-2.5 whitespace-nowrap">
                         {p.image_url || (Array.isArray(p.images) && p.images[0]) ? (
                           <img
                             src={p.image_url || p.images[0]}
@@ -372,36 +373,36 @@ export default function Dashboard() {
                         ) : (
                           <Package className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         )}
-                        <span className="truncate">{p.name}</span>
+                        <span className="truncate max-w-[200px]">{p.name}</span>
                       </td>
-                      <td className="p-3 text-slate-500 dark:text-zinc-400">
-                        <Badge variant="secondary" className="text-[10px]">
+                      <td className="p-3 text-slate-500 dark:text-zinc-400 whitespace-nowrap">
+                        <Badge variant="secondary" className="text-[10px] whitespace-nowrap">
                           {p.category_id?.name || (lang === 'bn' ? 'সাধারণ' : 'General')}
                         </Badge>
                       </td>
-                      <td className="p-3 font-mono text-[11px] text-slate-400">
+                      <td className="p-3 font-mono text-[11px] text-slate-400 whitespace-nowrap">
                         {toBn(p.sku || 'N/A')}
                       </td>
-                      <td className="p-3 font-semibold text-slate-900 dark:text-white">
+                      <td className="p-3 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
                         {formatPrice(p.selling_price || 0)}
                       </td>
-                      <td className="p-3 text-slate-700 dark:text-zinc-300 font-medium">
+                      <td className="p-3 text-slate-700 dark:text-zinc-300 font-medium whitespace-nowrap">
                         {formatNumber(p.stock_quantity)} {p.unit ? (lang === 'bn' && p.unit === 'pcs' ? 'টি' : p.unit) : (lang === 'bn' ? 'টি' : 'pcs')}
                       </td>
-                      <td className="p-3">
+                      <td className="p-3 whitespace-nowrap">
                         <Badge
                           variant={isOut ? 'destructive' : isLow ? 'destructive' : 'default'}
-                          className="text-[10px] capitalize font-normal"
+                          className="text-[10px] capitalize font-normal whitespace-nowrap inline-flex items-center"
                         >
                           {isOut ? (lang === 'bn' ? 'স্টক শেষ' : 'Out of Stock') : isLow ? (lang === 'bn' ? 'স্বল্প স্টক' : 'Low Stock') : (lang === 'bn' ? 'স্টকে আছে' : 'In Stock')}
                         </Badge>
                       </td>
-                      <td className="p-3 text-right">
+                      <td className="p-3 text-right whitespace-nowrap">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => navigate('/products')}
-                          className="h-7 text-[11px] px-2 text-[#00a86b] dark:text-[#00df89]"
+                          className="h-7 text-[11px] px-2 text-[#00a86b] dark:text-[#00df89] whitespace-nowrap"
                         >
                           {lang === 'bn' ? 'সম্পাদনা' : 'Edit'}
                         </Button>

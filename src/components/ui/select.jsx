@@ -306,7 +306,7 @@ export function SelectItem({
               e.preventDefault();
               onDelete(value, itemText);
             }}
-            className="opacity-0 group-hover:opacity-100 hover:opacity-100 p-1 rounded-md hover:bg-rose-500/15 text-slate-400 hover:text-rose-500 transition-all cursor-pointer"
+            className="opacity-60 hover:opacity-100 p-1 rounded-md hover:bg-rose-500/15 text-rose-500/80 hover:text-rose-500 transition-all cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

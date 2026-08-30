@@ -573,6 +573,12 @@ export const printPurchaseReceipt = ({ purchase, shop, lang = 'en' }) => {
   const paymentStatus = (purchase.payment_status || 'paid').toUpperCase();
 
   const items = Array.isArray(purchase.items) ? purchase.items : [];
+  const isOwnProd = Boolean(
+    purchase.is_own_product ||
+    purchase.supplier_name === 'Own Product / In-house' ||
+    purchase.supplier_name?.toLowerCase()?.includes('own product')
+  );
+
   const totalAmount = Number(purchase.total_amount || 0);
   const discount = Number(purchase.discount || 0);
   const netAmount = Number(purchase.net_amount || (totalAmount - discount));
@@ -687,34 +693,45 @@ export const printPurchaseReceipt = ({ purchase, shop, lang = 'en' }) => {
 
   <!-- Calculations -->
   <div style="margin-top: 4px;">
-    <div class="totals-row">
-      <span>${isBn ? 'মোট খরচ (Subtotal):' : 'Subtotal Gross:'}</span>
-      <span>৳${totalAmount.toLocaleString()}</span>
-    </div>
-
-    ${discount > 0 ? `
-      <div class="totals-row" style="color: #b91c1c;">
-        <span>${isBn ? 'ছাড় (Discount):' : 'Discount:'}</span>
-        <span>- ৳${discount.toLocaleString()}</span>
+    ${isOwnProd ? `
+      <div class="grand-total" style="color: #6b21a8; border-color: #6b21a8;">
+        <span>${isBn ? 'ইনভেন্টরি ধরন:' : 'Stock Category:'}</span>
+        <span>${isBn ? 'নিজের পণ্য (ইন-হাউস)' : 'Own Product (In-house)'}</span>
       </div>
-    ` : ''}
-
-    <div class="grand-total">
-      <span>${isBn ? 'প্রদেয় নিট মূল্য:' : 'Net Payable:'}</span>
-      <span>৳${netAmount.toLocaleString()}</span>
-    </div>
-
-    <div class="totals-row" style="margin-top: 3px;">
-      <span>${isBn ? 'পরিশোধিত টাকা (Paid):' : 'Paid Amount:'}</span>
-      <span class="font-bold">৳${paidAmount.toLocaleString()}</span>
-    </div>
-
-    ${dueAmount > 0 ? `
-      <div class="totals-row font-bold" style="color: #b45309; border-top: 1px dashed #777; padding-top: 2px;">
-        <span>${isBn ? 'বকেয়া টাকা (Due):' : 'Due Balance:'}</span>
-        <span>৳${dueAmount.toLocaleString()}</span>
+      <div class="totals-row" style="font-size: 10px; color: #555; margin-top: 3px;">
+        <span>${isBn ? 'সাপ্লায়ার প্রদেয়:' : 'Supplier Payable:'}</span>
+        <span>${isBn ? 'কোনো দেনা নেই (০ টাকা)' : 'No Debt (৳0)'}</span>
       </div>
-    ` : ''}
+    ` : `
+      <div class="totals-row">
+        <span>${isBn ? 'মোট খরচ (Subtotal):' : 'Subtotal Gross:'}</span>
+        <span>৳${totalAmount.toLocaleString()}</span>
+      </div>
+
+      ${discount > 0 ? `
+        <div class="totals-row" style="color: #b91c1c;">
+          <span>${isBn ? 'ছাড় (Discount):' : 'Discount:'}</span>
+          <span>- ৳${discount.toLocaleString()}</span>
+        </div>
+      ` : ''}
+
+      <div class="grand-total">
+        <span>${isBn ? 'প্রদেয় নিট মূল্য:' : 'Net Payable:'}</span>
+        <span>৳${netAmount.toLocaleString()}</span>
+      </div>
+
+      <div class="totals-row" style="margin-top: 3px;">
+        <span>${isBn ? 'পরিশোধিত টাকা (Paid):' : 'Paid Amount:'}</span>
+        <span class="font-bold">৳${paidAmount.toLocaleString()}</span>
+      </div>
+
+      ${dueAmount > 0 ? `
+        <div class="totals-row font-bold" style="color: #b45309; border-top: 1px dashed #777; padding-top: 2px;">
+          <span>${isBn ? 'বকেয়া টাকা (Due):' : 'Due Balance:'}</span>
+          <span>৳${dueAmount.toLocaleString()}</span>
+        </div>
+      ` : ''}
+    `}
   </div>
 
   <!-- Footer -->

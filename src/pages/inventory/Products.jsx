@@ -548,7 +548,8 @@ export default function Products() {
           sku: p.sku || 'N/A',
           barcode: p.barcode || '',
           category_id: matchingCat ? matchingCat._id : (catId || '__general__'),
-          supplier_id: p.supplier_id?._id || p.supplier_id || '',
+          supplier_id: p.is_own_product ? '__own_product__' : (p.supplier_id?._id || p.supplier_id || ''),
+          is_own_product: Boolean(p.is_own_product),
           category: catName,
           brand_id: matchingBrand ? matchingBrand._id : brandId,
           brand: brandName,
@@ -842,8 +843,11 @@ export default function Products() {
         ? (newProduct.variants || []).reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0) * (parseFloat(v.cost_price) || costPrice), 0)
         : (initialStock * costPrice);
 
+      const isOwnProduct = newProduct.supplier_id === '__own_product__';
       let calculatedPaid = 0;
-      if (newProduct.supplier_id) {
+      if (isOwnProduct) {
+        calculatedPaid = totalCost; // Own product - zero supplier payable
+      } else if (newProduct.supplier_id) {
         if (newProduct.payment_type === 'due') {
           calculatedPaid = 0;
         } else if (newProduct.payment_type === 'full') {
@@ -870,7 +874,8 @@ export default function Products() {
         category_id: finalCatId,
         brand_id: finalBrandId,
         brand: selectedBrand?.name || '',
-        supplier_id: newProduct.supplier_id || undefined,
+        supplier_id: isOwnProduct ? undefined : (newProduct.supplier_id || undefined),
+        is_own_product: isOwnProduct,
         sku: newProduct.sku ? newProduct.sku.trim() : undefined,
         barcode: newProduct.barcode ? newProduct.barcode.trim() : undefined,
         cost_price: costPrice,
@@ -1027,17 +1032,20 @@ export default function Products() {
       ];
     }
 
+    const isOwnProduct = restockForm.supplier_id === '__own_product__';
     const totalCost = purchaseItems.reduce((sum, it) => sum + it.total_cost, 0);
-    const paid = restockForm.paid_amount !== '' ? Number(restockForm.paid_amount) : totalCost;
+    const paid = isOwnProduct ? totalCost : (restockForm.paid_amount !== '' ? Number(restockForm.paid_amount) : totalCost);
 
     setIsSubmitting(true);
     try {
       await api.purchases.create({
-        supplier_id: restockForm.supplier_id || null,
+        supplier_id: isOwnProduct ? null : (restockForm.supplier_id || null),
+        supplier_name: isOwnProduct ? 'Own Product / In-house' : undefined,
+        is_own_product: isOwnProduct,
         items: purchaseItems,
         paid_amount: paid,
-        payment_method: restockForm.payment_method || 'cash',
-        notes: restockForm.notes || '',
+        payment_method: isOwnProduct ? 'in_house' : (restockForm.payment_method || 'cash'),
+        notes: isOwnProduct ? (restockForm.notes || 'In-house stock replenishment') : (restockForm.notes || ''),
       });
 
       // Prepare restocked items for 1-click printing
@@ -1126,12 +1134,12 @@ export default function Products() {
     );
     const resolvedBrandId = matchingBrand ? matchingBrand._id : (brandId || '');
 
-    let suppId = product.supplier_id || product.raw?.supplier_id;
+    let suppId = product.is_own_product ? '__own_product__' : (product.supplier_id || product.raw?.supplier_id);
     if (suppId && typeof suppId === 'object') {
       suppId = suppId._id;
     }
     const matchingSupp = suppliers.find((s) => String(s._id) === String(suppId));
-    const resolvedSuppId = matchingSupp ? matchingSupp._id : (suppId || '');
+    const resolvedSuppId = suppId === '__own_product__' ? '__own_product__' : (matchingSupp ? matchingSupp._id : (suppId || ''));
 
     const purchaseInfo = product.purchase_info || null;
     const initialStock = Number(product.stock) || 0;
@@ -1195,9 +1203,10 @@ export default function Products() {
       ? editForm.brand_id
       : null;
 
-    const finalSupplierId = (editForm.supplier_id && editForm.supplier_id !== '__none__')
-      ? editForm.supplier_id
-      : null;
+    const isOwnProduct = editForm.supplier_id === '__own_product__';
+    const finalSupplierId = (isOwnProduct || !editForm.supplier_id || editForm.supplier_id === '__none__')
+      ? null
+      : editForm.supplier_id;
 
     const selectedBrand = brands.find((b) => b._id === editForm.brand_id);
 
@@ -1273,6 +1282,7 @@ export default function Products() {
         brand_id: finalBrandId,
         brand: selectedBrand?.name || '',
         supplier_id: finalSupplierId,
+        is_own_product: isOwnProduct,
         sku: editForm.sku ? editForm.sku.trim() : undefined,
         barcode: editForm.barcode ? editForm.barcode.trim() : undefined,
         cost_price: costPrice,
@@ -1281,7 +1291,7 @@ export default function Products() {
         has_variants: hasVars,
         variation_options: hasVars ? editForm.variation_options : [],
         variants: formattedVariants,
-        paid_amount: calculatedPaid,
+        paid_amount: isOwnProduct ? newTotalCost : calculatedPaid,
         payment_method: editForm.payment_method || 'cash',
         unit: editForm.unit || 'Pcs',
         low_stock_threshold: parseInt(editForm.lowStockThreshold, 10) || 5,
@@ -1537,16 +1547,16 @@ export default function Products() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
+            <table className="w-full text-xs text-left min-w-[850px]">
               <thead className="bg-slate-50 dark:bg-zinc-900/60 text-slate-500 border-b border-slate-200 dark:border-zinc-800 select-none">
                 <tr>
-                  <th className="p-3.5">Product Name</th>
-                  <th className="p-3.5">SKU</th>
+                  <th className="p-3.5 whitespace-nowrap">Product Name</th>
+                  <th className="p-3.5 whitespace-nowrap">SKU</th>
                   
                   {/* Clickable Category Sort Header */}
                   <th
                     onClick={toggleCategorySort}
-                    className="p-3.5 cursor-pointer hover:text-slate-900 dark:hover:text-white transition-colors"
+                    className="p-3.5 cursor-pointer hover:text-slate-900 dark:hover:text-white transition-colors whitespace-nowrap"
                   >
                     <div className="flex items-center gap-1">
                       <span>Category</span>
@@ -1560,17 +1570,17 @@ export default function Products() {
                     </div>
                   </th>
 
-                  <th className="p-3.5">Stock Level</th>
-                  <th className="p-3.5">Cost Price</th>
-                  <th className="p-3.5">Selling Price</th>
-                  <th className="p-3.5">Status</th>
-                  <th className="p-3.5 text-right">Actions</th>
+                  <th className="p-3.5 whitespace-nowrap">Stock Level</th>
+                  <th className="p-3.5 whitespace-nowrap">Cost Price</th>
+                  <th className="p-3.5 whitespace-nowrap">Selling Price</th>
+                  <th className="p-3.5 whitespace-nowrap">Status</th>
+                  <th className="p-3.5 whitespace-nowrap text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
                 {paginatedProducts.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition-colors">
-                    <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2.5">
+                    <td className="p-3.5 font-semibold text-slate-900 dark:text-white flex items-center gap-2.5 whitespace-nowrap">
                       {p.image_url ? (
                         <img
                           src={p.image_url}
@@ -1586,7 +1596,7 @@ export default function Products() {
                         </div>
                       )}
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span>{p.name}</span>
+                        <span className="truncate max-w-[200px]">{p.name}</span>
                         {p.has_variants && Array.isArray(p.variants) && p.variants.length > 0 && (
                           <button
                             type="button"
@@ -1594,7 +1604,7 @@ export default function Products() {
                               e.stopPropagation();
                               setSelectedVariantProduct(p);
                             }}
-                            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30 hover:bg-[#00df89]/25 flex items-center gap-1 cursor-pointer transition-all"
+                            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30 hover:bg-[#00df89]/25 flex items-center gap-1 cursor-pointer transition-all whitespace-nowrap"
                             title="Click to view all variations"
                           >
                             <Layers className="w-3 h-3" />
@@ -1603,26 +1613,26 @@ export default function Products() {
                         )}
                       </div>
                     </td>
-                    <td className="p-3.5 font-mono text-[11px] text-slate-500">{p.sku}</td>
-                    <td className="p-3.5 text-slate-600 dark:text-zinc-300">
-                      <Badge variant="secondary" className="text-[10px]">
+                    <td className="p-3.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">{p.sku}</td>
+                    <td className="p-3.5 text-slate-600 dark:text-zinc-300 whitespace-nowrap">
+                      <Badge variant="secondary" className="text-[10px] whitespace-nowrap">
                         {p.category}
                       </Badge>
                     </td>
-                    <td className="p-3.5 font-semibold text-slate-800 dark:text-zinc-200">
+                    <td className="p-3.5 font-semibold text-slate-800 dark:text-zinc-200 whitespace-nowrap">
                       {p.stock} {p.unit}
                     </td>
-                    <td className="p-3.5 text-slate-600 dark:text-zinc-400">৳ {p.buyPrice.toLocaleString()}</td>
-                    <td className="p-3.5 font-semibold text-[#00a86b] dark:text-[#00df89]">৳ {p.sellPrice.toLocaleString()}</td>
-                    <td className="p-3.5">
+                    <td className="p-3.5 text-slate-600 dark:text-zinc-400 whitespace-nowrap">৳ {p.buyPrice.toLocaleString()}</td>
+                    <td className="p-3.5 font-semibold text-[#00a86b] dark:text-[#00df89] whitespace-nowrap">৳ {p.sellPrice.toLocaleString()}</td>
+                    <td className="p-3.5 whitespace-nowrap">
                       <Badge
                         variant={p.status === 'in_stock' ? 'default' : p.status === 'low_stock' ? 'warning' : 'destructive'}
-                        className="text-[10px] uppercase font-normal"
+                        className="text-[10px] uppercase font-normal whitespace-nowrap inline-flex items-center"
                       >
                         {p.status.replace('_', ' ')}
                       </Badge>
                     </td>
-                    <td className="p-3.5 text-right">
+                    <td className="p-3.5 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
@@ -2058,6 +2068,12 @@ export default function Products() {
                       <SelectValue placeholder={lang === 'bn' ? 'সাপ্লায়ার নির্বাচন করুন (ঐচ্ছিক)' : 'Select supplier (Optional)'} />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__own_product__" className="font-semibold text-purple-600 dark:text-purple-400 cursor-pointer">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                          <span>{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন (কোনো দেনা নেই)' : 'Own Product / In-house (No Supplier Debt)'}</span>
+                        </div>
+                      </SelectItem>
                       <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'}</SelectItem>
                       {suppliers.map((s) => (
                         <SelectItem
@@ -2447,8 +2463,23 @@ export default function Products() {
                 )}
               </div>
 
-              {/* SUPPLIER PAYMENT SETTLEMENT (Only if supplier selected) */}
-              {newProduct.supplier_id && (() => {
+              {/* OWN PRODUCT BANNER */}
+              {newProduct.supplier_id === '__own_product__' && (
+                <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-xs flex items-center gap-3 animate-in fade-in duration-200">
+                  <Sparkles className="w-5 h-5 shrink-0 text-purple-500" />
+                  <div>
+                    <span className="font-bold block text-sm">{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন' : 'Own Product / In-house Stock'}</span>
+                    <span className="text-[11px] opacity-90 block mt-0.5">
+                      {lang === 'bn'
+                        ? 'এই পণ্যের ক্রয়মূল্য ও বিক্রয়মূল্য সংরক্ষিত থাকবে এবং প্রফিট ও ইনভেন্টরি রিপোর্টে গণনা হবে। কোনো সাপ্লায়ার দেনা বা পেমেন্ট রেকর্ড হবে না।'
+                        : 'Cost price and selling price are recorded for profit calculation and inventory valuation without creating any supplier debt or payable.'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* SUPPLIER PAYMENT SETTLEMENT (Only if external supplier selected) */}
+              {newProduct.supplier_id && newProduct.supplier_id !== '__own_product__' && (() => {
                 const hasVars = Boolean(newProduct.has_variants);
                 const curStock = hasVars
                   ? (newProduct.variants || []).reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0)
@@ -3179,6 +3210,12 @@ export default function Products() {
                       <SelectValue placeholder="General / Walk-in Supplier" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__own_product__" className="font-semibold text-purple-600 dark:text-purple-400 cursor-pointer">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                          <span>{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব স্টক ইন' : 'Own Product / In-house'}</span>
+                        </div>
+                      </SelectItem>
                       <SelectItem value="__walk_in__">{lang === 'bn' ? 'সাধারণ সাপ্লায়ার' : 'General / Walk-in Supplier'}</SelectItem>
                       {suppliers.map((s) => (
                         <SelectItem
@@ -3559,6 +3596,12 @@ export default function Products() {
                       <SelectValue placeholder={lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'} />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__own_product__" className="font-semibold text-purple-600 dark:text-purple-400 cursor-pointer">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                          <span>{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন' : 'Own Product / In-house'}</span>
+                        </div>
+                      </SelectItem>
                       <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'}</SelectItem>
                       {suppliers.map((s) => (
                         <SelectItem key={s._id} value={s._id}>
@@ -3837,7 +3880,23 @@ export default function Products() {
               </div>
 
               {/* Supplier Stock Purchase Payment Section in Edit Modal */}
-              {editForm.supplier_id && (() => {
+              {/* OWN PRODUCT NOTICE */}
+              {editForm.supplier_id === '__own_product__' && (
+                <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-xs flex items-center gap-3 animate-in fade-in duration-200">
+                  <Sparkles className="w-5 h-5 shrink-0 text-purple-500" />
+                  <div>
+                    <span className="font-bold block text-sm">{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন' : 'Own Product / In-house Stock'}</span>
+                    <span className="text-[11px] opacity-90 block mt-0.5">
+                      {lang === 'bn'
+                        ? 'এই পণ্যের জন্য কোনো সাপ্লায়ার পাওনা বা পেমেন্ট প্রযোজ্য নয়।'
+                        : 'No supplier liability or payable applies to own in-house products.'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* SUPPLIER PAYMENT SETTLEMENT (Only if external supplier selected) */}
+              {editForm.supplier_id && editForm.supplier_id !== '__own_product__' && (() => {
                 const hasVars = Boolean(editForm.has_variants);
                 const curStock = hasVars
                   ? editForm.variants.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0)

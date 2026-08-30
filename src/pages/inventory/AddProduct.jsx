@@ -419,8 +419,11 @@ export default function AddProduct() {
       const sellPrice = parseFloat(form.selling_price) || 0;
       const totalCost = totalProcurementCost;
 
+      const isOwnProduct = form.supplier_id === '__own_product__';
       let calculatedPaid = 0;
-      if (form.supplier_id) {
+      if (isOwnProduct) {
+        calculatedPaid = totalCost; // Own stock - no supplier payable
+      } else if (form.supplier_id) {
         if (form.payment_type === 'due') {
           calculatedPaid = 0;
         } else if (form.payment_type === 'full') {
@@ -460,7 +463,9 @@ export default function AddProduct() {
         category_id: finalCatId,
         brand_id: finalBrandId,
         brand: selectedBrand?.name || '',
-        supplier_id: form.supplier_id || undefined,
+        supplier_id: isOwnProduct ? undefined : (form.supplier_id || undefined),
+        is_own_product: isOwnProduct,
+        paid_amount: calculatedPaid,
         sku: form.sku.trim() || undefined,
         barcode: form.barcode.trim() || undefined,
         cost_price: costPrice,
@@ -764,6 +769,12 @@ export default function AddProduct() {
                   <SelectValue placeholder={lang === 'bn' ? 'সাপ্লায়ার নির্বাচন করুন (ঐচ্ছিক)' : 'Select supplier (Optional)'} />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__own_product__" className="font-semibold text-purple-600 dark:text-purple-400 cursor-pointer">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                      <span>{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন (কোনো সাপ্লায়ার দেনা নেই)' : 'Own Product / In-house (No Supplier Debt)'}</span>
+                    </div>
+                  </SelectItem>
                   <SelectItem value="__none__">{lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'}</SelectItem>
                   {suppliers.map((s) => (
                     <SelectItem
@@ -1171,8 +1182,23 @@ export default function AddProduct() {
             </div>
           )}
 
+          {/* Own Product Notice */}
+          {form.supplier_id === '__own_product__' && (
+            <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-xs flex items-center gap-3 animate-in fade-in duration-200">
+              <Sparkles className="w-5 h-5 shrink-0 text-purple-500" />
+              <div>
+                <span className="font-bold block text-sm">{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন' : 'Own Product / In-house Stock'}</span>
+                <span className="text-[11px] opacity-90 block mt-0.5">
+                  {lang === 'bn'
+                    ? 'এই পণ্যের ক্রয়মূল্য ও বিক্রয়মূল্য সংরক্ষিত থাকবে এবং প্রফিট ও ইনভেন্টরি রিপোর্টে গণনা হবে। কোনো সাপ্লায়ার দেনা বা পেমেন্ট রেকর্ড হবে না।'
+                    : 'Cost price and selling price are recorded for profit calculation and inventory valuation without creating any supplier debt or payable.'}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Supplier Stock Purchase Payment Section in AddProduct Page */}
-          {form.supplier_id && (
+          {form.supplier_id && form.supplier_id !== '__own_product__' && (
             <div className="p-4 rounded-2xl bg-amber-500/5 dark:bg-zinc-900/70 border border-amber-500/20 dark:border-zinc-800 space-y-3.5 animate-in fade-in duration-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

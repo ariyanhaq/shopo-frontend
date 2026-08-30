@@ -127,6 +127,10 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(updateData),
       }),
+    delete: (id) =>
+      request(`/shops/${id}`, {
+        method: 'DELETE',
+      }),
   },
 
   // Users, Roles & Connected Devices

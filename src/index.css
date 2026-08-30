@@ -10,21 +10,29 @@
 @layer base {
   *, ::before, ::after {
     font-family: 'Hind Siliguri', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
   }
-  html, body {
-    overflow-x: hidden !important;
-    max-width: 100vw;
-    width: 100%;
-    font-family: 'Hind Siliguri', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  }
-  
-  /* Prevent background scrolling when a modal is open */
-  body.modal-open {
-    overflow: hidden !important;
+
+  html {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
+    overflow-x: hidden;
+    min-height: 100vh;
+    -webkit-overflow-scrolling: touch;
     @apply bg-[#F8FAFC] text-slate-900 dark:bg-[#09090b] dark:text-zinc-100 antialiased transition-colors duration-300;
+  }
+  
+  /* Prevent double-tap zoom delay on buttons and links */
+  button, a, input[type="button"], input[type="submit"], select {
+    touch-action: manipulation;
+  }
+
+  /* Prevent background scrolling when a modal is open */
+  body.modal-open {
+    overflow: hidden !important;
   }
 }
 

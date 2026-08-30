@@ -98,27 +98,27 @@ export default function GymDashboard() {
     <div className="space-y-6 font-sans">
       
       {/* ---------------------------------------------------- */}
-      {/* TOP STAT CARDS ROW (4 Columns)                       */}
+      {/* TOP STAT CARDS ROW (2 Columns on Mobile, 4 on Desktop) */}
       {/* ---------------------------------------------------- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {statCardsData.map((stat, idx) => {
           const Icon = stat.icon;
           return (
-            <Card key={idx} className="p-5 hover:shadow-xs transition-shadow border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-              <div className="flex items-center justify-between">
-                <span className="text-xs sm:text-sm font-medium text-slate-600 dark:text-zinc-400">
+            <Card key={idx} className="p-3.5 sm:p-5 hover:shadow-xs transition-shadow border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-1.5">
+                <span className="text-[11px] sm:text-sm font-medium text-slate-600 dark:text-zinc-400 truncate">
                   {stat.title}
                 </span>
-                <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800/80 text-slate-500 dark:text-zinc-400 flex items-center justify-center">
-                  <Icon className="w-4 h-4" />
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-100 dark:bg-zinc-800/80 text-slate-500 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
               </div>
 
-              <div className="mt-3 space-y-1">
-                <div className="text-2xl sm:text-3xl font-medium text-slate-900 dark:text-white tracking-tight">
+              <div className="mt-2.5 sm:mt-3 space-y-1">
+                <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
                   {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : stat.value}
                 </div>
-                <div className="flex items-center gap-1 text-xs font-medium">
+                <div className="flex items-center gap-1 text-[10px] sm:text-xs font-medium truncate">
                   <span className={stat.isPositive ? 'text-[#00a86b] dark:text-[#00df89]' : 'text-amber-500'}>
                     {stat.change}
                   </span>

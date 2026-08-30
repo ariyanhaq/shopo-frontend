@@ -381,6 +381,27 @@ export default function ProfitLoss() {
     profitMargin: '0.0%',
     totalSalesCount: 0,
     totalExpensesCount: 0,
+    totalInvestment: 0,
+  };
+
+  const investmentData = statement?.investment || {
+    totalInvestment: financialData.totalInvestment || financialData.periodTotalInvestment || 0,
+    periodTotalInvestment: financialData.periodTotalInvestment || financialData.totalInvestment || 0,
+    periodPurchaseInvestment: financialData.periodPurchaseInvestment || 0,
+    periodPurchasePaid: financialData.periodPurchasePaid || 0,
+    periodPurchaseDue: financialData.periodPurchaseDue || 0,
+    periodPurchaseCount: financialData.periodPurchaseCount || 0,
+    periodOperatingExpenses: financialData.periodOperatingExpenses || 0,
+    periodSalaryExpenses: financialData.periodSalaryExpenses || 0,
+    lifetimeTotalInvestment: financialData.lifetimeTotalInvestment || 0,
+    lifetimePurchaseInvestment: financialData.lifetimePurchaseInvestment || 0,
+    lifetimeOperatingExpenses: financialData.lifetimeOperatingExpenses || 0,
+    lifetimeSalaryExpenses: financialData.lifetimeSalaryExpenses || 0,
+    totalStockInvestment: financialData.totalStockInvestment || 0,
+    totalStockRetailValue: financialData.totalStockRetailValue || 0,
+    potentialStockProfit: financialData.potentialStockProfit || 0,
+    totalStockUnits: financialData.totalStockUnits || 0,
+    totalProductsCount: financialData.totalProductsCount || 0,
   };
 
   const expenseBreakdown = statement?.expenseBreakdown || [];
@@ -569,10 +590,34 @@ export default function ProfitLoss() {
       </Card>
 
       {/* ---------------------------------------------------- */}
-      {/* FINANCIAL SUMMARY KPI CARDS (4 COLUMNS)              */}
+      {/* FINANCIAL SUMMARY KPI CARDS (5 COLUMNS)              */}
       {/* ---------------------------------------------------- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         
+        {/* Total Business Investment (Purchases + Expenses + Salaries) */}
+        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent">
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
+              {lang === 'bn' ? 'সর্বমোট বিনিয়োগ (মোট খরচ)' : 'Total Investment'}
+            </span>
+            <Coins className="w-4 h-4 text-[#00a86b] dark:text-[#00df89]" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2 font-mono">
+            {isLoading ? (
+              <Skeleton className="h-8 w-28 my-0.5" />
+            ) : (
+              `৳ ${safeMoney(investmentData.totalInvestment || investmentData.periodTotalInvestment)}`
+            )}
+          </div>
+          <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 truncate" title={lang === 'bn' ? 'পণ্য ক্রয় + পরিচালন ব্যয় + কর্মচারীদের বেতন' : 'Purchases + Operating Expenses + Salaries'}>
+            {isLoading ? '...' : (
+              <span>
+                {lang === 'bn' ? 'ক্রয় + খরচ + বেতন' : 'Purchases + Expenses + Salaries'}
+              </span>
+            )}
+          </div>
+        </Card>
+
         {/* Gross Revenue */}
         <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
           <div className="flex items-center justify-between">
@@ -581,8 +626,8 @@ export default function ProfitLoss() {
             </span>
             <DollarSign className="w-4 h-4 text-[#00a86b] dark:text-[#00df89]" />
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] mt-2">
-            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${financialData.grossRevenue.toLocaleString()}`}
+          <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] mt-2 font-mono">
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${safeMoney(financialData.grossRevenue)}`}
           </div>
           <div className="text-xs text-slate-500 mt-1">From invoice transactions</div>
         </Card>
@@ -595,8 +640,8 @@ export default function ProfitLoss() {
             </span>
             <Receipt className="w-4 h-4 text-blue-500" />
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
-            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${financialData.cogs.toLocaleString()}`}
+          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2 font-mono">
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${safeMoney(financialData.cogs)}`}
           </div>
           <div className="text-xs text-slate-500 mt-1">Direct product unit cost</div>
         </Card>
@@ -609,8 +654,8 @@ export default function ProfitLoss() {
             </span>
             <ArrowDownRight className="w-4 h-4 text-rose-500" />
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-rose-500 mt-2">
-            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${financialData.operatingExpenses.toLocaleString()}`}
+          <div className="text-2xl sm:text-3xl font-bold text-rose-500 mt-2 font-mono">
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${safeMoney(financialData.operatingExpenses)}`}
           </div>
           <div className="text-xs text-rose-500 mt-1">Rent, bills & overheads</div>
         </Card>
@@ -627,8 +672,8 @@ export default function ProfitLoss() {
               <TrendingDown className="w-4 h-4 text-rose-500" />
             )}
           </div>
-          <div className={`text-2xl sm:text-3xl font-bold mt-2 ${financialData.netProfit >= 0 ? 'text-[#00a86b] dark:text-[#00df89]' : 'text-rose-500'}`}>
-            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${financialData.netProfit.toLocaleString()}`}
+          <div className={`text-2xl sm:text-3xl font-bold mt-2 font-mono ${financialData.netProfit >= 0 ? 'text-[#00a86b] dark:text-[#00df89]' : 'text-rose-500'}`}>
+            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${safeMoney(financialData.netProfit)}`}
           </div>
           <div className="text-xs font-semibold text-slate-500 mt-1">
             {isLoading ? <Skeleton className="h-3 w-20 my-0.5" /> : `${financialData.profitMargin} Net Margin`}
@@ -638,12 +683,12 @@ export default function ProfitLoss() {
       </div>
 
       {/* ---------------------------------------------------- */}
-      {/* EXPENSE CATEGORIES BREAKDOWN & SUMMARY               */}
+      {/* EXPENSE CATEGORIES, INVESTMENT, & P&L SUMMARY        */}
       {/* ---------------------------------------------------- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Expense Category Breakdown Card */}
-        <Card className="p-6 space-y-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] lg:col-span-2">
+        <Card className="p-6 space-y-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base font-bold text-slate-900 dark:text-white">
@@ -657,7 +702,7 @@ export default function ProfitLoss() {
               to="/expenses"
               className="text-xs font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <span>{lang === 'bn' ? 'খরচের তালিকা দেখুন' : 'View Expenses Ledger'}</span>
+              <span>{lang === 'bn' ? 'খরচের তালিকা' : 'Expenses'}</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -673,22 +718,105 @@ export default function ProfitLoss() {
               <p className="text-xs text-slate-400">{lang === 'bn' ? 'এই সময়ের জন্য কোনো খরচের হিসাব পাওয়া যায়নি।' : 'No operating expenses recorded for this period.'}</p>
             </div>
           ) : (
-            <div className="space-y-4 pt-1">
+            <div className="space-y-3.5 pt-1 max-h-72 overflow-y-auto pr-1">
               {expenseBreakdown.map((item, idx) => (
                 <div key={idx} className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-slate-800 dark:text-zinc-200">{item.title}</span>
-                    <span className="font-bold text-slate-900 dark:text-white">
+                    <span className="font-bold text-slate-900 dark:text-white font-mono">
                       ৳ {item.amount.toLocaleString()} ({item.percentage}%)
                     </span>
                   </div>
-                  <div className="w-full h-2.5 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
+                  <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
                     <div style={{ width: `${Math.min(100, item.percentage)}%` }} className="h-full rounded-full bg-rose-500 transition-all duration-300" />
                   </div>
                 </div>
               ))}
             </div>
           )}
+        </Card>
+
+        {/* Capital & Total Business Investment Card */}
+        <Card className="p-6 space-y-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Coins className="w-4 h-4 text-[#00df89]" />
+                <span>{lang === 'bn' ? 'সর্বমোট বিনিয়োগ ও মূলধনের হিসাব' : 'Total Investment Breakdown'}</span>
+              </CardTitle>
+              <CardDescription className="text-xs font-normal">
+                {lang === 'bn' ? 'পণ্য ক্রয়, দোকান পরিচালনা ব্যয় ও বেতনের যোগফল' : 'Purchases, operating expenses & salaries sum'}
+              </CardDescription>
+            </div>
+            <Link
+              to="/inventory"
+              className="text-xs font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span>{lang === 'bn' ? 'ইনভেন্টরি' : 'Inventory'}</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="space-y-2.5 text-xs pt-1">
+            {/* 3 Investment Outflow Pillars */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
+              <div className="flex justify-between text-slate-600 dark:text-zinc-400">
+                <span className="flex items-center gap-1.5">
+                  <ShoppingBag className="w-3.5 h-3.5 text-blue-500" />
+                  <span>{lang === 'bn' ? '১. পণ্য ক্রয় ও স্টক সংগ্রহ:' : '1. Product Purchases / Stock:'}</span>
+                </span>
+                <span className="font-bold text-slate-900 dark:text-white font-mono">
+                  ৳ {safeMoney(investmentData.periodPurchaseInvestment)}
+                </span>
+              </div>
+
+              <div className="flex justify-between text-slate-600 dark:text-zinc-400">
+                <span className="flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{lang === 'bn' ? '২. দোকান ও পরিচালন খরচ:' : '2. Operating & Shop Expenses:'}</span>
+                </span>
+                <span className="font-bold text-slate-900 dark:text-white font-mono">
+                  ৳ {safeMoney(investmentData.periodOperatingExpenses)}
+                </span>
+              </div>
+
+              <div className="flex justify-between text-slate-600 dark:text-zinc-400">
+                <span className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-purple-500" />
+                  <span>{lang === 'bn' ? '৩. কর্মচারীদের বেতন ও পারিশ্রমিক:' : '3. Staff Salaries Paid:'}</span>
+                </span>
+                <span className="font-bold text-slate-900 dark:text-white font-mono">
+                  ৳ {safeMoney(investmentData.periodSalaryExpenses)}
+                </span>
+              </div>
+
+              {/* Total Sum Highlight */}
+              <div className="flex justify-between items-center text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-zinc-800">
+                <span className="font-bold text-xs">
+                  {lang === 'bn' ? 'নির্বাচিত সময়ের মোট বিনিয়োগ:' : 'Period Total Investment:'}
+                </span>
+                <span className="font-black text-sm text-[#00a86b] dark:text-[#00df89] font-mono">
+                  ৳ {safeMoney(investmentData.totalInvestment || investmentData.periodTotalInvestment)}
+                </span>
+              </div>
+            </div>
+
+            {/* Current Real-time Inventory Asset & Lifetime Stats */}
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-[11px]">
+              <div className="flex justify-between text-slate-500">
+                <span>{lang === 'bn' ? 'বর্তমান অবিক্রিত স্টক সম্পদ (কেনা মূল্যে):' : 'Current Stock Asset (at Cost):'}</span>
+                <span className="font-semibold text-slate-800 dark:text-zinc-200 font-mono">
+                  ৳ {safeMoney(investmentData.totalStockInvestment)}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-500">
+                <span>{lang === 'bn' ? 'সর্বমোট লাইফটাইম ব্যবসায়িক বিনিয়োগ:' : 'Lifetime Business Investment:'}</span>
+                <span className="font-medium text-slate-600 dark:text-zinc-400 font-mono">
+                  ৳ {safeMoney(investmentData.lifetimeTotalInvestment)}
+                </span>
+              </div>
+            </div>
+          </div>
         </Card>
 
         {/* Quick Statement Card */}
@@ -714,14 +842,14 @@ export default function ProfitLoss() {
               </div>
               <div className="flex justify-between text-slate-500 pt-1 border-t border-slate-200 dark:border-zinc-800">
                 <span>{lang === 'bn' ? 'মোট লাভ (বিক্রি - ক্রয়):' : 'Gross Profit (Revenue - COGS):'}</span>
-                <span className="font-bold text-slate-900 dark:text-white">৳ {(financialData.grossProfit || 0).toLocaleString()}</span>
+                <span className="font-bold text-slate-900 dark:text-white font-mono">৳ {(financialData.grossProfit || 0).toLocaleString()}</span>
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[#00a86b] dark:text-[#00df89] space-y-1">
               <div className="text-[11px] font-semibold uppercase tracking-wider">{lang === 'bn' ? 'নিট ফলাফল' : 'Estimated Return'}</div>
-              <div className="text-base font-bold">
-                ৳ {financialData.netProfit.toLocaleString()} {lang === 'bn' ? (financialData.netProfit >= 0 ? 'নিট লাভ' : 'নিট লোকসান') : 'Net Gain'}
+              <div className="text-base font-bold font-mono">
+                ৳ {safeMoney(financialData.netProfit)} {lang === 'bn' ? (financialData.netProfit >= 0 ? 'নিট লাভ' : 'নিট লোকসান') : 'Net Gain'}
               </div>
               <div className="text-[11px] text-slate-500 dark:text-zinc-400">
                 {lang === 'bn'
@@ -811,6 +939,7 @@ export default function ProfitLoss() {
                   const isReturned = entry.status === 'returned';
                   const isPartialReturn = entry.status === 'partially_returned';
                   const isDue = (entry.due_amount || 0) > 0;
+                  const isLastRows = idx >= paginatedEntries.length - 2;
 
                   return (
                     <tr key={entry._id || idx} className="hover:bg-slate-50/60 dark:hover:bg-zinc-800/40 transition-colors">
@@ -918,7 +1047,7 @@ export default function ProfitLoss() {
                       </td>
 
                       {/* Actions: View (Eye), Print (Printer), More (MoreVertical Dropdown) */}
-                      <td className="p-3.5 text-right whitespace-nowrap">
+                      <td className="p-3.5 text-right whitespace-nowrap min-w-[130px]">
                         <div className="flex items-center justify-end gap-1.5">
                           {/* 1. VIEW BUTTON */}
                           <button
@@ -963,7 +1092,7 @@ export default function ProfitLoss() {
                                 <MoreVertical className="w-4 h-4" />
                               </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuContent align="right" side={isLastRows ? 'top' : 'auto'} width="w-52">
                               {isSale ? (
                                 <>
                                   {!isReturned && (

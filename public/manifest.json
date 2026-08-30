@@ -1,0 +1,21 @@
+{
+  "name": "Shopo POS & Retail Management",
+  "short_name": "Shopo",
+  "description": "Modern Retail POS, Inventory & ERP System for Bangladesh",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay"],
+  "orientation": "portrait",
+  "background_color": "#09090b",
+  "theme_color": "#00df89",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

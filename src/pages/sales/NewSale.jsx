@@ -57,6 +57,8 @@ export default function NewSale() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [discountType, setDiscountType] = useState('flat'); // 'flat' or 'percentage'
   const [discountValue, setDiscountValue] = useState('');
+  const [discountScope, setDiscountScope] = useState('all'); // 'all' or 'selected'
+  const [selectedDiscountItemIds, setSelectedDiscountItemIds] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('Cash'); // 'Cash', 'bKash', 'Nagad', 'Card', 'Due'
   const [cashGiven, setCashGiven] = useState('');
   const [duePaidAmount, setDuePaidAmount] = useState(''); // Amount paid when payment method is Due / Partial
@@ -221,12 +223,30 @@ export default function NewSale() {
   // Add Item to Cart
   const handleAddToCart = (product) => {
     if (product.has_variants && Array.isArray(product.variants) && product.variants.length > 0) {
+      const totalVarStock = product.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0);
+      if (totalVarStock <= 0) {
+        toast.error(lang === 'bn' ? `দুঃখিত! '${product.name}' স্টকে নেই (Out of stock)` : `Sorry! '${product.name}' is out of stock.`);
+        return;
+      }
       setVariantPickerProduct(product);
+      return;
+    }
+
+    const availableStock = Number(product.stock !== undefined ? product.stock : (product.stock_quantity ?? 0));
+    if (availableStock <= 0) {
+      toast.error(lang === 'bn' ? `দুঃখিত! '${product.name}' স্টকে নেই (Out of stock)` : `Sorry! '${product.name}' is out of stock.`);
       return;
     }
 
     const cartKey = String(product.id);
     const existing = cart.find((item) => item.cart_id === cartKey || item.id === cartKey);
+    const currentQty = existing ? (Number(existing.qty) || 0) : 0;
+
+    if (currentQty + 1 > availableStock) {
+      toast.error(lang === 'bn' ? `স্টকে মাত্র ${availableStock} টি রয়েছে!` : `Only ${availableStock} units available in stock!`);
+      return;
+    }
+
     if (existing) {
       setCart(
         cart.map((item) =>
@@ -244,6 +264,7 @@ export default function NewSale() {
           sku: product.sku,
           price: product.price,
           qty: 1,
+          max_stock: availableStock,
           unit: product.unit,
         },
       ]);
@@ -252,10 +273,23 @@ export default function NewSale() {
 
   // Add Specific Variant to Cart
   const handleAddVariantToCart = (parentProd, variant) => {
+    const availableStock = Number(variant.stock_quantity ?? 0);
+    if (availableStock <= 0) {
+      toast.error(lang === 'bn' ? `দুঃখিত! '${variant.name}' স্টকে নেই (Out of stock)` : `Sorry! '${variant.name}' is out of stock.`);
+      return;
+    }
+
     const parentId = parentProd.id || parentProd._id;
     const variantId = variant._id || variant.id;
     const cartKey = `${parentId}_${variantId}`;
     const existing = cart.find((item) => item.cart_id === cartKey || item.id === cartKey);
+    const currentQty = existing ? (Number(existing.qty) || 0) : 0;
+
+    if (currentQty + 1 > availableStock) {
+      toast.error(lang === 'bn' ? `স্টকে মাত্র ${availableStock} টি রয়েছে!` : `Only ${availableStock} units available in stock!`);
+      return;
+    }
+
     if (existing) {
       setCart(
         cart.map((item) =>
@@ -275,6 +309,7 @@ export default function NewSale() {
           sku: variant.sku || parentProd.sku,
           price: variant.selling_price || parentProd.price,
           qty: 1,
+          max_stock: availableStock,
           unit: parentProd.unit,
         },
       ]);
@@ -290,13 +325,36 @@ export default function NewSale() {
     handleUpdateQty(cartKey, delta);
   };
 
-  // Update Item Quantity in Cart
+  // Directly set Item Quantity in Cart (via input typing)
+  const handleSetItemQty = (id, newQty) => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        if (item.cart_id === id || item.id === id) {
+          if (newQty === '') return { ...item, qty: '' };
+          let q = Math.max(1, parseInt(newQty, 10) || 1);
+          if (item.max_stock && q > item.max_stock) {
+            q = item.max_stock;
+            toast.error(lang === 'bn' ? `স্টকে মাত্র ${item.max_stock} টি রয়েছে!` : `Only ${item.max_stock} units available in stock!`);
+          }
+          return { ...item, qty: q };
+        }
+        return item;
+      })
+    );
+  };
+
+  // Update Item Quantity in Cart (+ / - buttons)
   const handleUpdateQty = (id, delta) => {
-    setCart(
-      cart
+    setCart((prevCart) =>
+      prevCart
         .map((item) => {
           if (item.cart_id === id || item.id === id) {
-            const newQty = item.qty + delta;
+            const currentQty = typeof item.qty === 'number' ? item.qty : (parseInt(item.qty, 10) || 1);
+            const newQty = currentQty + delta;
+            if (delta > 0 && item.max_stock && newQty > item.max_stock) {
+              toast.error(lang === 'bn' ? `স্টকে মাত্র ${item.max_stock} টি রয়েছে!` : `Only ${item.max_stock} units available in stock!`);
+              return item;
+            }
             return newQty > 0 ? { ...item, qty: newQty } : null;
           }
           return item;
@@ -310,18 +368,48 @@ export default function NewSale() {
     setCart(cart.filter((item) => item.cart_id !== id && item.id !== id));
   };
 
+  // Keep selected discount items clean
+  const toggleDiscountItem = (id) => {
+    setSelectedDiscountItemIds((prev) => {
+      const currentIds = cart.map((i) => i.cart_id || i.id);
+      const activeList = prev.length > 0 ? prev.filter((x) => currentIds.includes(x)) : currentIds;
+      return activeList.includes(id) ? activeList.filter((x) => x !== id) : [...activeList, id];
+    });
+  };
+
+  const selectAllDiscountItems = () => {
+    setSelectedDiscountItemIds(cart.map((i) => i.cart_id || i.id));
+  };
+
+  const clearAllDiscountItems = () => {
+    setSelectedDiscountItemIds([]);
+  };
+
   // Calculations
   const subtotal = useMemo(() => {
-    return cart.reduce((acc, item) => acc + item.price * item.qty, 0);
+    return cart.reduce((acc, item) => acc + item.price * (Number(item.qty) || 1), 0);
   }, [cart]);
+
+  // Subtotal eligible for discount
+  const eligibleSubtotal = useMemo(() => {
+    if (discountScope === 'all') return subtotal;
+    const currentCartIds = new Set(cart.map((i) => i.cart_id || i.id));
+    const effectiveSelected = selectedDiscountItemIds.length > 0
+      ? selectedDiscountItemIds.filter((id) => currentCartIds.has(id))
+      : [];
+    return cart
+      .filter((item) => effectiveSelected.includes(item.cart_id || item.id))
+      .reduce((acc, item) => acc + item.price * (Number(item.qty) || 1), 0);
+  }, [cart, subtotal, discountScope, selectedDiscountItemIds]);
 
   const discountAmount = useMemo(() => {
     const val = parseFloat(discountValue) || 0;
+    if (val <= 0 || eligibleSubtotal <= 0) return 0;
     if (discountType === 'percentage') {
-      return (subtotal * val) / 100;
+      return (eligibleSubtotal * val) / 100;
     }
-    return Math.min(val, subtotal);
-  }, [subtotal, discountType, discountValue]);
+    return Math.min(val, eligibleSubtotal);
+  }, [eligibleSubtotal, discountType, discountValue]);
 
   // Reward Points Redemption Calculations
   const memberPointsAvailable = useMemo(() => {
@@ -552,19 +640,19 @@ export default function NewSale() {
     <div className="space-y-6 font-sans pb-12">
       
       {/* PAGE HEADER */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between items-start gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <Button
             variant="outline"
             size="icon"
             onClick={() => navigate('/sales')}
-            className="w-9 h-9 rounded-xl dark:bg-[#121215] border-slate-200 dark:border-zinc-800"
+            className="w-9 h-9 rounded-xl dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shrink-0"
             title="Back to Sales List"
           >
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
               {lang === 'bn' ? 'নতুন বিক্রি ও ক্যাশ মেমো' : 'Point of Sale & Cash Memo'}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
@@ -579,7 +667,7 @@ export default function NewSale() {
           variant="outline"
           size="sm"
           onClick={handleResetSale}
-          className="text-xs dark:bg-[#121215] border-slate-200 dark:border-zinc-800"
+          className="text-xs dark:bg-[#121215] border-slate-200 dark:border-zinc-800 whitespace-nowrap shrink-0 self-end sm:self-auto"
         >
           {lang === 'bn' ? 'কার্ট খালি করুন' : 'Clear Cart'}
         </Button>
@@ -639,19 +727,33 @@ export default function NewSale() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
               {filteredProducts.map((product) => {
                 const inCart = cart.find((i) => i.id === product.id);
+                const hasVariants = product.has_variants && Array.isArray(product.variants) && product.variants.length > 0;
+                const totalStock = hasVariants
+                  ? product.variants.reduce((sum, v) => sum + (Number(v.stock_quantity) || 0), 0)
+                  : (Number(product.stock !== undefined ? product.stock : product.stock_quantity) || 0);
+                const isOutOfStock = totalStock <= 0;
+
                 return (
                   <Card
                     key={product.id}
                     onClick={() => handleAddToCart(product)}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all duration-150 relative overflow-hidden flex flex-col justify-between hover:border-[#00df89] hover:shadow-md dark:bg-[#121215] ${
-                      inCart
-                        ? 'border-[#00df89] bg-emerald-500/5 shadow-xs'
-                        : 'border-slate-200/90 dark:border-zinc-800/80'
+                    className={`p-3.5 rounded-2xl border transition-all duration-150 relative overflow-hidden flex flex-col justify-between dark:bg-[#121215] ${
+                      isOutOfStock
+                        ? 'opacity-60 bg-slate-50/70 dark:bg-zinc-900/40 border-slate-200/60 dark:border-zinc-800/60 cursor-not-allowed hover:border-rose-300'
+                        : inCart
+                        ? 'border-[#00df89] bg-emerald-500/5 shadow-xs cursor-pointer hover:shadow-md'
+                        : 'border-slate-200/90 dark:border-zinc-800/80 cursor-pointer hover:border-[#00df89] hover:shadow-md'
                     }`}
                   >
                     {inCart && (
                       <div className="absolute top-2.5 right-2.5 z-10 w-6 h-6 rounded-full bg-[#00df89] text-[#011812] flex items-center justify-center text-xs font-bold shadow-md">
                         {inCart.qty}
+                      </div>
+                    )}
+
+                    {isOutOfStock && (
+                      <div className="absolute top-2.5 right-2.5 z-10 px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold shadow-xs">
+                        {lang === 'bn' ? 'স্টক শেষ' : 'Out of Stock'}
                       </div>
                     )}
 
@@ -748,46 +850,105 @@ export default function NewSale() {
               </div>
             ) : (
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                {cart.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-2 text-xs"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <h5 className="font-semibold text-slate-900 dark:text-white truncate">{item.name}</h5>
-                      <span className="text-[11px] text-slate-400">
-                        ৳ {item.price.toLocaleString()} / {item.unit}
-                      </span>
-                    </div>
+                {cart.map((item) => {
+                  const itemId = item.cart_id || item.id;
+                  const isDiscountEligible = selectedDiscountItemIds.includes(itemId);
 
-                    <div className="flex items-center gap-1 bg-white dark:bg-zinc-800 rounded-lg p-0.5 border border-slate-200 dark:border-zinc-700">
-                      <button
-                        onClick={() => handleUpdateQty(item.id, -1)}
-                        className="w-6 h-6 flex items-center justify-center text-slate-600 dark:text-zinc-300 hover:text-slate-900 cursor-pointer"
-                      >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="w-6 text-center font-bold">{item.qty}</span>
-                      <button
-                        onClick={() => handleUpdateQty(item.id, 1)}
-                        className="w-6 h-6 flex items-center justify-center text-slate-600 dark:text-zinc-300 hover:text-slate-900 cursor-pointer"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
-
-                    <div className="w-16 text-right font-bold text-slate-900 dark:text-white">
-                      ৳ {(item.price * item.qty).toLocaleString()}
-                    </div>
-
-                    <button
-                      onClick={() => handleRemoveFromCart(item.id)}
-                      className="p-1 text-slate-400 hover:text-rose-500 cursor-pointer"
+                  return (
+                    <div
+                      key={itemId}
+                      className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs transition-colors ${
+                        discountScope === 'selected' && isDiscountEligible
+                          ? 'bg-purple-500/5 dark:bg-purple-500/10 border-purple-500/30'
+                          : 'bg-slate-50 dark:bg-[#09090b] border-slate-100 dark:border-zinc-800'
+                      }`}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+                      {/* Checkbox when in Selected Items discount mode */}
+                      {discountScope === 'selected' && (
+                        <button
+                          type="button"
+                          onClick={() => toggleDiscountItem(itemId)}
+                          title={isDiscountEligible ? 'Discount Applied' : 'No Discount'}
+                          className={`w-4 h-4 rounded flex items-center justify-center border transition-colors cursor-pointer shrink-0 ${
+                            isDiscountEligible
+                              ? 'bg-purple-600 border-purple-600 text-white'
+                              : 'border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900'
+                          }`}
+                        >
+                          {isDiscountEligible && <Check className="w-3 h-3 stroke-[3]" />}
+                        </button>
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <h5 className="font-semibold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                          <span>{item.name}</span>
+                          {discountScope === 'selected' && isDiscountEligible && (
+                            <span className="text-[9px] font-bold px-1 rounded bg-purple-500/20 text-purple-600 dark:text-purple-400">
+                              % Disc
+                            </span>
+                          )}
+                        </h5>
+                        <span className="text-[11px] text-slate-400">
+                          ৳ {item.price.toLocaleString()} / {item.unit}
+                        </span>
+                      </div>
+
+                      {/* QUANTITY CONTROL (CLICK OR TYPE DIRECTLY, STRICTLY LIMITED BY STOCK) */}
+                      <div className="flex items-center gap-0.5 bg-white dark:bg-zinc-800 rounded-lg p-0.5 border border-slate-200 dark:border-zinc-700 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQty(itemId, -1)}
+                          className="w-6 h-6 flex items-center justify-center text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-zinc-700 cursor-pointer transition-colors"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+
+                        <input
+                          type="number"
+                          min="1"
+                          max={item.max_stock}
+                          value={item.qty}
+                          onChange={(e) => handleSetItemQty(itemId, e.target.value)}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (isNaN(val) || val < 1) {
+                              handleSetItemQty(itemId, 1);
+                            } else if (item.max_stock && val > item.max_stock) {
+                              handleSetItemQty(itemId, item.max_stock);
+                            }
+                          }}
+                          className="w-10 text-center font-bold font-mono text-xs bg-transparent border-0 outline-none text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none p-0 focus:ring-1 focus:ring-[#00df89] rounded"
+                        />
+
+                        <button
+                          type="button"
+                          disabled={item.max_stock !== undefined && (Number(item.qty) || 1) >= item.max_stock}
+                          onClick={() => handleUpdateQty(itemId, 1)}
+                          title={item.max_stock !== undefined && (Number(item.qty) || 1) >= item.max_stock ? `Maximum stock reached (${item.max_stock})` : 'Increase quantity'}
+                          className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                            item.max_stock !== undefined && (Number(item.qty) || 1) >= item.max_stock
+                              ? 'opacity-30 text-slate-300 dark:text-zinc-600 cursor-not-allowed'
+                              : 'text-slate-600 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-700 cursor-pointer'
+                          }`}
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      <div className="w-16 text-right font-bold text-slate-900 dark:text-white font-mono">
+                        ৳ {(item.price * (Number(item.qty) || 1)).toLocaleString()}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFromCart(itemId)}
+                        className="p-1 text-slate-400 hover:text-rose-500 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -1071,8 +1232,8 @@ export default function NewSale() {
               )}
             </div>
 
-            {/* DISCOUNT CONFIGURATION (FLAT / PERCENTAGE) */}
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
+            {/* DISCOUNT CONFIGURATION (FLAT / PERCENTAGE & ALL PRODUCTS VS SELECTED ITEMS) */}
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2.5">
               <div className="flex items-center justify-between text-xs">
                 <label className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
                   <Percent className="w-3.5 h-3.5 text-[#00df89]" />
@@ -1106,10 +1267,108 @@ export default function NewSale() {
                 </div>
               </div>
 
+              {/* Discount Target Scope (All Cart Products vs Selected Items Only) */}
+              <div className="grid grid-cols-2 gap-1 bg-slate-200/70 dark:bg-zinc-800/80 p-0.5 rounded-lg text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setDiscountScope('all')}
+                  className={`py-1 px-2 rounded-md font-semibold transition-all ${
+                    discountScope === 'all'
+                      ? 'bg-white dark:bg-zinc-900 text-[#00a86b] dark:text-[#00df89] shadow-xs'
+                      : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800'
+                  }`}
+                >
+                  {lang === 'bn' ? 'সকল পণ্য (পুরো কার্ট)' : 'All Items in Cart'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscountScope('selected')}
+                  className={`py-1 px-2 rounded-md font-semibold transition-all ${
+                    discountScope === 'selected'
+                      ? 'bg-white dark:bg-zinc-900 text-purple-600 dark:text-purple-400 shadow-xs'
+                      : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800'
+                  }`}
+                >
+                  {lang === 'bn' ? `নির্দিষ্ট পণ্য (${selectedDiscountItemIds.length})` : `Selected Items (${selectedDiscountItemIds.length})`}
+                </button>
+              </div>
+
+              {/* Selected Items Checklist (Visible when discountScope is 'selected') */}
+              {discountScope === 'selected' && cart.length > 0 && (
+                <div className="p-2 rounded-lg bg-purple-500/5 dark:bg-purple-500/10 border border-purple-500/20 space-y-1.5 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-purple-700 dark:text-purple-300">
+                      {lang === 'bn'
+                        ? `ডিসকাউন্টের জন্য পণ্য নির্বাচন (${selectedDiscountItemIds.length}/${cart.length})`
+                        : `Select Items for Discount (${selectedDiscountItemIds.length}/${cart.length})`}
+                    </span>
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={selectAllDiscountItems}
+                        className="text-purple-600 dark:text-purple-400 hover:underline font-semibold cursor-pointer"
+                      >
+                        {lang === 'bn' ? 'সবগুলো' : 'All'}
+                      </button>
+                      <span>&middot;</span>
+                      <button
+                        type="button"
+                        onClick={clearAllDiscountItems}
+                        className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                      >
+                        {lang === 'bn' ? 'মুছুন' : 'Clear'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                    {cart.map((item) => {
+                      const itemId = item.cart_id || item.id;
+                      const isSelected = selectedDiscountItemIds.includes(itemId);
+                      const itemSubtotal = item.price * (Number(item.qty) || 1);
+
+                      return (
+                        <label
+                          key={itemId}
+                          onClick={() => toggleDiscountItem(itemId)}
+                          className={`flex items-center justify-between p-1.5 rounded-md text-[11px] cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'bg-purple-500/15 text-purple-900 dark:text-purple-200 font-medium'
+                              : 'bg-white dark:bg-zinc-900 text-slate-500 dark:text-zinc-400'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="w-3 h-3 text-purple-600 rounded"
+                            />
+                            <span className="truncate">{item.name}</span>
+                          </div>
+                          <span className="font-mono text-[10px] shrink-0 font-bold">
+                            ৳ {itemSubtotal.toLocaleString()}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex justify-between text-[10px] text-purple-700 dark:text-purple-300 pt-1 border-t border-purple-500/20 font-medium">
+                    <span>{lang === 'bn' ? 'ডিসকাউন্ট প্রযোজ্য মূল্য:' : 'Eligible Subtotal:'}</span>
+                    <span className="font-mono font-bold">৳ {eligibleSubtotal.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="relative">
                 <input
                   type="number"
-                  placeholder={discountType === 'flat' ? (lang === 'bn' ? 'ডিসকাউন্ট পরিমাণ (৳ যেমন ৫০)' : 'Discount Amount (৳ e.g. 50)') : (lang === 'bn' ? 'ডিসকাউন্ট শতাংশ (% যেমন ১০)' : 'Discount Percentage (% e.g. 10)')}
+                  placeholder={
+                    discountType === 'flat'
+                      ? (lang === 'bn' ? 'ডিসকাউন্ট পরিমাণ (৳ যেমন ৫০)' : 'Discount Amount (৳ e.g. 50)')
+                      : (lang === 'bn' ? 'ডিসকাউন্ট শতাংশ (% যেমন ১০)' : 'Discount Percentage (% e.g. 10)')
+                  }
                   value={discountValue}
                   onChange={(e) => setDiscountValue(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-1 focus:ring-[#00df89]"

@@ -735,10 +735,11 @@ export default function Orders() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/80">
-                  {paginatedOrders.map((order) => {
+                  {paginatedOrders.map((order, idx) => {
                     const isDue = (order.due_amount || 0) > 0;
                     const isCopied = copiedInvoice === order.invoice_number;
                     const items = Array.isArray(order.items) ? order.items : [];
+                    const isLastRows = idx >= paginatedOrders.length - 2;
 
                     return (
                       <tr
@@ -747,10 +748,8 @@ export default function Orders() {
                       >
                         {/* Invoice & Date */}
                         <td className="py-3.5 px-4 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-900 dark:text-white font-mono text-[13px]">
-                              {order.invoice_number}
-                            </span>
+                          <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-slate-900 dark:text-white">
+                            <span>{order.invoice_number}</span>
                             <button
                               type="button"
                               onClick={(e) => handleCopyInvoice(e, order.invoice_number)}
@@ -897,10 +896,9 @@ export default function Orders() {
                           </div>
                         </td>
 
-                        {/* Actions Toolbar (Properly sized & Accessible) */}
+                        {/* Actions Toolbar */}
                         <td className="py-3.5 px-4 text-right whitespace-nowrap w-[160px] min-w-[160px]">
                           <div className="flex items-center justify-end gap-1.5">
-                            {/* Collect Due (Primary highlighted when due is active) */}
                             {isDue && order.status !== 'returned' && (
                               <button
                                 type="button"
@@ -912,8 +910,6 @@ export default function Orders() {
                                 <span>{lang === 'bn' ? 'বকেয়া' : 'Due'}</span>
                               </button>
                             )}
-
-                            {/* View Receipt Memo Modal */}
                             <button
                               type="button"
                               onClick={() => setSelectedOrder(order)}
@@ -922,8 +918,6 @@ export default function Orders() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-
-                            {/* Print Cash Memo */}
                             <button
                               type="button"
                               onClick={() => printSaleReceipt({ order, shop: mongoShop, lang })}
@@ -932,14 +926,12 @@ export default function Orders() {
                             >
                               <Printer className="w-4 h-4" />
                             </button>
-
-                            {/* More Actions Dropdown (Shadcn DropdownMenu) */}
                             <div className="shrink-0">
                               <DropdownMenu>
                                 <DropdownMenuTrigger className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 flex items-center justify-center transition-colors cursor-pointer border border-slate-200/80 dark:border-zinc-700/80">
                                   <MoreVertical className="w-4 h-4" />
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="right" width="w-52">
+                                <DropdownMenuContent align="right" side={isLastRows ? 'top' : 'auto'} width="w-52">
                                   <DropdownMenuLabel>
                                     {order.invoice_number}
                                   </DropdownMenuLabel>

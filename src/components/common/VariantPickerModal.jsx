@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import toast from 'react-hot-toast';
 
 // Comprehensive color palette for auto-detecting variation colors
 const COLOR_MAP = {
@@ -217,9 +218,16 @@ export default function VariantPickerModal({
         if (filteredVariants[index]) {
           const selectedVariant = filteredVariants[index];
           const stock = Number(selectedVariant.stock_quantity) || 0;
-          if (stock > 0 || stock === 0) { // allow adding
-            onAddVariant?.(product, selectedVariant);
+          if (stock <= 0) {
+            toast.error(lang === 'bn' ? `দুঃখিত! '${selectedVariant.name}' স্টকে নেই` : `Sorry! '${selectedVariant.name}' is out of stock.`);
+            return;
           }
+          const inCart = cartVariantMap[String(selectedVariant._id || selectedVariant.id)] || 0;
+          if (inCart + 1 > stock) {
+            toast.error(lang === 'bn' ? `স্টকে মাত্র ${stock} টি রয়েছে!` : `Only ${stock} units available in stock!`);
+            return;
+          }
+          onAddVariant?.(product, selectedVariant);
         }
       }
     };
@@ -240,6 +248,16 @@ export default function VariantPickerModal({
 
   // Handler for adding/incrementing
   const handleAdd = (variant) => {
+    const stockQty = Number(variant.stock_quantity) || 0;
+    if (stockQty <= 0) {
+      toast.error(lang === 'bn' ? `দুঃখিত! '${variant.name}' স্টকে নেই (Out of stock)` : `Sorry! '${variant.name}' is out of stock.`);
+      return;
+    }
+    const currentInCart = cartVariantMap[String(variant._id || variant.id)] || 0;
+    if (currentInCart + 1 > stockQty) {
+      toast.error(lang === 'bn' ? `স্টকে মাত্র ${stockQty} টি রয়েছে!` : `Only ${stockQty} units available in stock!`);
+      return;
+    }
     onAddVariant?.(product, variant);
   };
 
@@ -253,6 +271,10 @@ export default function VariantPickerModal({
   // Add all in-stock variations
   const handleAddAllInStock = () => {
     const inStockList = variants.filter((v) => (Number(v.stock_quantity) || 0) > 0);
+    if (inStockList.length === 0) {
+      toast.error(lang === 'bn' ? 'কোনো ভ্যারিয়েন্ট স্টকে নেই!' : 'No variants available in stock!');
+      return;
+    }
     inStockList.forEach((v) => {
       onAddVariant?.(product, v);
     });
@@ -533,9 +555,14 @@ export default function VariantPickerModal({
                           </span>
                           <button
                             type="button"
+                            disabled={inCartQty >= stockQty}
                             onClick={() => handleAdd(v)}
-                            className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors cursor-pointer shadow-xs"
-                            title="Increase quantity"
+                            className={`w-7 h-7 rounded-lg text-white flex items-center justify-center transition-colors shadow-xs ${
+                              inCartQty >= stockQty
+                                ? 'bg-slate-300 dark:bg-zinc-700 cursor-not-allowed opacity-50'
+                                : 'bg-emerald-500 hover:bg-emerald-600 cursor-pointer'
+                            }`}
+                            title={inCartQty >= stockQty ? 'Max stock reached' : 'Increase quantity'}
                           >
                             <Plus className="w-3 h-3" />
                           </button>
@@ -543,14 +570,19 @@ export default function VariantPickerModal({
                       ) : (
                         <button
                           type="button"
+                          disabled={isOutOfStock}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleAdd(v);
                           }}
-                          className="h-8 px-3 rounded-xl bg-slate-100 dark:bg-zinc-800 group-hover:bg-emerald-500 group-hover:text-white text-slate-700 dark:text-zinc-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                          className={`h-8 px-3 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs ${
+                            isOutOfStock
+                              ? 'bg-slate-100 dark:bg-zinc-800/60 text-slate-400 dark:text-zinc-600 cursor-not-allowed border border-slate-200/50 dark:border-zinc-800'
+                              : 'bg-slate-100 dark:bg-zinc-800 group-hover:bg-emerald-500 group-hover:text-white text-slate-700 dark:text-zinc-200 cursor-pointer active:scale-95'
+                          }`}
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>{lang === 'bn' ? 'যোগ করুন' : 'Add'}</span>
+                          <span>{isOutOfStock ? (lang === 'bn' ? 'স্টক নেই' : 'No Stock') : (lang === 'bn' ? 'যোগ করুন' : 'Add')}</span>
                         </button>
                       )}
                     </div>

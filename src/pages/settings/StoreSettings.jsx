@@ -1,6 +1,8 @@
 /**
  * @file StoreSettings.jsx
- * @description Comprehensive Store & Retail Outlet Settings page covering Branding, Address, Invoicing & POS, Inventory controls, Localization, and Schedule.
+ * @description Comprehensive Store & Retail Outlet Settings page covering Branding,
+ * Address & Location, Invoicing & POS Cash Memo Designer, Inventory controls,
+ * Localization, Operating Hours, and Danger Zone with Store Deletion.
  */
 import { useState, useEffect, useMemo, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -24,7 +26,8 @@ import {
   Cookie, Smartphone, Hammer, Armchair, BookOpen, Gift, Flower2,
   Footprints, Gem, Dumbbell, Scissors, ScissorsLineDashed, Dog,
   Gamepad2, Trophy, Laptop, Sprout, Car, Boxes, HelpCircle,
-  Sliders, ShieldAlert, Trash2, Camera
+  Sliders, ShieldAlert, Trash2, Camera, AlertCircle, ArrowRight,
+  ExternalLink, Search, RefreshCw, Layers, ShieldCheck, X
 } from 'lucide-react';
 
 const ICON_MAP = {
@@ -34,14 +37,22 @@ const ICON_MAP = {
   Gamepad2, Trophy, Store, Laptop, Sprout, Car, Boxes
 };
 
+const BANGLADESH_CITIES = [
+  'Dhaka', 'Chittagong', 'Sylhet', 'Rajshahi', 'Khulna',
+  'Barisal', 'Rangpur', 'Mymensingh', 'Comilla', 'Gazipur', 'Narayanganj'
+];
+
 export default function StoreSettings() {
   const navigate = useNavigate();
   const { lang, setLang } = useLanguage();
   const { activeShop, selectShopType } = useShop();
-  const { mongoShop, setSessionShop, syncBackendProfile } = useAuth();
+  const { mongoShop, userShops, switchShop, setSessionShop, syncBackendProfile } = useAuth();
   
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeTab, setActiveTab] = useState('general'); // 'general' | 'address' | 'invoicing' | 'inventory' | 'schedule' | 'danger'
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [typeSearch, setTypeSearch] = useState('');
   const logoInputId = useId();
 
@@ -125,6 +136,8 @@ export default function StoreSettings() {
     weekly_off_day: 'Friday',
   });
 
+  const [originalForm, setOriginalForm] = useState(null);
+
   useEffect(() => {
     if (mongoShop) {
       if (mongoShop.settings?.cash_memo_config) {
@@ -134,7 +147,7 @@ export default function StoreSettings() {
         }));
       }
 
-      setForm({
+      const initialData = {
         name: mongoShop.name || '',
         business_type: mongoShop.business_type || 'grocery',
         tagline: mongoShop.tagline || '',
@@ -170,20 +183,29 @@ export default function StoreSettings() {
         opening_time: mongoShop.settings?.opening_time || '09:00',
         closing_time: mongoShop.settings?.closing_time || '21:00',
         weekly_off_day: mongoShop.settings?.weekly_off_day || 'Friday',
-      });
+      };
+
+      setForm(initialData);
+      setOriginalForm(initialData);
     }
   }, [mongoShop]);
 
+  // Dirty state tracker
+  const isDirty = useMemo(() => {
+    if (!originalForm) return false;
+    return Object.keys(form).some((k) => form[k] !== originalForm[k]);
+  }, [form, originalForm]);
+
   const filteredTypes = useMemo(() => {
     const q = typeSearch.toLowerCase().trim();
-    return SHOP_TYPES.filter(st => {
+    return SHOP_TYPES.filter((st) => {
       const sName = lang === 'bn' && st.nameBn ? st.nameBn : st.name;
       return !q || sName.toLowerCase().includes(q) || st.id.includes(q) || st.category.includes(q);
     });
   }, [typeSearch, lang]);
 
   const selectedTypeObj = useMemo(() => {
-    return SHOP_TYPES.find(st => st.id === form.business_type) || SHOP_TYPES[0];
+    return SHOP_TYPES.find((st) => st.id === form.business_type) || SHOP_TYPES[0];
   }, [form.business_type]);
 
   const SelectedIcon = ICON_MAP[selectedTypeObj?.iconName] || Store;
@@ -191,19 +213,21 @@ export default function StoreSettings() {
   const handleLogoUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error(lang === 'bn' ? 'লোগোর সাইজ ২MB এর কম হতে হবে।' : 'Logo image must be under 2MB.');
+    if (file.size > 2.5 * 1024 * 1024) {
+      toast.error(lang === 'bn' ? 'লোগোর সাইজ ২.৫MB এর কম হতে হবে।' : 'Logo image must be under 2.5MB.');
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
-      setForm(prev => ({ ...prev, logo_url: reader.result }));
+      setForm((prev) => ({ ...prev, logo_url: reader.result }));
+      toast.success(lang === 'bn' ? 'লোগো প্রিভিউ তৈরি হয়েছে!' : 'Logo preview updated!');
     };
     reader.readAsDataURL(file);
   };
 
+  // Save Shop Settings Handler
   const handleSaveShopSettings = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!form.name.trim()) {
       toast.error(lang === 'bn' ? 'দোকানের নাম আবশ্যক।' : 'Shop name is required.');
       return;
@@ -252,7 +276,6 @@ export default function StoreSettings() {
 
       const res = await api.shops.update(payload);
 
-      // Synchronously update local auth and shop context
       if (res.data) {
         setSessionShop(res.data);
       }
@@ -260,25 +283,19 @@ export default function StoreSettings() {
       localStorage.setItem('shopo_business_type', form.business_type);
 
       await syncBackendProfile(true);
+      setOriginalForm({ ...form });
 
-      const typeLabel = lang === 'bn' && selectedTypeObj?.nameBn ? selectedTypeObj.nameBn : selectedTypeObj?.name;
       toast.success(
         lang === 'bn'
           ? `দোকানের সকল সেটিংস (${form.name}) সফলভাবে সংরক্ষিত হয়েছে!`
           : `Store settings for (${form.name}) saved successfully!`
       );
 
-      // If business type changed to/from gym or restaurant, transition layout
+      // Handle gym/restaurant UI redirection if type switched
       if (form.business_type === 'gym') {
         navigate('/gym/dashboard', { replace: true });
       } else if (form.business_type === 'restaurant') {
         navigate('/restaurant/dashboard', { replace: true });
-      } else if (
-        (mongoShop?.business_type === 'gym' || mongoShop?.business_type === 'restaurant') &&
-        form.business_type !== 'gym' &&
-        form.business_type !== 'restaurant'
-      ) {
-        navigate('/dashboard', { replace: true });
       }
     } catch (err) {
       console.error('Update shop settings error:', err);
@@ -288,56 +305,173 @@ export default function StoreSettings() {
     }
   };
 
+  // Delete Shop Handler
+  const handleDeleteShop = async () => {
+    if (deleteConfirmText.trim().toLowerCase() !== form.name.trim().toLowerCase()) {
+      toast.error(lang === 'bn' ? 'দোকানের নামটি সঠিকভাবে টাইপ করুন।' : 'Please type the exact store name to confirm.');
+      return;
+    }
+
+    if (!mongoShop?._id) {
+      toast.error('No active shop found to delete.');
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const res = await api.shops.delete(mongoShop._id);
+      setIsDeleteModalOpen(false);
+      setDeleteConfirmText('');
+
+      toast.success(
+        lang === 'bn'
+          ? `'${form.name}' দোকান সফলভাবে ডিলিট করা হয়েছে!`
+          : `Store '${form.name}' deleted successfully!`
+      );
+
+      // Sync backend profile
+      await syncBackendProfile(true);
+
+      // If user has other remaining shops, switch to next one
+      if (res.data?.nextActiveShop) {
+        await switchShop(res.data.nextActiveShop._id);
+        navigate('/dashboard', { replace: true });
+      } else {
+        localStorage.removeItem('shopo_active_shop_id');
+        localStorage.removeItem('shopo_has_shop');
+        navigate('/onboarding', { replace: true });
+      }
+    } catch (err) {
+      console.error('Delete shop error:', err);
+      toast.error(err.message || 'Failed to delete store.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const tabs = [
     { id: 'general', labelEn: 'General & Branding', labelBn: 'সাধারণ ও ব্র্যান্ডিং', icon: Store },
-    { id: 'address', labelEn: 'Address & Contact', labelBn: 'ঠিকানা ও যোগাযোগ', icon: MapPin },
-    { id: 'invoicing', labelEn: 'Cash Memo & POS Invoicing', labelBn: 'ক্যাশ মেমো ও পিওএস প্রিন্টিং', icon: Receipt },
+    { id: 'address', labelEn: 'Address & Location', labelBn: 'ঠিকানা ও লোকেশন', icon: MapPin },
+    { id: 'invoicing', labelEn: 'Cash Memo & POS', labelBn: 'ক্যাশ মেমো ও প্রিন্টিং', icon: Receipt },
     { id: 'inventory', labelEn: 'Inventory Controls', labelBn: 'মজুত ও স্টক কন্ট্রোল', icon: Package },
     { id: 'schedule', labelEn: 'Localization & Hours', labelBn: 'লোকেশন ও সময়সূচি', icon: Clock },
-    { id: 'danger', labelEn: 'Danger Zone', labelBn: 'ডেঞ্জার জোন', icon: ShieldAlert },
+    { id: 'danger', labelEn: 'Danger Zone & Delete', labelBn: 'ডেঞ্জার জোন ও ডিলিট', icon: ShieldAlert },
   ];
 
   return (
-    <div className="max-w-6xl space-y-6 font-sans pb-16">
+    <div className="max-w-6xl mx-auto space-y-6 font-sans pb-24 animate-in fade-in duration-200">
       
       {/* ---------------------------------------------------- */}
-      {/* HEADER SECTION                                       */}
+      {/* STORE HERO BANNER                                    */}
       {/* ---------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#00df89]/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center">
-              <Store className="w-4 h-4" />
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-zinc-900 to-slate-950 border border-slate-700/60 p-6 sm:p-8 text-white shadow-xl">
+        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-[#00df89]/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/4 -mb-12 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-4 sm:gap-5">
+            {/* Store Logo with Category Badge */}
+            <div className="relative shrink-0">
+              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl p-1 bg-gradient-to-tr from-[#00df89] to-emerald-400 shadow-lg flex items-center justify-center bg-zinc-900">
+                {form.logo_url ? (
+                  <img
+                    src={form.logo_url}
+                    alt="Store Logo"
+                    className="w-full h-full object-contain rounded-xl bg-zinc-900 p-1"
+                  />
+                ) : (
+                  <SelectedIcon className="w-8 h-8 text-slate-950" />
+                )}
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#00df89] border-2 border-slate-900 flex items-center justify-center" title="Verified Outlet">
+                <Check className="w-3 h-3 text-slate-950 stroke-[3]" />
+              </div>
             </div>
-            <span>{lang === 'bn' ? 'দোকানের সেটিংস' : 'Store Settings'}</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
-            {lang === 'bn'
-              ? 'দোকানের নাম, ব্যবসার ক্যাটাগরি, ইনভয়েস রসিদ, স্টক কন্ট্রোল এবং কাজের সময় পরিচালনা করুন।'
-              : 'Configure your retail branding, invoice format, POS parameters, inventory rules, and business schedule.'}
-          </p>
+
+            {/* Store Title & Type */}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white truncate">
+                  {form.name || (lang === 'bn' ? 'দোকানের নাম' : 'Store Name')}
+                </h1>
+                <Badge className="bg-[#00df89] text-slate-950 text-[10px] font-bold uppercase tracking-wider">
+                  <SelectedIcon className="w-3 h-3 mr-1" />
+                  {lang === 'bn' && selectedTypeObj?.nameBn ? selectedTypeObj.nameBn : selectedTypeObj?.name}
+                </Badge>
+              </div>
+
+              <p className="text-xs text-slate-300 flex items-center gap-2 mt-1">
+                <MapPin className="w-3.5 h-3.5 text-[#00df89] shrink-0" />
+                <span className="truncate">{form.city || 'Dhaka'}, {form.country || 'Bangladesh'}</span>
+                {form.bin_vat_number && (
+                  <span className="text-slate-400 font-mono text-[11px]">• BIN: {form.bin_vat_number}</span>
+                )}
+              </p>
+
+              {form.tagline && (
+                <div className="text-xs text-slate-400 italic mt-0.5 truncate">
+                  "{form.tagline}"
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Outlet Switcher Dropdown in Banner */}
+          {userShops && userShops.length > 1 && (
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 sm:p-4 border border-white/10 shrink-0 flex flex-col justify-between">
+              <div className="text-[11px] font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <Store className="w-3.5 h-3.5 text-[#00df89]" />
+                <span>{lang === 'bn' ? 'আউটলেট পরিবর্তন করুন:' : 'Switch Active Outlet:'}</span>
+              </div>
+              <select
+                value={mongoShop?._id || ''}
+                onChange={async (e) => {
+                  const targetId = e.target.value;
+                  if (!targetId || targetId === mongoShop?._id) return;
+                  try {
+                    await switchShop(targetId);
+                    toast.success(lang === 'bn' ? 'আউটলেট পরিবর্তিত হয়েছে!' : 'Outlet switched successfully!');
+                  } catch (err) {
+                    toast.error(err.message || 'Failed to switch outlet');
+                  }
+                }}
+                className="h-9 px-3 rounded-xl bg-slate-900/90 text-white border border-white/20 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-[#00df89] cursor-pointer"
+              >
+                {userShops.map((shop) => (
+                  <option key={shop._id} value={shop._id}>
+                    {shop.name} ({shop.business_type})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
       {/* ---------------------------------------------------- */}
-      {/* TABS NAVIGATION                                      */}
+      {/* MODERN TAB NAVIGATION                                */}
       {/* ---------------------------------------------------- */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-200 dark:border-zinc-800 scrollbar-none">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-slate-200 dark:border-zinc-800 scrollbar-none">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
+          const isDanger = tab.id === 'danger';
           return (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 isActive
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800/60'
+                  ? isDanger
+                    ? 'bg-rose-600 text-white shadow-sm'
+                    : 'bg-slate-900 text-white dark:bg-[#00df89] dark:text-slate-950 shadow-sm'
+                  : isDanger
+                  ? 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30'
+                  : 'text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/60'
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className={`w-3.5 h-3.5 ${isActive ? (isDanger ? 'text-white' : 'text-[#00df89] dark:text-slate-950') : isDanger ? 'text-rose-500' : 'text-slate-400'}`} />
               <span>{lang === 'bn' ? tab.labelBn : tab.labelEn}</span>
             </button>
           );
@@ -350,7 +484,7 @@ export default function StoreSettings() {
         {/* TAB 1: GENERAL & BRANDING                            */}
         {/* ==================================================== */}
         {activeTab === 'general' && (
-          <div className="space-y-6 animate-in fade-in-50 duration-200">
+          <div className="space-y-6 animate-in fade-in duration-150">
             
             {/* Store Name & Logo Card */}
             <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs rounded-2xl">
@@ -365,8 +499,8 @@ export default function StoreSettings() {
               </CardDescription>
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-6">
-                {/* Store Logo Preview */}
-                <div className="relative group">
+                {/* Store Logo Preview Box */}
+                <div className="relative group shrink-0">
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl p-1 bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 shadow-sm flex items-center justify-center overflow-hidden">
                     {form.logo_url ? (
                       <img src={form.logo_url} alt="Store Logo" className="w-full h-full object-contain rounded-xl" />
@@ -385,17 +519,26 @@ export default function StoreSettings() {
                 </div>
 
                 <div className="space-y-2 flex-1 min-w-0">
-                  <div className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'দোকানের লোগো URL' : 'Store Logo Web Link'}
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                    <span>{lang === 'bn' ? 'দোকানের লোগো URL বা ওয়েব লিংক' : 'Store Logo Direct Image URL'}</span>
+                    {form.logo_url && (
+                      <button
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, logo_url: '' }))}
+                        className="text-[11px] text-rose-500 hover:underline cursor-pointer"
+                      >
+                        {lang === 'bn' ? 'লোগো মুছুন' : 'Remove Logo'}
+                      </button>
+                    )}
                   </div>
                   <Input
                     value={form.logo_url}
                     onChange={(e) => setForm({ ...form, logo_url: e.target.value })}
                     placeholder="https://example.com/logo.png"
-                    className="text-xs h-9"
+                    className="text-xs h-9 font-mono"
                   />
                   <div className="text-[11px] text-slate-400 dark:text-zinc-500">
-                    {lang === 'bn' ? 'লোগোটি রসিদের প্রিন্ট হেডারে প্রদর্শিত হবে।' : 'Logo appears on POS receipts and reports.'}
+                    {lang === 'bn' ? 'লোগোটি রসিদের প্রিন্ট হেডারে প্রদর্শিত হবে।' : 'Logo appears on POS receipts and financial reports.'}
                   </div>
                 </div>
               </div>
@@ -455,47 +598,46 @@ export default function StoreSettings() {
                       value={form.website}
                       onChange={(e) => setForm({ ...form, website: e.target.value })}
                       placeholder="https://myshop.com"
-                      className="pl-9 text-xs h-10"
+                      className="pl-9 text-xs h-10 font-mono"
                     />
                   </div>
                 </div>
               </div>
             </Card>
 
-            {/* Business Type Category Selector */}
+            {/* Business Category Selection Card */}
             <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs rounded-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <div>
-                  <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
-                    <Sliders className="w-4 h-4 text-blue-500" />
-                    <span>{lang === 'bn' ? 'ব্যবসার ধরন ও ইন্ডাস্ট্রি মোড' : 'Business Type & Industry Mode'}</span>
+                  <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-blue-500" />
+                    <span>{lang === 'bn' ? 'ব্যবসার ধরণ ও ক্যাটাগরি' : 'Business Category & Industry Type'}</span>
                   </CardTitle>
                   <CardDescription className="text-xs text-slate-500 dark:text-zinc-400">
-                    {lang === 'bn'
-                      ? 'আপনার ব্যবসার ধরন অনুযায়ী সফটওয়্যারের ড্যাশবোর্ড ও টুলস স্বয়ংক্রিয়ভাবে পরিবর্তিত হবে।'
-                      : 'Adapts POS widgets, categories, and inventory fields to your specific retail industry.'}
+                    {lang === 'bn' ? 'আপনার দোকানের সাথে মানানসই ব্যবসার ক্যাটাগরি বেছে নিন।' : 'Select the appropriate retail/service template.'}
                   </CardDescription>
                 </div>
 
-                <div className="w-full sm:w-56">
+                <div className="relative w-full sm:w-60">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <Input
                     value={typeSearch}
                     onChange={(e) => setTypeSearch(e.target.value)}
-                    placeholder={lang === 'bn' ? 'ক্যাটাগরি খুঁজুন...' : 'Search industry...'}
-                    className="text-xs h-8"
+                    placeholder={lang === 'bn' ? 'ক্যাটাগরি খুঁজুন...' : 'Search category...'}
+                    className="pl-8 text-xs h-9"
                   />
                 </div>
               </div>
 
-              {/* Grid of Shop Types */}
+              {/* Category Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-72 overflow-y-auto pr-1">
                 {filteredTypes.map((st) => {
                   const StIcon = ICON_MAP[st.iconName] || Store;
                   const isSelected = form.business_type === st.id;
                   return (
                     <button
-                      type="button"
                       key={st.id}
+                      type="button"
                       onClick={() => setForm({ ...form, business_type: st.id })}
                       className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all cursor-pointer ${
                         isSelected
@@ -525,7 +667,7 @@ export default function StoreSettings() {
         {/* TAB 2: ADDRESS & CONTACT                             */}
         {/* ==================================================== */}
         {activeTab === 'address' && (
-          <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs rounded-2xl animate-in fade-in-50 duration-200">
+          <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs rounded-2xl animate-in fade-in duration-150">
             <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
               <MapPin className="w-4 h-4 text-rose-500" />
               <span>{lang === 'bn' ? 'দোকানের ঠিকানা ও কন্টাক্ট ইনফো' : 'Store Address & Contact Info'}</span>
@@ -579,6 +721,19 @@ export default function StoreSettings() {
                   className="text-xs h-10"
                   required
                 />
+                {/* City quick pills */}
+                <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                  {BANGLADESH_CITIES.slice(0, 5).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setForm({ ...form, city: c })}
+                      className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-[10px] text-slate-600 dark:text-zinc-400 hover:bg-slate-200 cursor-pointer"
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Division / State */}
@@ -631,7 +786,7 @@ export default function StoreSettings() {
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                     placeholder="017XXXXXXXX"
-                    className="pl-9 text-xs h-10"
+                    className="pl-9 text-xs h-10 font-mono"
                   />
                 </div>
               </div>
@@ -647,7 +802,7 @@ export default function StoreSettings() {
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     placeholder="support@myshop.com"
-                    className="pl-9 text-xs h-10"
+                    className="pl-9 text-xs h-10 font-mono"
                   />
                 </div>
               </div>
@@ -660,20 +815,22 @@ export default function StoreSettings() {
         {/* TAB 3: CASH MEMO & POS INVOICING STUDIO              */}
         {/* ==================================================== */}
         {activeTab === 'invoicing' && (
-          <CashMemoDesigner
-            memoConfig={memoConfig}
-            setMemoConfig={setMemoConfig}
-            shop={mongoShop}
-            form={form}
-            setForm={setForm}
-          />
+          <div className="space-y-6 animate-in fade-in duration-150">
+            <CashMemoDesigner
+              memoConfig={memoConfig}
+              setMemoConfig={setMemoConfig}
+              shop={mongoShop}
+              form={form}
+              setForm={setForm}
+            />
+          </div>
         )}
 
         {/* ==================================================== */}
         {/* TAB 4: INVENTORY CONTROLS                            */}
         {/* ==================================================== */}
         {activeTab === 'inventory' && (
-          <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs rounded-2xl animate-in fade-in-50 duration-200">
+          <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs rounded-2xl animate-in fade-in duration-150">
             <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
               <Package className="w-4 h-4 text-amber-500" />
               <span>{lang === 'bn' ? 'ইনভেন্টরি ও স্টক নিয়ন্ত্রণ' : 'Inventory & Stock Rules'}</span>
@@ -699,8 +856,7 @@ export default function StoreSettings() {
                 <div className="w-28 shrink-0">
                   <Input
                     type="number"
-                    min="1"
-                    max="1000"
+                    min="0"
                     value={form.low_stock_threshold}
                     onChange={(e) => setForm({ ...form, low_stock_threshold: e.target.value })}
                     className="text-xs h-10 font-mono text-center"
@@ -708,40 +864,44 @@ export default function StoreSettings() {
                 </div>
               </div>
 
-              {/* Allow Negative Stock Sales */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/80 dark:border-zinc-700/60 flex items-center justify-between">
+              {/* Allow Negative Stock */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/80 dark:border-zinc-700/60 flex items-center justify-between gap-4">
                 <div>
                   <div className="text-xs font-bold text-slate-900 dark:text-white">
-                    {lang === 'bn' ? 'নেগেটিভ স্টকে বিক্রির অনুমতি (Allow Negative Stock Sales)' : 'Allow Negative Stock Sales'}
+                    {lang === 'bn' ? 'জিরো স্টক অবস্থায় বিক্রয় অনুমোদন (Negative Stock)' : 'Allow Selling Out-of-Stock Items'}
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                    {lang === 'bn' ? 'স্টক ০ থাকলেও পিওএস কাউন্টারে বিক্রি সম্পন্ন করতে পারবে।' : 'Allow cashiers to complete sales even when item quantity is zero.'}
+                    {lang === 'bn' ? 'স্টক শূন্য হলেও ক্যাশিয়ারে বিক্রি সম্পন্ন করতে পারবে।' : 'Allow cashiers to complete sales when stock is zero (stock becomes negative).'}
                   </div>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={form.allow_negative_stock}
-                  onChange={(e) => setForm({ ...form, allow_negative_stock: e.target.checked })}
-                  className="w-5 h-5 accent-[#00df89] rounded cursor-pointer"
-                />
+
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, allow_negative_stock: !form.allow_negative_stock })}
+                  className={`w-12 h-6.5 rounded-full transition-colors relative cursor-pointer ${form.allow_negative_stock ? 'bg-[#00df89]' : 'bg-slate-300 dark:bg-zinc-700'}`}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white shadow-md transition-transform absolute top-0.5 ${form.allow_negative_stock ? 'right-1' : 'left-1'}`} />
+                </button>
               </div>
 
               {/* Auto Generate SKU */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/80 dark:border-zinc-700/60 flex items-center justify-between">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/80 dark:border-zinc-700/60 flex items-center justify-between gap-4">
                 <div>
                   <div className="text-xs font-bold text-slate-900 dark:text-white">
-                    {lang === 'bn' ? 'নতুন পণ্যে স্বয়ংক্রিয় SKU তৈরি (Auto-generate SKU)' : 'Auto-Generate SKU on Product Creation'}
+                    {lang === 'bn' ? 'স্বয়ংক্রিয় SKU ও বারকোড তৈরি' : 'Auto-Generate SKU & Barcode Codes'}
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                    {lang === 'bn' ? 'নতুন প্রোডাক্ট যোগ করার সময় সিস্টেম স্বয়ংক্রিয় ইউনিক SKU বসাবে।' : 'Automatically generates unique product SKU codes when left blank.'}
+                    {lang === 'bn' ? 'নতুন পণ্য যোগ করার সময় অটোমেটিক অনন্য SKU কোড জেনারেট হবে।' : 'Automatically generate unique alphanumeric SKUs during new product creation.'}
                   </div>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={form.auto_generate_sku}
-                  onChange={(e) => setForm({ ...form, auto_generate_sku: e.target.checked })}
-                  className="w-5 h-5 accent-[#00df89] rounded cursor-pointer"
-                />
+
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, auto_generate_sku: !form.auto_generate_sku })}
+                  className={`w-12 h-6.5 rounded-full transition-colors relative cursor-pointer ${form.auto_generate_sku ? 'bg-[#00df89]' : 'bg-slate-300 dark:bg-zinc-700'}`}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white shadow-md transition-transform absolute top-0.5 ${form.auto_generate_sku ? 'right-1' : 'left-1'}`} />
+                </button>
               </div>
 
             </div>
@@ -749,18 +909,18 @@ export default function StoreSettings() {
         )}
 
         {/* ==================================================== */}
-        {/* TAB 5: LOCALIZATION & SCHEDULE                       */}
+        {/* TAB 5: LOCALIZATION & OPERATING HOURS                */}
         {/* ==================================================== */}
         {activeTab === 'schedule' && (
-          <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs rounded-2xl animate-in fade-in-50 duration-200">
+          <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs rounded-2xl animate-in fade-in duration-150">
             <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
-              <Globe className="w-4 h-4 text-cyan-500" />
-              <span>{lang === 'bn' ? 'কারেন্সি, ভাষা ও কাজের সময়সূচি' : 'Currency, Localization & Schedule'}</span>
+              <Clock className="w-4 h-4 text-emerald-500" />
+              <span>{lang === 'bn' ? 'লোকেশন, মুদ্রা ও সময়সূচি' : 'Localization & Business Operating Hours'}</span>
             </CardTitle>
             <CardDescription className="text-xs text-slate-500 dark:text-zinc-400 mb-6">
               {lang === 'bn'
-                ? 'মুদ্রার প্রতীক, সিস্টেম টাইমজোন এবং দোকানের খোলার ও বন্ধের সময়সূচি।'
-                : 'Default currency display, system locale timezone, and standard business operating hours.'}
+                ? 'মুদ্রা প্রতীক, টাইমজোন, সাপ্তাহিক ছুটি এবং দোকান খোলার সময়সূচি।'
+                : 'Currency formatting, operating schedule, and weekly closure settings.'}
             </CardDescription>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -768,23 +928,20 @@ export default function StoreSettings() {
               {/* Currency Symbol */}
               <div>
                 <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1.5">
-                  {lang === 'bn' ? 'মুদ্রার প্রতীক (Currency Symbol)' : 'Currency Symbol'}
+                  {lang === 'bn' ? 'মুদ্রা প্রতীক (Currency Symbol)' : 'Currency Symbol'}
                 </label>
-                <div className="relative">
-                  <DollarSign className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <Input
-                    value={form.currency_symbol}
-                    onChange={(e) => setForm({ ...form, currency_symbol: e.target.value })}
-                    placeholder="৳"
-                    className="pl-9 text-xs h-10 font-bold"
-                  />
-                </div>
+                <Input
+                  value={form.currency_symbol}
+                  onChange={(e) => setForm({ ...form, currency_symbol: e.target.value })}
+                  placeholder="৳"
+                  className="text-xs h-10 font-bold"
+                />
               </div>
 
               {/* Currency Code */}
               <div>
                 <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 block mb-1.5">
-                  {lang === 'bn' ? 'মুদ্রার কোড (Currency Code)' : 'Currency Code'}
+                  {lang === 'bn' ? 'মুদ্রা কোড (ISO Currency)' : 'Currency Code'}
                 </label>
                 <select
                   value={form.currency}
@@ -793,9 +950,9 @@ export default function StoreSettings() {
                 >
                   <option value="BDT">BDT - Bangladeshi Taka (৳)</option>
                   <option value="USD">USD - US Dollar ($)</option>
+                  <option value="INR">INR - Indian Rupee (₹)</option>
                   <option value="EUR">EUR - Euro (€)</option>
                   <option value="GBP">GBP - British Pound (£)</option>
-                  <option value="INR">INR - Indian Rupee (₹)</option>
                   <option value="AED">AED - UAE Dirham</option>
                   <option value="SAR">SAR - Saudi Riyal</option>
                 </select>
@@ -868,63 +1025,102 @@ export default function StoreSettings() {
         )}
 
         {/* ==================================================== */}
-        {/* TAB 6: DANGER ZONE                                  */}
+        {/* TAB 6: DANGER ZONE & STORE DELETION                  */}
         {/* ==================================================== */}
         {activeTab === 'danger' && (
-          <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-rose-500/30 dark:border-rose-900/40 shadow-xs rounded-2xl animate-in fade-in-50 duration-200">
-            <CardTitle className="text-base font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2 mb-1">
-              <ShieldAlert className="w-4 h-4" />
-              <span>{lang === 'bn' ? 'ডেঞ্জার জোন ও নিয়ন্ত্রণ' : 'Danger Zone & Store Deactivation'}</span>
-            </CardTitle>
-            <CardDescription className="text-xs text-slate-500 dark:text-zinc-400 mb-6">
-              {lang === 'bn'
-                ? 'সংবেদনশীল অ্যাকশন এবং আউটলেট সংক্রান্ত জরুরি পদক্ষেপ।'
-                : 'Critical store-level operations requiring executive administrative authorization.'}
-            </CardDescription>
+          <div className="space-y-6 animate-in fade-in duration-150">
+            
+            <Card className="p-5 sm:p-6 bg-white dark:bg-zinc-900 border-rose-500/30 dark:border-rose-900/40 shadow-xs rounded-2xl">
+              <CardTitle className="text-base font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2 mb-1">
+                <ShieldAlert className="w-4 h-4" />
+                <span>{lang === 'bn' ? 'ডেঞ্জার জোন ও দোকান মুছে ফেলা' : 'Danger Zone & Store Deletion'}</span>
+              </CardTitle>
+              <CardDescription className="text-xs text-slate-500 dark:text-zinc-400 mb-6">
+                {lang === 'bn'
+                  ? 'সংবেদনশীল অ্যাকশন এবং দোকান স্থায়ীভাবে মুছে ফেলার নিয়ন্ত্রণ।'
+                  : 'Irreversible operations and permanent store tenant deactivation.'}
+              </CardDescription>
 
-            <div className="space-y-4">
-              
-              {/* Data Safeguard Notice */}
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <div className="text-xs text-slate-700 dark:text-zinc-300 leading-relaxed">
-                  <span className="font-bold text-slate-900 dark:text-white">
-                    {lang === 'bn' ? 'স্বয়ংক্রিয় ব্যাকআপ সক্রিয়:' : 'Continuous Cloud Backup Active:'}
-                  </span>{' '}
-                  {lang === 'bn'
-                    ? 'আপনার আউটলেটের সকল বিক্রয়, ইনভেন্টরি ও আর্থিক রেকর্ডস স্বয়ংক্রিয়ভাবে ক্লাউড ডাটাবেজে সংরক্ষিত থাকে।'
-                    : 'All retail transactions, stock ledgers, and financial journal entries are safely replicated on MongoDB Atlas.'}
-                </div>
-              </div>
-
-              {/* Store Switch & Outlet Info */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/80 dark:border-zinc-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">
-                    {lang === 'bn' ? 'আউটলেট আইডি (Store ID)' : 'Store Tenant ID'}
-                  </div>
-                  <div className="text-xs font-mono font-bold text-slate-600 dark:text-zinc-400 mt-0.5">
-                    {mongoShop?._id || '—'}
+              <div className="space-y-4">
+                
+                {/* Continuous Backup Notice */}
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-slate-700 dark:text-zinc-300 leading-relaxed">
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {lang === 'bn' ? 'জরুরি সতর্কতা:' : 'Critical Notice:'}
+                    </span>{' '}
+                    {lang === 'bn'
+                      ? 'দোকান মুছে ফেললে এই আউটলেটের পণ্য তালিকা, বিক্রয় হিসাব এবং মেমো নিষ্ক্রিয় হবে। আপনি যদি একাধিক আউটলেট পরিচালনা করেন তবে পরবর্তী সক্রিয় আউটলেটে সুইচ করা হবে।'
+                      : 'Deleting this store tenant will deactivate its associated catalog, invoices, and ledgers. If you manage multiple outlets, your session will automatically switch to your next active outlet.'}
                   </div>
                 </div>
 
-                <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
-                  Outlet Status: Operational
-                </Badge>
-              </div>
+                {/* Outlet Meta */}
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/80 dark:border-zinc-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">
+                      {lang === 'bn' ? 'আউটলেট আইডি ও বর্তমান স্ট্যাটাস' : 'Store Tenant Identifier'}
+                    </div>
+                    <div className="text-xs font-mono font-bold text-slate-600 dark:text-zinc-400 mt-0.5">
+                      ID: {mongoShop?._id || '—'}
+                    </div>
+                  </div>
 
-            </div>
-          </Card>
+                  <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-xs">
+                    Operational
+                  </Badge>
+                </div>
+
+                {/* DELETE STORE ACTION BOX */}
+                <div className="p-5 rounded-2xl bg-rose-500/5 border border-rose-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                      <Trash2 className="w-4 h-4" />
+                      <span>{lang === 'bn' ? 'এই দোকানটি স্থায়ীভাবে ডিলিট করুন' : 'Delete this Store Outlet'}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                      {lang === 'bn'
+                        ? `'${form.name}' দোকানটি সিস্টেম থেকে অপসারণ করা হবে।`
+                        : `Permanently deactivate '${form.name}' and remove it from your outlets list.`}
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={() => setIsDeleteModalOpen(true)}
+                    className="h-10 px-5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer gap-2 shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>{lang === 'bn' ? 'দোকান ডিলিট করুন' : 'Delete Store'}</span>
+                  </Button>
+                </div>
+
+              </div>
+            </Card>
+
+          </div>
         )}
 
         {/* ---------------------------------------------------- */}
         {/* SUBMIT BUTTON BAR                                    */}
         {/* ---------------------------------------------------- */}
-        <div className="flex items-center justify-end gap-3 pt-2">
+        <div className="flex items-center justify-between gap-4 pt-2">
+          <div className="text-xs text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+            {isDirty && (
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            )}
+            <span>
+              {isDirty
+                ? (lang === 'bn' ? 'অসংরক্ষিত পরিবর্তন রয়েছে' : 'You have unsaved changes')
+                : (lang === 'bn' ? 'দোকানের সকল সেটিংস হালনাগাদ আছে' : 'All settings up to date')}
+            </span>
+          </div>
+
           <Button
             type="submit"
             disabled={isSaving}
-            className="h-11 px-7 rounded-xl bg-[#00df89] hover:bg-[#00c578] text-[#011812] font-bold text-xs shadow-md hover:shadow-lg transition-all cursor-pointer gap-2"
+            className="h-11 px-8 rounded-xl bg-[#00df89] hover:bg-[#00c578] text-[#011812] font-bold text-xs shadow-md hover:shadow-lg transition-all cursor-pointer gap-2"
           >
             {isSaving ? (
               <>
@@ -941,6 +1137,93 @@ export default function StoreSettings() {
         </div>
 
       </form>
+
+      {/* ---------------------------------------------------- */}
+      {/* CONFIRM DELETE STORE MODAL                           */}
+      {/* ---------------------------------------------------- */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl border border-rose-500/30 p-6 shadow-2xl space-y-5 animate-in zoom-in-95">
+            
+            <div className="flex items-center justify-between">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeleteConfirmText('');
+                }}
+                className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-zinc-800 text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                {lang === 'bn' ? 'দোকান ডিলিট নিশ্চিতকরণ' : 'Confirm Store Deletion'}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                {lang === 'bn'
+                  ? `আপনি কি নিশ্চিত যে '${form.name}' দোকানটি মুছে ফেলতে চান? নিশ্চিত করতে নিচে দোকানের নামটি হুবহু টাইপ করুন:`
+                  : `Are you absolutely sure you want to delete '${form.name}'? Please type the exact store name to confirm:`}
+              </p>
+            </div>
+
+            {/* Confirm input box */}
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-mono text-slate-400 font-bold bg-slate-100 dark:bg-zinc-800 p-2 rounded-lg text-center select-all">
+                {form.name}
+              </div>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={lang === 'bn' ? 'দোকানের নাম টাইপ করুন' : 'Type store name exactly'}
+                className="text-xs h-10 font-bold text-center"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeleteConfirmText('');
+                }}
+                disabled={isDeleting}
+                className="text-xs font-semibold cursor-pointer"
+              >
+                {lang === 'bn' ? 'বাতিল' : 'Cancel'}
+              </Button>
+
+              <Button
+                type="button"
+                onClick={handleDeleteShop}
+                disabled={isDeleting || deleteConfirmText.trim().toLowerCase() !== form.name.trim().toLowerCase()}
+                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold gap-2 cursor-pointer shadow-md disabled:opacity-40"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>{lang === 'bn' ? 'ডিলিট হচ্ছে...' : 'Deleting Store...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>{lang === 'bn' ? 'স্থায়ীভাবে ডিলিট করুন' : 'Confirm Delete'}</span>
+                  </>
+                )}
+              </Button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

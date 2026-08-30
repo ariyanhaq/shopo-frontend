@@ -9,11 +9,32 @@ import { useAuth } from '@/context/AuthContext';
 import { api } from '@/services/api';
 import { printPurchaseReceipt } from '@/utils/invoicePrinter';
 import {
-  ShoppingBag, Plus, Search, Calendar, DollarSign,
-  Receipt, CheckCircle2, AlertCircle, Loader2, X,
-  Building2, ArrowUpDown, ChevronRight, Filter, Eye,
-  Printer, CreditCard, Trash2, PlusCircle, Edit2, Wallet,
-  Layers, Boxes, Sliders, Sparkles, Barcode
+  Search,
+  Plus,
+  ArrowUpDown,
+  Filter,
+  Eye,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  TrendingDown,
+  ShoppingBag,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  PlusCircle,
+  FileText,
+  Calendar,
+  Layers,
+  Edit2,
+  Printer,
+  Barcode,
+  Sparkles,
+  Building2,
+  Loader2,
+  Wallet,
+  Receipt
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,6 +52,22 @@ import { BarcodeLabelModal } from '@/components/inventory/BarcodeLabelModal';
 import { generateUniqueBarcode } from '@/utils/barcodePrinter';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import toast from 'react-hot-toast';
+
+const isOwnProductPurchase = (p) => {
+  if (!p) return false;
+  return Boolean(
+    p.is_own_product ||
+    p.supplier_id === '__own_product__' ||
+    p.payment_method === 'in_house' ||
+    p.supplier_name === 'Own Product / In-house' ||
+    p.supplier_name === 'General / Initial Stock' ||
+    p.supplier_name?.toLowerCase()?.includes('own product') ||
+    p.supplier_name?.toLowerCase()?.includes('initial stock') ||
+    p.notes?.toLowerCase()?.includes('own product') ||
+    p.notes?.toLowerCase()?.includes('in-house') ||
+    p.notes?.toLowerCase()?.includes('initial stock')
+  );
+};
 
 export default function Purchases() {
   const { lang } = useLanguage();
@@ -821,17 +858,23 @@ export default function Purchases() {
   const calculatedPaid = purchaseForm.paid_amount !== '' ? Number(purchaseForm.paid_amount) : calculatedNet;
   const calculatedDue = Math.max(0, calculatedNet - calculatedPaid);
 
-  // Live calculated summary metrics from purchases array
+  // Live calculated summary metrics from purchases array (excluding own product stock)
   const liveTotalAmount = useMemo(() => {
-    return purchases.reduce((acc, p) => acc + (p.net_amount !== undefined ? p.net_amount : (p.total_amount || 0)), 0);
+    return purchases
+      .filter((p) => !isOwnProductPurchase(p))
+      .reduce((acc, p) => acc + (p.net_amount !== undefined ? p.net_amount : (p.total_amount || 0)), 0);
   }, [purchases]);
 
   const livePaidAmount = useMemo(() => {
-    return purchases.reduce((acc, p) => acc + (p.paid_amount || 0), 0);
+    return purchases
+      .filter((p) => !isOwnProductPurchase(p))
+      .reduce((acc, p) => acc + (p.paid_amount || 0), 0);
   }, [purchases]);
 
   const liveDueAmount = useMemo(() => {
-    return purchases.reduce((acc, p) => acc + (p.due_amount || 0), 0);
+    return purchases
+      .filter((p) => !isOwnProductPurchase(p))
+      .reduce((acc, p) => acc + (p.due_amount || 0), 0);
   }, [purchases]);
 
   const summaryTotalProcurement = stats.total_amount !== undefined && stats.total_amount > 0 ? stats.total_amount : liveTotalAmount;
@@ -1039,15 +1082,18 @@ export default function Purchases() {
       return;
     }
 
+    const isOwnProduct = purchaseForm.supplier_id === '__own_product__' || purchaseForm.is_own_product;
+
     setIsSubmitting(true);
     try {
       await api.purchases.create({
-        supplier_id: purchaseForm.supplier_id || null,
-        supplier_name: purchaseForm.supplier_name,
+        supplier_id: isOwnProduct ? null : (purchaseForm.supplier_id || null),
+        supplier_name: isOwnProduct ? 'Own Product / In-house' : purchaseForm.supplier_name,
+        is_own_product: isOwnProduct,
         items: validItems,
         discount: calculatedDiscount,
-        paid_amount: calculatedPaid,
-        payment_method: purchaseForm.payment_method,
+        paid_amount: isOwnProduct ? calculatedNet : calculatedPaid,
+        payment_method: isOwnProduct ? 'in_house' : purchaseForm.payment_method,
         notes: purchaseForm.notes,
       });
 
@@ -1117,15 +1163,18 @@ export default function Purchases() {
       return;
     }
 
+    const isOwnProduct = editForm.supplier_id === '__own_product__' || editForm.is_own_product;
+
     setIsSubmitting(true);
     try {
       await api.purchases.update(editingPurchase._id, {
-        supplier_id: editForm.supplier_id || null,
-        supplier_name: editForm.supplier_name,
+        supplier_id: isOwnProduct ? null : (editForm.supplier_id || null),
+        supplier_name: isOwnProduct ? 'Own Product / In-house' : editForm.supplier_name,
+        is_own_product: isOwnProduct,
         items: validItems,
         discount: editCalculatedDiscount,
-        paid_amount: editCalculatedPaid,
-        payment_method: editForm.payment_method,
+        paid_amount: isOwnProduct ? editCalculatedNet : editCalculatedPaid,
+        payment_method: isOwnProduct ? 'in_house' : editForm.payment_method,
         notes: editForm.notes,
       });
 
@@ -1399,9 +1448,22 @@ export default function Purchases() {
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-slate-900 dark:text-white">{p.supplier_name || 'General'}</div>
-                      {p.supplier_phone && (
-                        <div className="text-[11px] text-slate-400 font-mono">{p.supplier_phone}</div>
+                      {isOwnProductPurchase(p) ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {lang === 'bn' ? 'নিজের পণ্য' : 'Own Product'}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 inline-flex items-center gap-0.5">
+                            <Sparkles className="w-2.5 h-2.5" /> In-house
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="font-bold text-slate-900 dark:text-white">{p.supplier_name || 'General'}</div>
+                          {p.supplier_phone && (
+                            <div className="text-[11px] text-slate-400 font-mono">{p.supplier_phone}</div>
+                          )}
+                        </>
                       )}
                     </td>
                     <td className="py-3.5 px-4">
@@ -1415,40 +1477,64 @@ export default function Purchases() {
                       </div>
                     </td>
                     <td className="py-3.5 px-4 font-bold font-mono text-slate-900 dark:text-white">
-                      ৳{(p.net_amount || p.total_amount || 0).toLocaleString()}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="text-emerald-600 dark:text-[#00df89] font-medium font-mono">
-                        ৳{(p.paid_amount || 0).toLocaleString()}
-                      </div>
-                      {(p.due_amount || 0) > 0 && (
-                        <div className="text-amber-500 font-bold font-mono text-[11px]">
-                          Due: ৳{(p.due_amount).toLocaleString()}
-                        </div>
+                      {isOwnProductPurchase(p) ? (
+                        <span className="text-slate-400 font-mono font-normal">—</span>
+                      ) : (
+                        `৳${(p.net_amount || p.total_amount || 0).toLocaleString()}`
                       )}
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className="capitalize px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 font-medium text-[11px]">
-                        {p.payment_method || 'cash'}
-                      </span>
+                      {isOwnProductPurchase(p) ? (
+                        <span className="text-purple-600 dark:text-purple-400 font-semibold text-xs">
+                          {lang === 'bn' ? 'নিজস্ব স্টক' : 'Own Stock'}
+                        </span>
+                      ) : (
+                        <>
+                          <div className="text-emerald-600 dark:text-[#00df89] font-medium font-mono">
+                            ৳{(p.paid_amount || 0).toLocaleString()}
+                          </div>
+                          {(p.due_amount || 0) > 0 && (
+                            <div className="text-amber-500 font-bold font-mono text-[11px]">
+                              Due: ৳{(p.due_amount).toLocaleString()}
+                            </div>
+                          )}
+                        </>
+                      )}
                     </td>
                     <td className="py-3.5 px-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          p.payment_status === 'paid'
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-[#00df89]'
-                            : p.payment_status === 'partial'
-                            ? 'bg-blue-500/10 text-blue-600'
-                            : 'bg-amber-500/15 text-amber-500'
-                        }`}
-                      >
-                        {p.payment_status}
-                      </span>
+                      {isOwnProductPurchase(p) ? (
+                        <span className="capitalize px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 font-medium text-[11px]">
+                          {lang === 'bn' ? 'ইন-হাউস' : 'In-house'}
+                        </span>
+                      ) : (
+                        <span className="capitalize px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 font-medium text-[11px]">
+                          {p.payment_method || 'cash'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {isOwnProductPurchase(p) ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                          {lang === 'bn' ? 'নিজের পণ্য' : 'Own Product'}
+                        </span>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            p.payment_status === 'paid'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-[#00df89]'
+                              : p.payment_status === 'partial'
+                              ? 'bg-blue-500/10 text-blue-600'
+                              : 'bg-amber-500/15 text-amber-500'
+                          }`}
+                        >
+                          {p.payment_status}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {/* Pay Due Button */}
-                        {(p.due_amount || 0) > 0 && p.supplier_id && (
+                        {!isOwnProductPurchase(p) && (p.due_amount || 0) > 0 && p.supplier_id && (
                           <button
                             type="button"
                             onClick={() => handleOpenPayDue(p)}
@@ -1600,14 +1686,27 @@ export default function Purchases() {
                   <Select
                     value={purchaseForm.supplier_id || '__walk_in__'}
                     onValueChange={(val) => {
-                      if (val === '__walk_in__') {
-                        setPurchaseForm({ ...purchaseForm, supplier_id: '', supplier_name: 'General / Walk-in Supplier' });
+                      if (val === '__own_product__') {
+                        setPurchaseForm({
+                          ...purchaseForm,
+                          supplier_id: '__own_product__',
+                          supplier_name: 'Own Product / In-house',
+                          is_own_product: true,
+                        });
+                      } else if (val === '__walk_in__') {
+                        setPurchaseForm({
+                          ...purchaseForm,
+                          supplier_id: '',
+                          supplier_name: 'General / Walk-in Supplier',
+                          is_own_product: false,
+                        });
                       } else {
                         const found = suppliers.find((s) => s._id === val);
                         setPurchaseForm({
                           ...purchaseForm,
                           supplier_id: val,
                           supplier_name: found ? found.name : '',
+                          is_own_product: false,
                         });
                       }
                     }}
@@ -1616,7 +1715,13 @@ export default function Purchases() {
                       <SelectValue placeholder="General / Walk-in Supplier" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__walk_in__">General / Walk-in Supplier</SelectItem>
+                      <SelectItem value="__own_product__" className="font-semibold text-purple-600 dark:text-purple-400 cursor-pointer">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                          <span>{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন (কোনো দেনা নেই)' : 'Own Product / In-house (No Supplier Debt)'}</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="__walk_in__">{lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'}</SelectItem>
                       {suppliers.map((s) => (
                         <SelectItem
                           key={s._id}
@@ -1629,6 +1734,17 @@ export default function Purchases() {
                       ))}
                     </SelectContent>
                   </Select>
+                )}
+
+                {purchaseForm.supplier_id === '__own_product__' && (
+                  <div className="mt-2 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 text-xs flex items-center gap-2.5 animate-in fade-in duration-200">
+                    <Sparkles className="w-4 h-4 shrink-0 text-purple-500" />
+                    <span>
+                      {lang === 'bn'
+                        ? 'নিজস্ব পণ্য / ইন-হাউস উৎপাদন: ক্রয়মূল্য ও বিক্রয়মূল্য প্রফিট হিসাবের জন্য সংরক্ষিত থাকবে। কোনো সাপ্লায়ার দেনা যুক্ত হবে না।'
+                        : 'Own Product / In-house: Unit cost and selling prices are preserved for profit calculations without creating supplier debt.'}
+                    </span>
+                  </div>
                 )}
               </div>
 
@@ -1822,75 +1938,89 @@ export default function Purchases() {
               </div>
 
               {/* Totals & Payment Breakdown */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                      {lang === 'bn' ? 'ছাড় / ডিসকাউন্ট (৳)' : 'Discount (৳)'}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={purchaseForm.discount}
-                      onChange={(e) => setPurchaseForm({ ...purchaseForm, discount: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
-                    />
+              {purchaseForm.supplier_id === '__own_product__' ? (
+                <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 space-y-2 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    <span className="font-bold text-xs sm:text-sm">{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন' : 'Own Product / In-house Stock'}</span>
                   </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                      {lang === 'bn' ? 'পরিশোধিত অর্থ (৳)' : 'Paid Amount (৳)'}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder={`৳${calculatedNet}`}
-                      value={purchaseForm.paid_amount}
-                      onChange={(e) => setPurchaseForm({ ...purchaseForm, paid_amount: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                      {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
-                    </label>
-                    <Select
-                      value={purchaseForm.payment_method}
-                      onValueChange={(val) => setPurchaseForm({ ...purchaseForm, payment_method: val })}
-                    >
-                      <SelectTrigger className="w-full bg-white dark:bg-[#09090b]">
-                        <SelectValue placeholder="Cash" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">{lang === 'bn' ? 'নগদ (Cash)' : 'Cash'}</SelectItem>
-                        <SelectItem value="bkash">bKash</SelectItem>
-                        <SelectItem value="nagad">Nagad</SelectItem>
-                        <SelectItem value="rocket">Rocket</SelectItem>
-                        <SelectItem value="card">{lang === 'bn' ? 'কার্ড (Card)' : 'Card'}</SelectItem>
-                        <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার' : 'Bank Transfer'}</SelectItem>
-                        <SelectItem value="due">{lang === 'bn' ? 'সম্পূর্ণ বাকি (Due)' : 'Full Due'}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <p className="text-[11px] opacity-90 leading-relaxed">
+                    {lang === 'bn'
+                      ? 'এই স্টকের জন্য কোনো সাপ্লায়ার দেনা, ডিসকাউন্ট বা নগদ পরিশোধ প্রযোজ্য নয়। ক্রয়মূল্য এবং বিক্রয়মূল্য কেবল লাভ-ক্ষতি ও ইনভেন্টরি মূল্যায়নের জন্য ডাটাবেজে সংরক্ষিত থাকবে।'
+                      : 'No supplier payment, discount, or accounts payable debt will be recorded for this stock. Unit cost and selling prices are preserved strictly for Profit & Loss and inventory asset valuation.'}
+                  </p>
                 </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                        {lang === 'bn' ? 'ছাড় / ডিসকাউন্ট (৳)' : 'Discount (৳)'}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={purchaseForm.discount}
+                        onChange={(e) => setPurchaseForm({ ...purchaseForm, discount: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
+                      />
+                    </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-zinc-800 text-xs font-bold">
-                  <div className="space-y-0.5">
-                    <span className="text-slate-500">{lang === 'bn' ? 'সর্বমোট বিল:' : 'Total Amount:'} ৳{calculatedTotal.toLocaleString()}</span>
-                    {calculatedDue > 0 && (
-                      <span className="text-amber-500 block">
-                        {lang === 'bn' ? 'সাপ্লায়ার বাকি থাকবে:' : 'Due Balance:'} ৳{calculatedDue.toLocaleString()}
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                        {lang === 'bn' ? 'পরিশোধিত অর্থ (৳)' : 'Paid Amount (৳)'}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder={`৳${calculatedNet}`}
+                        value={purchaseForm.paid_amount}
+                        onChange={(e) => setPurchaseForm({ ...purchaseForm, paid_amount: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                        {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
+                      </label>
+                      <Select
+                        value={purchaseForm.payment_method}
+                        onValueChange={(val) => setPurchaseForm({ ...purchaseForm, payment_method: val })}
+                      >
+                        <SelectTrigger className="w-full bg-white dark:bg-[#09090b]">
+                          <SelectValue placeholder="Cash" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">{lang === 'bn' ? 'নগদ (Cash)' : 'Cash'}</SelectItem>
+                          <SelectItem value="bkash">bKash</SelectItem>
+                          <SelectItem value="nagad">Nagad</SelectItem>
+                          <SelectItem value="rocket">Rocket</SelectItem>
+                          <SelectItem value="card">{lang === 'bn' ? 'কার্ড (Card)' : 'Card'}</SelectItem>
+                          <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার' : 'Bank Transfer'}</SelectItem>
+                          <SelectItem value="due">{lang === 'bn' ? 'সম্পূর্ণ বাকি (Due)' : 'Full Due'}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-zinc-800 text-xs font-bold">
+                    <div className="space-y-0.5">
+                      <span className="text-slate-500">{lang === 'bn' ? 'সর্বমোট বিল:' : 'Total Amount:'} ৳{calculatedTotal.toLocaleString()}</span>
+                      {calculatedDue > 0 && (
+                        <span className="text-amber-500 block">
+                          {lang === 'bn' ? 'সাপ্লায়ার বাকি থাকবে:' : 'Due Balance:'} ৳{calculatedDue.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-black text-slate-900 dark:text-white font-mono">
+                        {lang === 'bn' ? 'নিট বিল:' : 'Net Bill:'} ৳{calculatedNet.toLocaleString()}
                       </span>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <span className="text-sm font-black text-slate-900 dark:text-white font-mono">
-                      {lang === 'bn' ? 'নিট বিল:' : 'Net Bill:'} ৳{calculatedNet.toLocaleString()}
-                    </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
@@ -1971,14 +2101,27 @@ export default function Purchases() {
                 <Select
                   value={editForm.supplier_id || '__walk_in__'}
                   onValueChange={(val) => {
-                    if (val === '__walk_in__') {
-                      setEditForm({ ...editForm, supplier_id: '', supplier_name: 'General / Walk-in Supplier' });
+                    if (val === '__own_product__') {
+                      setEditForm({
+                        ...editForm,
+                        supplier_id: '__own_product__',
+                        supplier_name: 'Own Product / In-house',
+                        is_own_product: true,
+                      });
+                    } else if (val === '__walk_in__') {
+                      setEditForm({
+                        ...editForm,
+                        supplier_id: '',
+                        supplier_name: 'General / Walk-in Supplier',
+                        is_own_product: false,
+                      });
                     } else {
                       const found = suppliers.find((s) => s._id === val);
                       setEditForm({
                         ...editForm,
                         supplier_id: val,
                         supplier_name: found ? found.name : '',
+                        is_own_product: false,
                       });
                     }
                   }}
@@ -1987,7 +2130,13 @@ export default function Purchases() {
                     <SelectValue placeholder="General / Walk-in Supplier" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__walk_in__">General / Walk-in Supplier</SelectItem>
+                    <SelectItem value="__own_product__" className="font-semibold text-purple-600 dark:text-purple-400 cursor-pointer">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                        <span>{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন (কোনো দেনা নেই)' : 'Own Product / In-house (No Supplier Debt)'}</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="__walk_in__">{lang === 'bn' ? 'সাধারণ / কোনো নির্দিষ্ট নেই' : 'General / Walk-in Supplier'}</SelectItem>
                     {suppliers.map((s) => (
                       <SelectItem
                         key={s._id}
@@ -2192,75 +2341,89 @@ export default function Purchases() {
               </div>
 
               {/* Totals & Payment Breakdown */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                      {lang === 'bn' ? 'ছাড় / ডিসকাউন্ট (৳)' : 'Discount (৳)'}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={editForm.discount}
-                      onChange={(e) => setEditForm({ ...editForm, discount: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
-                    />
+              {editForm.supplier_id === '__own_product__' || editForm.is_own_product ? (
+                <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 space-y-2 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    <span className="font-bold text-xs sm:text-sm">{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন' : 'Own Product / In-house Stock'}</span>
                   </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                      {lang === 'bn' ? 'পরিশোধিত অর্থ (৳)' : 'Paid Amount (৳)'}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder={`৳${editCalculatedNet}`}
-                      value={editForm.paid_amount}
-                      onChange={(e) => setEditForm({ ...editForm, paid_amount: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
-                      {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
-                    </label>
-                    <Select
-                      value={editForm.payment_method}
-                      onValueChange={(val) => setEditForm({ ...editForm, payment_method: val })}
-                    >
-                      <SelectTrigger className="w-full bg-white dark:bg-[#09090b]">
-                        <SelectValue placeholder="Cash" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">{lang === 'bn' ? 'নগদ (Cash)' : 'Cash'}</SelectItem>
-                        <SelectItem value="bkash">bKash</SelectItem>
-                        <SelectItem value="nagad">Nagad</SelectItem>
-                        <SelectItem value="rocket">Rocket</SelectItem>
-                        <SelectItem value="card">{lang === 'bn' ? 'কার্ড (Card)' : 'Card'}</SelectItem>
-                        <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার' : 'Bank Transfer'}</SelectItem>
-                        <SelectItem value="due">{lang === 'bn' ? 'সম্পূর্ণ বাকি (Due)' : 'Full Due'}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <p className="text-[11px] opacity-90 leading-relaxed">
+                    {lang === 'bn'
+                      ? 'এই স্টকের জন্য কোনো সাপ্লায়ার দেনা বা পেমেন্ট প্রযোজ্য নয়।'
+                      : 'No supplier payment or accounts payable applies to this in-house stock.'}
+                  </p>
                 </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                        {lang === 'bn' ? 'ছাড় / ডিসকাউন্ট (৳)' : 'Discount (৳)'}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editForm.discount}
+                        onChange={(e) => setEditForm({ ...editForm, discount: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
+                      />
+                    </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-zinc-800 text-xs font-bold">
-                  <div className="space-y-0.5">
-                    <span className="text-slate-500">{lang === 'bn' ? 'সর্বমোট বিল:' : 'Total Amount:'} ৳{editCalculatedTotal.toLocaleString()}</span>
-                    {editCalculatedDue > 0 && (
-                      <span className="text-amber-500 block">
-                        {lang === 'bn' ? 'সাপ্লায়ার বাকি থাকবে:' : 'Due Balance:'} ৳{editCalculatedDue.toLocaleString()}
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                        {lang === 'bn' ? 'পরিশোধিত অর্থ (৳)' : 'Paid Amount (৳)'}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder={`৳${editCalculatedNet}`}
+                        value={editForm.paid_amount}
+                        onChange={(e) => setEditForm({ ...editForm, paid_amount: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-xs text-slate-900 dark:text-white outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                        {lang === 'bn' ? 'পেমেন্ট মাধ্যম' : 'Payment Method'}
+                      </label>
+                      <Select
+                        value={editForm.payment_method}
+                        onValueChange={(val) => setEditForm({ ...editForm, payment_method: val })}
+                      >
+                        <SelectTrigger className="w-full bg-white dark:bg-[#09090b]">
+                          <SelectValue placeholder="Cash" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">{lang === 'bn' ? 'নগদ (Cash)' : 'Cash'}</SelectItem>
+                          <SelectItem value="bkash">bKash</SelectItem>
+                          <SelectItem value="nagad">Nagad</SelectItem>
+                          <SelectItem value="rocket">Rocket</SelectItem>
+                          <SelectItem value="card">{lang === 'bn' ? 'কার্ড (Card)' : 'Card'}</SelectItem>
+                          <SelectItem value="bank_transfer">{lang === 'bn' ? 'ব্যাংক ট্রান্সফার' : 'Bank Transfer'}</SelectItem>
+                          <SelectItem value="due">{lang === 'bn' ? 'সম্পূর্ণ বাকি (Due)' : 'Full Due'}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-zinc-800 text-xs font-bold">
+                    <div className="space-y-0.5">
+                      <span className="text-slate-500">{lang === 'bn' ? 'সর্বমোট বিল:' : 'Total Amount:'} ৳{editCalculatedTotal.toLocaleString()}</span>
+                      {editCalculatedDue > 0 && (
+                        <span className="text-amber-500 block">
+                          {lang === 'bn' ? 'সাপ্লায়ার বাকি থাকবে:' : 'Due Balance:'} ৳{editCalculatedDue.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-black text-slate-900 dark:text-white font-mono">
+                        {lang === 'bn' ? 'নিট বিল:' : 'Net Bill:'} ৳{editCalculatedNet.toLocaleString()}
                       </span>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <span className="text-sm font-black text-slate-900 dark:text-white font-mono">
-                      {lang === 'bn' ? 'নিট বিল:' : 'Net Bill:'} ৳{editCalculatedNet.toLocaleString()}
-                    </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block font-bold text-slate-700 dark:text-zinc-300 mb-1">
@@ -2387,32 +2550,45 @@ export default function Purchases() {
               </div>
 
               {/* Totals Breakdown */}
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 space-y-1.5 text-xs">
-                <div className="flex justify-between text-slate-500">
-                  <span>{lang === 'bn' ? 'মোট বিল:' : 'Total Amount:'}</span>
-                  <span className="font-mono">৳{(selectedInvoice.total_amount || 0).toLocaleString()}</span>
+              {isOwnProductPurchase(selectedInvoice) ? (
+                <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/20 space-y-2 text-xs text-purple-600 dark:text-purple-400">
+                  <div className="flex justify-between font-bold">
+                    <span>{lang === 'bn' ? 'স্টকের ধরন:' : 'Stock Category:'}</span>
+                    <span>{lang === 'bn' ? 'নিজের পণ্য / নিজস্ব উৎপাদন' : 'Own Product / In-house Stock'}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] opacity-90 pt-1.5 border-t border-purple-500/20">
+                    <span>{lang === 'bn' ? 'সাপ্লায়ার খরচ / দেনা:' : 'Supplier Payable:'}</span>
+                    <span>{lang === 'bn' ? 'কোনো দেনা বা পেমেন্ট নেই (০ টাকা)' : 'No Debt (৳0)'}</span>
+                  </div>
                 </div>
-                {selectedInvoice.discount > 0 && (
+              ) : (
+                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-500">
-                    <span>{lang === 'bn' ? 'ডিসকাউন্ট:' : 'Discount:'}</span>
-                    <span className="font-mono">-৳{(selectedInvoice.discount || 0).toLocaleString()}</span>
+                    <span>{lang === 'bn' ? 'মোট বিল:' : 'Total Amount:'}</span>
+                    <span className="font-mono">৳{(selectedInvoice.total_amount || 0).toLocaleString()}</span>
                   </div>
-                )}
-                <div className="flex justify-between font-bold text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-800">
-                  <span>{lang === 'bn' ? 'নিট বিল:' : 'Net Bill:'}</span>
-                  <span className="font-mono text-sm">৳{(selectedInvoice.net_amount || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-emerald-600 font-medium pt-1">
-                  <span>{lang === 'bn' ? 'পরিশোধ:' : 'Paid:'}</span>
-                  <span className="font-mono">৳{(selectedInvoice.paid_amount || 0).toLocaleString()}</span>
-                </div>
-                {(selectedInvoice.due_amount || 0) > 0 && (
-                  <div className="flex justify-between text-amber-500 font-bold">
-                    <span>{lang === 'bn' ? 'বাকি ব্যালেন্স:' : 'Due Balance:'}</span>
-                    <span className="font-mono">৳{(selectedInvoice.due_amount).toLocaleString()}</span>
+                  {selectedInvoice.discount > 0 && (
+                    <div className="flex justify-between text-slate-500">
+                      <span>{lang === 'bn' ? 'ডিসকাউন্ট:' : 'Discount:'}</span>
+                      <span className="font-mono">-৳{(selectedInvoice.discount || 0).toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-zinc-800">
+                    <span>{lang === 'bn' ? 'নিট বিল:' : 'Net Bill:'}</span>
+                    <span className="font-mono text-sm">৳{(selectedInvoice.net_amount || 0).toLocaleString()}</span>
                   </div>
-                )}
-              </div>
+                  <div className="flex justify-between text-emerald-600 font-medium pt-1">
+                    <span>{lang === 'bn' ? 'পরিশোধ:' : 'Paid:'}</span>
+                    <span className="font-mono">৳{(selectedInvoice.paid_amount || 0).toLocaleString()}</span>
+                  </div>
+                  {(selectedInvoice.due_amount || 0) > 0 && (
+                    <div className="flex justify-between text-amber-500 font-bold">
+                      <span>{lang === 'bn' ? 'বাকি ব্যালেন্স:' : 'Due Balance:'}</span>
+                      <span className="font-mono">৳{(selectedInvoice.due_amount).toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-100 dark:border-zinc-800">

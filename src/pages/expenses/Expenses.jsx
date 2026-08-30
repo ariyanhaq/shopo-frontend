@@ -24,9 +24,10 @@ import { printExpenseVoucher } from '@/utils/invoicePrinter';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   DollarSign, Plus, Search, Calendar, Trash2, Edit2,
-  Loader2, X, CheckCircle2, TrendingDown, Receipt, CreditCard,
+  Loader2, X, Check, CheckCircle2, TrendingDown, Receipt, CreditCard,
   Banknote, Sparkles, AlertCircle, FileText, Printer, ArrowUpDown,
-  Building, Zap, Truck, Megaphone, Coffee, Wrench, Globe, Tag
+  Building, Zap, Truck, Megaphone, Coffee, Wrench, Globe, Tag, FolderPlus,
+  Settings, FolderKanban
 } from 'lucide-react';
 
 const EXPENSE_CATEGORIES = [
@@ -67,6 +68,21 @@ export default function Expenses() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  // Custom Categories State
+  const [customCategories, setCustomCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('shopo_custom_expense_categories');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Inline Category Creator & Manager States
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryInput, setNewCategoryInput] = useState('');
+  const [isManageCategoriesModalOpen, setIsManageCategoriesModalOpen] = useState(false);
+
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -91,7 +107,8 @@ export default function Expenses() {
       isCreateModalOpen ||
       isEditModalOpen ||
       selectedVoucher ||
-      confirmDelete.isOpen
+      confirmDelete.isOpen ||
+      isManageCategoriesModalOpen
     )
   );
 
@@ -104,6 +121,124 @@ export default function Expenses() {
     date: new Date().toISOString().split('T')[0],
     description: '',
   });
+
+  // Consolidated Categories List (Built-in + Custom + from existing expense docs)
+  const allCategoriesList = useMemo(() => {
+    const list = [...EXPENSE_CATEGORIES];
+    const registeredIds = new Set(EXPENSE_CATEGORIES.map((c) => c.id.toLowerCase()));
+
+    // Include custom categories from localStorage
+    customCategories.forEach((cat) => {
+      if (cat && typeof cat === 'string' && !registeredIds.has(cat.toLowerCase())) {
+        list.push({
+          id: cat,
+          labelBn: cat,
+          labelEn: cat,
+          isCustom: true,
+        });
+        registeredIds.add(cat.toLowerCase());
+      }
+    });
+
+    // Include any categories present in current expenses
+    expenses.forEach((e) => {
+      if (e.category && typeof e.category === 'string' && !registeredIds.has(e.category.toLowerCase())) {
+        list.push({
+          id: e.category,
+          labelBn: e.category,
+          labelEn: e.category,
+          isCustom: true,
+        });
+        registeredIds.add(e.category.toLowerCase());
+      }
+    });
+
+    return list;
+  }, [customCategories, expenses]);
+
+  const getCategoryDisplayName = (categoryId) => {
+    if (!categoryId) return 'General';
+    const found = EXPENSE_CATEGORIES.find(
+      (c) => c.id.toLowerCase() === String(categoryId).toLowerCase()
+    );
+    if (found) {
+      return lang === 'bn' ? found.labelBn : found.labelEn;
+    }
+    return categoryId;
+  };
+
+  const handleAddNewCategory = () => {
+    const trimmed = newCategoryInput.trim();
+    if (!trimmed) {
+      toast.error(lang === 'bn' ? 'অনুগ্রহ করে ক্যাটাগরির নাম লিখুন।' : 'Please enter a category name.');
+      return;
+    }
+
+    const existsInDefault = EXPENSE_CATEGORIES.some(
+      (c) =>
+        c.id.toLowerCase() === trimmed.toLowerCase() ||
+        c.labelEn.toLowerCase() === trimmed.toLowerCase() ||
+        c.labelBn.toLowerCase() === trimmed.toLowerCase()
+    );
+    const existsInCustom = customCategories.some((c) => c.toLowerCase() === trimmed.toLowerCase());
+
+    if (!existsInCustom && !existsInDefault) {
+      const updated = [...customCategories, trimmed];
+      setCustomCategories(updated);
+      try {
+        localStorage.setItem('shopo_custom_expense_categories', JSON.stringify(updated));
+      } catch (err) {
+        console.warn('Could not save custom categories to localStorage:', err);
+      }
+      toast.success(
+        lang === 'bn'
+          ? `'${trimmed}' ক্যাটাগরি সফলভাবে যোগ হয়েছে!`
+          : `Category '${trimmed}' added successfully!`
+      );
+    } else {
+      toast.success(
+        lang === 'bn'
+          ? `'${trimmed}' ক্যাটাগরি নির্বাচন করা হয়েছে।`
+          : `Selected category '${trimmed}'.`
+      );
+    }
+
+    setForm((prev) => ({ ...prev, category: trimmed }));
+    setIsAddingCategory(false);
+    setNewCategoryInput('');
+  };
+
+  const handleDeleteCategory = (categoryId) => {
+    if (!categoryId) return;
+    const updated = customCategories.filter(
+      (c) => c.toLowerCase() !== String(categoryId).toLowerCase()
+    );
+    setCustomCategories(updated);
+    try {
+      localStorage.setItem('shopo_custom_expense_categories', JSON.stringify(updated));
+    } catch (err) {
+      console.warn('Could not update custom categories in localStorage:', err);
+    }
+
+    // If currently selected in form, reset to 'General'
+    setForm((prev) => {
+      if (prev.category?.toLowerCase() === String(categoryId).toLowerCase()) {
+        return { ...prev, category: 'General' };
+      }
+      return prev;
+    });
+
+    // If active in filter, reset to 'all'
+    if (categoryFilter?.toLowerCase() === String(categoryId).toLowerCase()) {
+      setCategoryFilter('all');
+    }
+
+    toast.success(
+      lang === 'bn'
+        ? `'${categoryId}' ক্যাটাগরি মুছে ফেলা হয়েছে!`
+        : `Category '${categoryId}' deleted!`
+    );
+  };
 
   const fetchExpenses = async () => {
     setIsLoading(true);
@@ -151,6 +286,8 @@ export default function Expenses() {
   }, []);
 
   const handleOpenCreate = () => {
+    setIsAddingCategory(false);
+    setNewCategoryInput('');
     setForm({
       title: '',
       category: 'General',
@@ -164,6 +301,8 @@ export default function Expenses() {
   };
 
   const handleOpenEdit = (expense) => {
+    setIsAddingCategory(false);
+    setNewCategoryInput('');
     setEditingExpense(expense);
     setForm({
       title: expense.title || '',
@@ -297,6 +436,16 @@ export default function Expenses() {
 
         <div className="flex items-center gap-2">
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsManageCategoriesModalOpen(true)}
+            className="h-10 px-3 text-xs sm:text-sm font-semibold gap-1.5 cursor-pointer border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] hover:bg-slate-50 dark:hover:bg-zinc-900 shadow-2xs"
+          >
+            <FolderKanban className="w-4 h-4 text-[#00df89]" />
+            <span>{lang === 'bn' ? 'ক্যাটাগরি পরিচালনা' : 'Manage Categories'}</span>
+          </Button>
+
+          <Button
             onClick={handleOpenCreate}
             className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
           >
@@ -359,18 +508,30 @@ export default function Expenses() {
             />
           </div>
 
-          <div className="w-full sm:w-52">
+          <div className="w-full sm:w-56 flex items-center gap-2">
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger size="sm" className="bg-slate-50 dark:bg-[#09090b] w-full h-9.5 rounded-xl border border-slate-200 dark:border-zinc-800 text-xs font-semibold">
                 <SelectValue placeholder={lang === 'bn' ? 'সকল খাত' : 'All Categories'} />
               </SelectTrigger>
-              <SelectContent className="min-w-[190px]">
+              <SelectContent className="min-w-[210px] max-h-64">
                 <SelectItem value="all">
                   {lang === 'bn' ? 'সকল খাত (All Categories)' : 'All Categories'}
                 </SelectItem>
-                {EXPENSE_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {lang === 'bn' ? cat.labelBn : cat.labelEn}
+                {allCategoriesList.map((cat) => (
+                  <SelectItem
+                    key={cat.id}
+                    value={cat.id}
+                    onDelete={cat.isCustom ? () => handleDeleteCategory(cat.id) : undefined}
+                    deleteTitle={lang === 'bn' ? `'${cat.id}' মুছে ফেলুন` : `Delete '${cat.id}'`}
+                  >
+                    <div className="flex items-center justify-between w-full pr-1">
+                      <span>{lang === 'bn' ? cat.labelBn : cat.labelEn}</span>
+                      {cat.isCustom && (
+                        <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded font-medium ml-2">
+                          {lang === 'bn' ? 'কাস্টম' : 'Custom'}
+                        </span>
+                      )}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -433,7 +594,7 @@ export default function Expenses() {
                         {exp.title}
                       </div>
                       <div className="text-[11px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">
-                        {exp.category || 'General'}
+                        {getCategoryDisplayName(exp.category)}
                       </div>
                     </td>
 
@@ -543,30 +704,118 @@ export default function Expenses() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'খরচের খাত (Category) *' : 'Expense Category *'}
-                  </label>
-                  <Select
-                    value={form.category}
-                    onValueChange={(val) => setForm({ ...form, category: val })}
-                  >
-                    <SelectTrigger className="h-9 text-xs bg-slate-50 dark:bg-[#09090b] border-slate-200 dark:border-zinc-800">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXPENSE_CATEGORIES.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {lang === 'bn' ? c.labelBn : c.labelEn}
+                  <div className="flex items-center justify-between mb-1 h-5">
+                    <label className="block font-medium text-slate-700 dark:text-zinc-300">
+                      {lang === 'bn' ? 'খরচের খাত *' : 'Expense Category *'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsManageCategoriesModalOpen(true)}
+                      className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Settings className="w-3 h-3" />
+                      <span>{lang === 'bn' ? 'পরিচালনা' : 'Manage'}</span>
+                    </button>
+                  </div>
+
+                  {isAddingCategory ? (
+                    <div className="relative flex items-center h-9">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder={lang === 'bn' ? 'যেমন: জেনারেটর তেল, প্যাকেজিং' : 'e.g. Generator Fuel, Packaging'}
+                        value={newCategoryInput}
+                        onChange={(e) => setNewCategoryInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddNewCategory();
+                          }
+                          if (e.key === 'Escape') {
+                            setIsAddingCategory(false);
+                            setNewCategoryInput('');
+                          }
+                        }}
+                        className="w-full h-9 pl-3 pr-16 rounded-xl bg-slate-50 dark:bg-[#09090b] border-2 border-[#00df89] text-xs outline-none text-slate-900 dark:text-white font-medium focus:ring-1 focus:ring-[#00df89]"
+                      />
+                      <div className="absolute right-1 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={handleAddNewCategory}
+                          title={lang === 'bn' ? 'যোগ করুন' : 'Add category'}
+                          className="h-7 w-7 rounded-lg bg-[#00df89] hover:bg-[#00c97b] text-[#011812] flex items-center justify-center cursor-pointer shadow-xs transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingCategory(false);
+                            setNewCategoryInput('');
+                          }}
+                          title={lang === 'bn' ? 'বাতিল' : 'Cancel'}
+                          className="h-7 w-7 rounded-lg hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 flex items-center justify-center cursor-pointer transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Select
+                      value={form.category}
+                      onValueChange={(val) => {
+                        if (val === '__add_new__') {
+                          setIsAddingCategory(true);
+                        } else if (val === '__manage_categories__') {
+                          setIsManageCategoriesModalOpen(true);
+                        } else {
+                          setForm({ ...form, category: val });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-xs bg-slate-50 dark:bg-[#09090b] border-slate-200 dark:border-zinc-800 focus:ring-[#00df89]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {allCategoriesList.map((c) => (
+                          <SelectItem
+                            key={c.id}
+                            value={c.id}
+                            onDelete={c.isCustom ? () => handleDeleteCategory(c.id) : undefined}
+                            deleteTitle={lang === 'bn' ? `'${c.id}' মুছে ফেলুন` : `Delete '${c.id}'`}
+                          >
+                            {lang === 'bn' ? c.labelBn : c.labelEn}
+                          </SelectItem>
+                        ))}
+                        <SelectItem
+                          value="__add_new__"
+                          className="font-bold text-[#00a86b] dark:text-[#00df89] border-t border-slate-100 dark:border-zinc-800 mt-1 pt-1.5 focus:bg-emerald-500/10 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>{lang === 'bn' ? '+ নতুন ক্যাটাগরি যোগ করুন...' : '+ Add New Category...'}</span>
+                          </div>
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        <SelectItem
+                          value="__manage_categories__"
+                          className="text-slate-600 dark:text-zinc-300 font-semibold focus:bg-slate-500/10 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <Settings className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{lang === 'bn' ? 'ক্যাটাগরি মুছুন বা পরিচালনা...' : 'Manage / Delete Categories...'}</span>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
                 <div>
-                  <label className="block font-medium mb-1 text-slate-700 dark:text-zinc-300">
-                    {lang === 'bn' ? 'টাকার পরিমাণ (৳) *' : 'Amount (৳) *'}
-                  </label>
+                  <div className="flex items-center mb-1 h-5">
+                    <label className="block font-medium text-slate-700 dark:text-zinc-300">
+                      {lang === 'bn' ? 'টাকার পরিমাণ (৳) *' : 'Amount (৳) *'}
+                    </label>
+                  </div>
                   <input
                     type="number"
                     min="1"
@@ -575,7 +824,7 @@ export default function Expenses() {
                     placeholder="0.00"
                     value={form.amount}
                     onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none font-mono text-xs"
+                    className="w-full h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none font-mono text-xs focus:ring-2 focus:ring-[#00df89]"
                   />
                 </div>
               </div>
@@ -675,6 +924,135 @@ export default function Expenses() {
       )}
 
       {/* ---------------------------------------------------- */}
+      {/* MANAGE / DELETE CATEGORIES MODAL                     */}
+      {/* ---------------------------------------------------- */}
+      {isManageCategoriesModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <Card className="max-w-md w-full p-5 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00a86b] dark:text-[#00df89]">
+                  <FolderKanban className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                    {lang === 'bn' ? 'ব্যয়ের ক্যাটাগরি পরিচালনা' : 'Manage Expense Categories'}
+                  </h2>
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                    {lang === 'bn' ? 'কাস্টম ক্যাটাগরি তৈরি বা মুছে ফেলুন' : 'Create or delete custom spending categories'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsManageCategoriesModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Add Inside Manager */}
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-zinc-300">
+                {lang === 'bn' ? '+ নতুন ক্যাটাগরি যুক্ত করুন' : '+ Add New Category'}
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  placeholder={lang === 'bn' ? 'যেমন: জেনারেটর তেল, প্যাকেজিং' : 'e.g. Generator Fuel, Packaging'}
+                  value={newCategoryInput}
+                  onChange={(e) => setNewCategoryInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddNewCategory();
+                    }
+                  }}
+                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#121215] border border-slate-200 dark:border-zinc-800 text-xs outline-none focus:ring-2 focus:ring-[#00df89] text-slate-900 dark:text-white"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleAddNewCategory}
+                  className="h-8 px-3 bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-xs font-semibold cursor-pointer shrink-0"
+                >
+                  {lang === 'bn' ? 'যোগ' : 'Add'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Categories List */}
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 px-1 pt-1">
+                {lang === 'bn' ? 'সকল সক্রিয় ক্যাটাগরি তালিকা' : 'Active Categories List'} ({allCategoriesList.length})
+              </div>
+
+              {allCategoriesList.map((cat) => {
+                const usageCount = expenses.filter(
+                  (e) => e.category?.toLowerCase() === cat.id.toLowerCase()
+                ).length;
+
+                return (
+                  <div
+                    key={cat.id}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 dark:bg-zinc-900/50 border border-slate-100 dark:border-zinc-800/80 text-xs"
+                  >
+                    <div className="flex items-center gap-2 truncate pr-2">
+                      <Tag className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <div className="truncate">
+                        <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                          {lang === 'bn' ? cat.labelBn : cat.labelEn}
+                        </span>
+                        {usageCount > 0 && (
+                          <span className="text-[10px] text-slate-400 ml-1.5">
+                            ({usageCount} {lang === 'bn' ? 'টি হিসাব' : 'records'})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {cat.isCustom ? (
+                        <>
+                          <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] px-1.5 py-0.5">
+                            {lang === 'bn' ? 'কাস্টম' : 'Custom'}
+                          </Badge>
+                          <button
+                            type="button"
+                            title={lang === 'bn' ? `'${cat.id}' মুছে ফেলুন` : `Delete '${cat.id}'`}
+                            onClick={() => handleDeleteCategory(cat.id)}
+                            className="h-7 px-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>{lang === 'bn' ? 'মুছুন' : 'Delete'}</span>
+                          </button>
+                        </>
+                      ) : (
+                        <Badge variant="secondary" className="bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-[10px] px-1.5 py-0.5">
+                          {lang === 'bn' ? 'সিস্টেম' : 'Default'}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-zinc-800">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setIsManageCategoriesModalOpen(false)}
+                className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs cursor-pointer"
+              >
+                {lang === 'bn' ? 'সম্পন্ন' : 'Done'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
       {/* EXPENSE VOUCHER / SLIP VIEW MODAL                    */}
       {/* ---------------------------------------------------- */}
       {selectedVoucher && (
@@ -711,7 +1089,7 @@ export default function Expenses() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">{lang === 'bn' ? 'ব্যয়ের খাত:' : 'Category:'}</span>
-                  <span className="font-semibold text-amber-600">{selectedVoucher.category}</span>
+                  <span className="font-semibold text-amber-600">{getCategoryDisplayName(selectedVoucher.category)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">{lang === 'bn' ? 'পেমেন্ট মাধ্যম:' : 'Payment Method:'}</span>
