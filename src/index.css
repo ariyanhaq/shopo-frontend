@@ -36,6 +36,25 @@
   }
 }
 
+/* iOS Dynamic Island & Notch Safe Area Inset Support */
+.header-safe-top {
+  padding-top: max(calc(env(safe-area-inset-top, 0px) + 0.85rem), 3.25rem);
+}
+@media (min-width: 768px) {
+  .header-safe-top {
+    padding-top: 0px !important;
+    height: 3.5rem !important;
+  }
+}
+
+.drawer-safe-top {
+  padding-top: max(calc(env(safe-area-inset-top, 0px) + 0.75rem), 2.75rem);
+}
+
+.bottom-nav-safe {
+  padding-bottom: max(calc(env(safe-area-inset-bottom, 0px) + 0.85rem), 1.5rem);
+}
+
 /* Modal Inner Card Scroll Containment */
 [role="dialog"] {
   overscroll-behavior: contain;

@@ -185,7 +185,7 @@ export default function Sidebar({ collapsed, isMobileOpen = false, onCloseMobile
     <div className="flex flex-col h-full justify-between overflow-hidden">
       
       {/* TOP BRAND HEADER */}
-      <div className={`${isMobile ? 'p-3 pb-2' : 'p-3.5 pb-2.5'} shrink-0 w-full relative z-30 border-b border-slate-100 dark:border-zinc-800/80`}>
+      <div className={`${isMobile ? 'p-3 pb-2 drawer-safe-top' : 'p-3.5 pb-2.5'} shrink-0 w-full relative z-30 border-b border-slate-100 dark:border-zinc-800/80`}>
         <div className="flex items-center justify-between gap-2">
           <DropdownMenu className="flex-1 min-w-0">
             <DropdownMenuTrigger className="w-full block outline-none">

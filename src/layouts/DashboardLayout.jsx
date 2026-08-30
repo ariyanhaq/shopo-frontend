@@ -127,8 +127,8 @@ export default function DashboardLayout() {
       {/* MAIN CONTENT WRAPPER */}
       <div className="flex-1 flex flex-col md:pl-64 min-w-0 transition-all">
         
-        {/* STICKY TOP NAVBAR */}
-        <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-md border-b border-slate-200/90 dark:border-zinc-800/80 px-4 sm:px-6 pt-7 pb-3 sm:py-0 h-auto sm:h-14 flex items-center justify-between gap-2.5 sm:gap-4">
+        {/* STICKY TOP NAVBAR WITH SAFE AREA INSET SUPPORT */}
+        <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-md border-b border-slate-200/90 dark:border-zinc-800/80 px-4 sm:px-6 header-safe-top pb-3 md:py-0 h-auto md:h-14 flex items-center justify-between gap-2.5 sm:gap-4">
           
           {/* Left Breadcrumb Navigation & Mobile Menu Button */}
           <div className="flex items-center gap-3">
@@ -265,7 +265,7 @@ export default function DashboardLayout() {
       {/* ---------------------------------------------------- */}
       {/* NATIVE MOBILE BOTTOM NAVBAR (< 768px)                */}
       {/* ---------------------------------------------------- */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xl border-t border-slate-200/90 dark:border-zinc-800/80 px-2 pt-2.5 pb-6 sm:pb-2 flex items-center justify-around shadow-2xl">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#121215]/95 backdrop-blur-xl border-t border-slate-200/90 dark:border-zinc-800/80 px-2 pt-2.5 bottom-nav-safe sm:pb-2 flex items-center justify-around shadow-2xl">
         
         {/* 1. Dashboard */}
         <Link
