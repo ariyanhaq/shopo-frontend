@@ -354,7 +354,7 @@ export default function Sidebar({ collapsed, isMobileOpen = false, onCloseMobile
 
       {/* BOTTOM USER PROFILE BADGE */}
       {(!collapsed || isMobile) && (
-        <div className={`${isMobile ? 'p-3' : 'p-3.5'} border-t border-slate-200/90 dark:border-zinc-800/80 shrink-0 w-full relative z-30 bg-slate-50/50 dark:bg-zinc-900/40`}>
+        <div className={`${isMobile ? 'p-3 drawer-safe-bottom' : 'p-3.5'} border-t border-slate-200/90 dark:border-zinc-800/80 shrink-0 w-full relative z-30 bg-slate-50/50 dark:bg-zinc-900/40`}>
           <DropdownMenu className="w-full">
             <DropdownMenuTrigger className="w-full block outline-none">
               <div className={`w-full flex items-center justify-between ${isMobile ? 'p-2 rounded-xl' : 'p-2.5 rounded-2xl'} bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/80 hover:border-slate-300 dark:hover:border-zinc-600 transition-all text-left min-w-0 shadow-2xs cursor-pointer`}>

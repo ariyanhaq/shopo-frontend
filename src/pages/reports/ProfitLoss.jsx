@@ -398,9 +398,13 @@ export default function ProfitLoss() {
     lifetimeOperatingExpenses: financialData.lifetimeOperatingExpenses || 0,
     lifetimeSalaryExpenses: financialData.lifetimeSalaryExpenses || 0,
     totalStockInvestment: financialData.totalStockInvestment || 0,
+    totalSupplierStockValuation: financialData.totalSupplierStockValuation || financialData.totalStockInvestment || 0,
+    totalOwnStockValuation: financialData.totalOwnStockValuation || 0,
     totalStockRetailValue: financialData.totalStockRetailValue || 0,
     potentialStockProfit: financialData.potentialStockProfit || 0,
     totalStockUnits: financialData.totalStockUnits || 0,
+    totalSupplierStockUnits: financialData.totalSupplierStockUnits || 0,
+    totalOwnStockUnits: financialData.totalOwnStockUnits || 0,
     totalProductsCount: financialData.totalProductsCount || 0,
   };
 
@@ -446,10 +450,10 @@ export default function ProfitLoss() {
       {/* ---------------------------------------------------- */}
       {/* HEADER SECTION                                       */}
       {/* ---------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <FileBarChart className="w-6 h-6 text-[#00df89]" />
+            <FileBarChart className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>{lang === 'bn' ? 'আর্থিক রিপোর্ট ও লাভ-লোকসান স্টেটমেন্ট' : 'Financial Reports & P&L Statement'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
@@ -459,12 +463,12 @@ export default function ProfitLoss() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
             onClick={() => window.print()}
-            className="text-xs h-10 px-3.5 gap-1.5 border-slate-200 dark:border-zinc-800 font-semibold cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-zinc-800"
+            className="text-xs h-10 px-3.5 gap-1.5 border-slate-200 dark:border-zinc-800 font-semibold cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-zinc-800 whitespace-nowrap shrink-0"
           >
             <Printer className="w-4 h-4 text-slate-500" />
             <span>{lang === 'bn' ? 'প্রিন্ট রিপোর্ট' : 'Print Statement'}</span>
@@ -804,11 +808,21 @@ export default function ProfitLoss() {
             {/* Current Real-time Inventory Asset & Lifetime Stats */}
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-[11px]">
               <div className="flex justify-between text-slate-500">
-                <span>{lang === 'bn' ? 'বর্তমান অবিক্রিত স্টক সম্পদ (কেনা মূল্যে):' : 'Current Stock Asset (at Cost):'}</span>
+                <span>{lang === 'bn' ? 'সাপ্লায়ার অবিক্রিত স্টক সম্পদ (বিনিয়োগ মূল্য):' : 'Supplier Stock Asset (Cost Investment):'}</span>
                 <span className="font-semibold text-slate-800 dark:text-zinc-200 font-mono">
                   ৳ {safeMoney(investmentData.totalStockInvestment)}
                 </span>
               </div>
+              {Number(investmentData.totalOwnStockValuation) > 0 && (
+                <div className="flex justify-between text-slate-500 text-[10px]">
+                  <span className="text-purple-600 dark:text-purple-400">
+                    {lang === 'bn' ? '↳ নিজস্ব পণ্য স্টক (বিনিয়োগে যুক্ত নয়):' : '↳ Own Product Stock (excluded from investment):'}
+                  </span>
+                  <span className="font-medium text-purple-600 dark:text-purple-400 font-mono">
+                    ৳ {safeMoney(investmentData.totalOwnStockValuation)}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between text-slate-500">
                 <span>{lang === 'bn' ? 'সর্বমোট লাইফটাইম ব্যবসায়িক বিনিয়োগ:' : 'Lifetime Business Investment:'}</span>
                 <span className="font-medium text-slate-600 dark:text-zinc-400 font-mono">

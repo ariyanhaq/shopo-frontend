@@ -555,13 +555,13 @@ export default function Members() {
       {/* ---------------------------------------------------- */}
       {/* 1. TOP HEADER SECTION                                */}
       {/* ---------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <Crown className="w-6 h-6 text-[#00df89]" />
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+            <Crown className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>{lang === 'bn' ? 'মেম্বারশিপ ও লয়্যালটি প্রোগ্রাম' : 'Members & Loyalty Rewards'}</span>
             <span
-              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
                 settingsData.enabled
                   ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
                   : 'bg-slate-500/10 text-slate-500 border-slate-500/20'
@@ -578,7 +578,7 @@ export default function Members() {
         </div>
 
         {/* Top Actions & Tab Toggle */}
-        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <div className="bg-slate-100 dark:bg-zinc-900 p-1 rounded-xl flex items-center border border-slate-200/80 dark:border-zinc-800 shrink-0">
             <button
               onClick={() => setActiveTab('members')}

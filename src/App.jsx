@@ -19,6 +19,7 @@ export default function App() {
               position="top-center"
               reverseOrder={false}
               gutter={8}
+              containerClassName="toast-container-safe"
               toastOptions={{
                 duration: 4000,
                 style: {

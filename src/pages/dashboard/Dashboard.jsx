@@ -115,25 +115,25 @@ export default function Dashboard() {
       {/* ---------------------------------------------------- */}
       {/* TOP HEADER & LIVE REFRESH BUTTON                     */}
       {/* ---------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <Store className="w-6 h-6 text-[#00df89]" />
+            <Store className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>{mongoShop?.name || activeShop?.name || 'My Store'} {lang === 'bn' ? 'ড্যাশবোর্ড' : 'Overview'}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
             {lang === 'bn'
               ? 'মঙ্গোডিবি ক্লাউড থেকে রিয়েল-টাইম পণ্য, বিক্রয় এবং আয় খতিয়ান'
               : 'Real-time sales, live inventory catalog and cloud database metrics'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="default"
             size="sm"
             onClick={() => navigate('/sales/new')}
-            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs gap-1.5 shadow-xs"
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-1.5 shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>{lang === 'bn' ? 'নতুন বিক্রি / ক্যাশ মেমো' : 'New Sale / POS'}</span>

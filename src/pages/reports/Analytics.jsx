@@ -52,13 +52,13 @@ export default function Analytics() {
     <div className="space-y-6 font-sans">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <TrendingUp className="w-6 h-6 text-[#00df89]" />
+            <TrendingUp className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>{lang === 'bn' ? 'অ্যাডভান্সড বিজনেস অ্যানালিটিক্স' : 'Business Intelligence & Analytics'}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
             {lang === 'bn' ? 'স্টোরের আয়, বিক্রয় ট্রেন্ড ও পারফরম্যান্স বিশ্লেষণ' : 'Real-time aggregated sales trends, revenue velocities and inventory turnover'}
           </p>
         </div>

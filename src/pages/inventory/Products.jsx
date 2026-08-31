@@ -103,6 +103,7 @@ export default function Products() {
   const [newSuppData, setNewSuppData] = useState({ name: '', phone: '', company_name: '', address: '' });
   const [isCreatingSupp, setIsCreatingSupp] = useState(false);
   const newAttrEndRef = useRef(null);
+  const editAttrEndRef = useRef(null);
 
   // New Product Form State
   const [newProduct, setNewProduct] = useState({
@@ -396,6 +397,147 @@ export default function Products() {
         ...prev,
         lowStockThreshold: val,
         variants: updatedVariants,
+      };
+    });
+  };
+
+  // Generate Combinations for Edit Product
+  const generateEditProductCombinations = () => {
+    const validOptions = (editForm.variation_options || []).filter((opt) => opt.name.trim() && opt.values.length > 0);
+    if (validOptions.length === 0) {
+      toast.error(lang === 'bn' ? 'অনুগ্রহ করে অন্তত একটি বৈশিষ্ট্য ও মান লিখুন।' : 'Please add at least one attribute and value.');
+      return;
+    }
+
+    const cartesian = (arrays) => {
+      return arrays.reduce((acc, curr) => {
+        return acc.flatMap((a) => curr.map((b) => [...a, b]));
+      }, [[]]);
+    };
+
+    const valuesArrays = validOptions.map((opt) => opt.values);
+    const combinations = cartesian(valuesArrays);
+
+    const baseCost = editForm.buyPrice !== '' ? (parseFloat(editForm.buyPrice) || 0) : 0;
+    const baseSell = editForm.sellPrice !== '' ? (parseFloat(editForm.sellPrice) || 0) : 0;
+    const alertLevel = parseInt(editForm.lowStockThreshold, 10) || 5;
+    const basePrefix = editForm.name ? editForm.name.slice(0, 3).toUpperCase() : 'SKU';
+
+    // Existing variants map by normalized name for smart merge (preserving existing stock, barcode, price, id)
+    const existingMap = new Map();
+    (editForm.variants || []).forEach((v) => {
+      if (v.name) {
+        existingMap.set(v.name.toLowerCase().trim(), v);
+      }
+    });
+
+    const newVariants = combinations.map((combo, idx) => {
+      const variantAttrs = combo.map((val, optIdx) => ({
+        name: validOptions[optIdx].name,
+        value: val,
+      }));
+      const comboName = combo.join(' / ');
+      const existing = existingMap.get(comboName.toLowerCase().trim());
+
+      if (existing) {
+        return {
+          ...existing,
+          name: comboName,
+          attributes: variantAttrs,
+        };
+      }
+
+      const variantSku = `${basePrefix}-${Math.floor(1000 + Math.random() * 9000)}-V${idx + 1}`;
+
+      return {
+        id: `var_${Date.now()}_${idx}`,
+        name: comboName,
+        attributes: variantAttrs,
+        sku: variantSku,
+        barcode: generateUniqueBarcode('21'),
+        cost_price: baseCost,
+        selling_price: baseSell,
+        stock_quantity: 0,
+        low_stock_threshold: alertLevel,
+      };
+    });
+
+    const totalStock = newVariants.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0);
+    setEditForm((prev) => ({ ...prev, variants: newVariants, stock: totalStock.toString() }));
+    toast.success(lang === 'bn' ? `${newVariants.length} টি ভ্যারিয়েশন তৈরি হয়েছে!` : `Generated ${newVariants.length} variations!`);
+  };
+
+  const handleAddNewEditProductAttrGroup = (preset) => {
+    if (preset) {
+      setEditForm(prev => ({
+        ...prev,
+        variation_options: [...(prev.variation_options || []), { name: preset.name, values: [] }]
+      }));
+    } else {
+      setEditForm(prev => ({
+        ...prev,
+        variation_options: [...(prev.variation_options || []), { name: '', values: [] }]
+      }));
+    }
+
+    setTimeout(() => {
+      if (editAttrEndRef.current) {
+        editAttrEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 80);
+  };
+
+  const handleRemoveEditProductAttrGroup = (index) => {
+    setEditForm(prev => ({
+      ...prev,
+      variation_options: (prev.variation_options || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleAddEditProductOptionValue = (optIndex, val) => {
+    if (!val || !val.trim()) return;
+    const upperVal = String(val).trim().toUpperCase();
+    setEditForm(prev => {
+      const updated = [...(prev.variation_options || [])];
+      if (updated[optIndex] && !updated[optIndex].values.includes(upperVal)) {
+        updated[optIndex] = {
+          ...updated[optIndex],
+          values: [...updated[optIndex].values, upperVal],
+        };
+      }
+      return { ...prev, variation_options: updated };
+    });
+  };
+
+  const handleRemoveEditProductOptionValue = (optIndex, valIndex) => {
+    setEditForm(prev => {
+      const updated = [...(prev.variation_options || [])];
+      updated[optIndex].values = updated[optIndex].values.filter((_, i) => i !== valIndex);
+      return { ...prev, variation_options: updated };
+    });
+  };
+
+  const handleUpdateEditProductVariant = (vIdx, field, value) => {
+    setEditForm(prev => {
+      const updated = [...(prev.variants || [])];
+      updated[vIdx] = { ...updated[vIdx], [field]: value };
+      let nextStock = prev.stock;
+      if (field === 'stock_quantity') {
+        const total = updated.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0);
+        nextStock = total.toString();
+      }
+      return { ...prev, variants: updated, stock: nextStock };
+    });
+  };
+
+  const handleRemoveEditProductVariant = (vIdx) => {
+    setEditForm(prev => {
+      const updated = (prev.variants || []).filter((_, i) => i !== vIdx);
+      const total = updated.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0);
+      return {
+        ...prev,
+        variants: updated,
+        stock: prev.has_variants && updated.length > 0 ? total.toString() : prev.stock,
       };
     });
   };
@@ -1159,6 +1301,41 @@ export default function Products() {
       initialDue = resolvedSuppId ? initialTotalCost : 0;
     }
 
+    let initialVariationOptions = Array.isArray(product.variation_options) && product.variation_options.length > 0
+      ? JSON.parse(JSON.stringify(product.variation_options))
+      : [];
+
+    if (initialVariationOptions.length === 0 && Array.isArray(product.variants) && product.variants.length > 0) {
+      const attrMap = new Map();
+      product.variants.forEach((v) => {
+        if (Array.isArray(v.attributes) && v.attributes.length > 0) {
+          v.attributes.forEach((a) => {
+            if (a.name && a.value) {
+              const key = a.name.trim();
+              if (!attrMap.has(key)) attrMap.set(key, new Set());
+              attrMap.get(key).add(String(a.value).trim());
+            }
+          });
+        } else if (v.name && v.name.includes('/')) {
+          const parts = v.name.split('/').map((s) => s.trim());
+          if (parts.length >= 2) {
+            const attr1 = 'Color';
+            const attr2 = 'Size';
+            if (!attrMap.has(attr1)) attrMap.set(attr1, new Set());
+            if (!attrMap.has(attr2)) attrMap.set(attr2, new Set());
+            attrMap.get(attr1).add(parts[0]);
+            attrMap.get(attr2).add(parts[1]);
+          }
+        }
+      });
+      if (attrMap.size > 0) {
+        initialVariationOptions = Array.from(attrMap.entries()).map(([name, valSet]) => ({
+          name,
+          values: Array.from(valSet),
+        }));
+      }
+    }
+
     setEditForm({
       id: product.id,
       name: product.name,
@@ -1183,7 +1360,7 @@ export default function Products() {
       unit: product.unit || 'Pcs',
       lowStockThreshold: product.lowStockThreshold || 5,
       has_variants: Boolean(product.has_variants),
-      variation_options: Array.isArray(product.variation_options) ? product.variation_options : [],
+      variation_options: initialVariationOptions,
       variants: Array.isArray(product.variants) ? JSON.parse(JSON.stringify(product.variants)) : [],
     });
     setShowEditSuppInline(false);
@@ -1345,10 +1522,10 @@ export default function Products() {
       {/* ---------------------------------------------------- */}
       {/* TOP HEADER & ACTION ROW                              */}
       {/* ---------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <Package className="w-6 h-6 text-[#00df89]" />
+            <Package className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>{lang === 'bn' ? 'পণ্য ও ইনভেন্টরি ক্যাটালগ' : 'Products & Inventory Catalog'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
@@ -1356,7 +1533,7 @@ export default function Products() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <Button
             type="button"
             variant="outline"
@@ -1364,7 +1541,7 @@ export default function Products() {
               setBarcodeModalProducts(productList);
               setIsBarcodeModalOpen(true);
             }}
-            className="text-xs sm:text-sm h-10 px-3.5 gap-2 cursor-pointer border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs hover:border-[#00df89]"
+            className="text-xs sm:text-sm h-10 px-3.5 gap-2 cursor-pointer border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs hover:border-[#00df89] whitespace-nowrap shrink-0"
           >
             <Printer className="w-4 h-4 text-[#00df89]" />
             <span>{lang === 'bn' ? 'বারকোড লেবেল প্রিন্ট' : 'Print Barcode Labels'}</span>
@@ -1372,7 +1549,7 @@ export default function Products() {
 
           <Button
             onClick={() => setIsActionChoiceModalOpen(true)}
-            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>{lang === 'bn' ? 'নতুন পণ্য বা স্টক যোগ' : 'Add Product / Stock'}</span>
@@ -1842,11 +2019,11 @@ export default function Products() {
               </div>
 
               {/* Category & Brand (Side by Side) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 min-w-0">
                 {/* Category */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="font-bold text-[13px] text-slate-800 dark:text-zinc-200">
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between gap-1.5 mb-1.5 min-w-0">
+                    <label className="font-bold text-[13px] text-slate-800 dark:text-zinc-200 truncate">
                       {lang === 'bn' ? 'ক্যাটাগরি' : 'Category'}
                     </label>
                     <button
@@ -1855,7 +2032,7 @@ export default function Products() {
                         setShowAddCatInline(!showAddCatInline);
                         setNewCatName('');
                       }}
-                      className="text-xs font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                      className="text-xs font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 shrink-0 cursor-pointer"
                     >
                       <FolderPlus className="w-3 h-3" />
                       <span>{showAddCatInline ? (lang === 'bn' ? 'বাতিল' : 'Cancel') : (lang === 'bn' ? '+ নতুন' : '+ New')}</span>
@@ -1863,20 +2040,20 @@ export default function Products() {
                   </div>
 
                   {showAddCatInline ? (
-                    <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                    <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 w-full min-w-0">
                       <input
                         type="text"
-                        placeholder={categoryPlaceholder}
+                        placeholder={lang === 'bn' ? 'ক্যাটাগরির নাম...' : 'Category name...'}
                         value={newCatName}
                         onChange={(e) => setNewCatName(e.target.value)}
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm focus:ring-1 focus:ring-[#00df89]"
+                        className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
                       />
                       <Button
                         type="button"
                         size="sm"
                         disabled={isCreatingCat || !newCatName.trim()}
                         onClick={() => handleCreateCategory(false)}
-                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs h-7 px-2.5 cursor-pointer"
+                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs h-7 px-2.5 shrink-0 cursor-pointer"
                       >
                         {isCreatingCat ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
                       </Button>
@@ -1919,9 +2096,9 @@ export default function Products() {
                 </div>
 
                 {/* Brand */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="font-bold text-[13px] text-slate-800 dark:text-zinc-200">
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between gap-1.5 mb-1.5 min-w-0">
+                    <label className="font-bold text-[13px] text-slate-800 dark:text-zinc-200 truncate">
                       {lang === 'bn' ? 'ব্র্যান্ড' : 'Brand'}
                     </label>
                     <button
@@ -1930,7 +2107,7 @@ export default function Products() {
                         setShowAddBrandInline(!showAddBrandInline);
                         setNewBrandName('');
                       }}
-                      className="text-xs font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                      className="text-xs font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 shrink-0 cursor-pointer"
                     >
                       <Tag className="w-3 h-3" />
                       <span>{showAddBrandInline ? (lang === 'bn' ? 'বাতিল' : 'Cancel') : (lang === 'bn' ? '+ নতুন' : '+ New')}</span>
@@ -1938,20 +2115,20 @@ export default function Products() {
                   </div>
 
                   {showAddBrandInline ? (
-                    <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                    <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 w-full min-w-0">
                       <input
                         type="text"
                         placeholder={lang === 'bn' ? 'ব্র্যান্ডের নাম...' : 'Brand name...'}
                         value={newBrandName}
                         onChange={(e) => setNewBrandName(e.target.value)}
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-sm focus:ring-1 focus:ring-[#00df89]"
+                        className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
                       />
                       <Button
                         type="button"
                         size="sm"
                         disabled={isCreatingBrand || !newBrandName.trim()}
                         onClick={() => handleCreateBrand(false)}
-                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs h-7 px-2.5 cursor-pointer"
+                        className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs h-7 px-2.5 shrink-0 cursor-pointer"
                       >
                         {isCreatingBrand ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
                       </Button>
@@ -3391,16 +3568,16 @@ export default function Products() {
               />
 
               {/* Category with Inline Creator in Edit Modal */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-medium text-slate-700 dark:text-zinc-300">Category</label>
+              <div className="min-w-0">
+                <div className="flex items-center justify-between gap-1.5 mb-1 min-w-0">
+                  <label className="block font-medium text-slate-700 dark:text-zinc-300 truncate">Category</label>
                   <button
                     type="button"
                     onClick={() => {
                       setShowEditCatInline(!showEditCatInline);
                       setNewCatName('');
                     }}
-                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 shrink-0 cursor-pointer"
                   >
                     <FolderPlus className="w-3 h-3" />
                     <span>{showEditCatInline ? 'Choose existing' : '+ Add New Category'}</span>
@@ -3408,20 +3585,20 @@ export default function Products() {
                 </div>
 
                 {showEditCatInline ? (
-                  <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                  <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 w-full min-w-0">
                     <input
                       type="text"
-                      placeholder={categoryPlaceholder}
+                      placeholder={lang === 'bn' ? 'ক্যাটাগরির নাম...' : 'Category name...'}
                       value={newCatName}
                       onChange={(e) => setNewCatName(e.target.value)}
-                      className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
+                      className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
                     />
                     <Button
                       type="button"
                       size="sm"
                       disabled={isCreatingCat || !newCatName.trim()}
                       onClick={() => handleCreateCategory(true)}
-                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3"
+                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-7 px-2.5 shrink-0 cursor-pointer"
                     >
                       {isCreatingCat ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save & Select'}
                     </Button>
@@ -3464,9 +3641,9 @@ export default function Products() {
               </div>
 
               {/* Brand with Inline Creator */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-medium text-slate-700 dark:text-zinc-300">
+              <div className="min-w-0">
+                <div className="flex items-center justify-between gap-1.5 mb-1 min-w-0">
+                  <label className="block font-medium text-slate-700 dark:text-zinc-300 truncate">
                     {lang === 'bn' ? 'ব্র্যান্ড' : 'Brand'}
                   </label>
                   <button
@@ -3475,7 +3652,7 @@ export default function Products() {
                       setShowEditBrandInline(!showEditBrandInline);
                       setNewBrandName('');
                     }}
-                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+                    className="text-[11px] font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 shrink-0 cursor-pointer"
                   >
                     <Tag className="w-3 h-3" />
                     <span>{showEditBrandInline ? (lang === 'bn' ? 'তালিকা থেকে বেছে নিন' : 'Choose existing') : (lang === 'bn' ? '+ নতুন ব্র্যান্ড' : '+ Add New Brand')}</span>
@@ -3483,20 +3660,20 @@ export default function Products() {
                 </div>
 
                 {showEditBrandInline ? (
-                  <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                  <div className="flex items-center gap-1.5 p-1.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 w-full min-w-0">
                     <input
                       type="text"
                       placeholder={lang === 'bn' ? 'ব্র্যান্ডের নাম লিখুন...' : 'Enter brand name...'}
                       value={newBrandName}
                       onChange={(e) => setNewBrandName(e.target.value)}
-                      className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
+                      className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 outline-none text-xs focus:ring-1 focus:ring-[#00df89]"
                     />
                     <Button
                       type="button"
                       size="sm"
                       disabled={isCreatingBrand || !newBrandName.trim()}
                       onClick={() => handleCreateBrand(true)}
-                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-8 px-3 cursor-pointer"
+                      className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs h-7 px-2.5 shrink-0 cursor-pointer"
                     >
                       {isCreatingBrand ? <Loader2 className="w-3 h-3 animate-spin" /> : (lang === 'bn' ? 'সেভ' : 'Save')}
                     </Button>
@@ -3705,144 +3882,242 @@ export default function Products() {
 
                 {/* If Variations Enabled in Edit Modal */}
                 {editForm.has_variants && (
-                  <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-[11px] text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-                        <Boxes className="w-3.5 h-3.5 text-[#00df89]" />
-                        {lang === 'bn' ? `ভ্যারিয়েশনসমূহ (${editForm.variants.length} টি):` : `Variants List (${editForm.variants.length}):`}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const baseCost = parseFloat(editForm.buyPrice) || 0;
-                          const baseSell = parseFloat(editForm.sellPrice) || 0;
-                          const newVar = {
-                            name: `Variant ${editForm.variants.length + 1}`,
-                            attributes: [],
-                            sku: `SKU-${Math.floor(1000 + Math.random() * 9000)}-V${editForm.variants.length + 1}`,
-                            barcode: generateUniqueBarcode('21'),
-                            cost_price: baseCost,
-                            selling_price: baseSell,
-                            stock_quantity: 0,
-                            low_stock_threshold: 5,
-                          };
-                          setEditForm({ ...editForm, variants: [...editForm.variants, newVar] });
-                        }}
-                        className="text-[10px] font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
-                      >
-                        <Plus className="w-2.5 h-2.5" />
-                        {lang === 'bn' ? '+ নতুন ভ্যারিয়েশন' : '+ Add Variant'}
-                      </button>
-                    </div>
+                  <div className="space-y-3 pt-1 animate-in fade-in duration-150">
+                    {/* Step 1: Attribute & Option Builder */}
+                    <div className="p-3.5 rounded-2xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Sliders className="w-4 h-4 text-[#00df89]" />
+                          <span className="font-bold text-xs text-slate-800 dark:text-zinc-200">
+                            {lang === 'bn' ? 'বৈশিষ্ট্য ও অপশনসমূহ:' : 'Attributes & Option Values:'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddNewEditProductAttrGroup()}
+                          className="text-xs font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>{lang === 'bn' ? '+ বৈশিষ্ট্য যোগ' : '+ Add Attribute'}</span>
+                        </button>
+                      </div>
 
-                    <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-1">
-                      {editForm.variants.map((v, vIdx) => (
-                        <div key={v._id || vIdx} className="p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-xs shadow-2xs">
-                          <div className="flex items-center justify-between gap-1.5">
-                            <input
-                              type="text"
-                              placeholder="Variant Name (e.g. Red / XL)"
-                              value={v.name}
-                              onChange={(e) => {
-                                const updated = [...editForm.variants];
-                                updated[vIdx] = { ...updated[vIdx], name: e.target.value };
-                                setEditForm({ ...editForm, variants: updated });
-                              }}
-                              className="flex-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-bold"
-                            />
-                            
-                            <div className="flex items-center gap-1">
-                              <div className="flex items-center px-1.5 py-0.5 rounded-md bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
+                      {/* Quick Preset Buttons */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs text-slate-400 font-semibold">Presets:</span>
+                        {attributePresets.map((preset) => (
+                          <button
+                            key={preset.name}
+                            type="button"
+                            onClick={() => handleAddNewEditProductAttrGroup(preset)}
+                            className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-zinc-800/80 hover:bg-[#00df89]/15 hover:text-[#00a86b] dark:hover:text-[#00df89] text-slate-700 dark:text-zinc-300 border border-slate-200/60 dark:border-zinc-700/60 transition-colors cursor-pointer"
+                          >
+                            + {preset.name}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Empty State vs Attribute Item Inputs */}
+                      {(editForm.variation_options || []).length === 0 ? (
+                        <div className="py-4 px-3 text-center border border-dashed border-slate-200 dark:border-zinc-800 rounded-2xl space-y-1 bg-slate-50/50 dark:bg-zinc-900/30">
+                          <p className="text-xs text-slate-500 dark:text-zinc-400">
+                            {lang === 'bn' ? 'কোনো বৈশিষ্ট্য যোগ করা হয়নি। উপরের প্রিসেট বা বাটনে চাপুন।' : 'No attributes added yet. Click a preset (e.g. Color, Size) or Add Attribute.'}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {editForm.variation_options.map((opt, optIdx) => (
+                            <div
+                              key={optIdx}
+                              ref={optIdx === editForm.variation_options.length - 1 ? editAttrEndRef : null}
+                              className="p-3 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/70 dark:border-zinc-800 space-y-2 text-sm"
+                            >
+                              <div className="flex items-center justify-between gap-2">
                                 <input
                                   type="text"
-                                  placeholder="Barcode"
-                                  value={v.barcode || ''}
+                                  placeholder={lang === 'bn' ? 'বৈশিষ্ট্যের নাম (যেমন: Size)' : 'Attribute Name (e.g. Size, Color)'}
+                                  value={opt.name}
                                   onChange={(e) => {
-                                    const updated = [...editForm.variants];
-                                    updated[vIdx] = { ...updated[vIdx], barcode: e.target.value };
-                                    setEditForm({ ...editForm, variants: updated });
+                                    const updated = [...(editForm.variation_options || [])];
+                                    updated[optIdx] = { ...updated[optIdx], name: e.target.value };
+                                    setEditForm({ ...editForm, variation_options: updated });
                                   }}
-                                  className="w-24 bg-transparent outline-none font-mono text-[11px]"
+                                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-sm font-bold w-48 outline-none focus:ring-1 focus:ring-[#00df89]"
                                 />
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    const updated = [...editForm.variants];
-                                    updated[vIdx] = { ...updated[vIdx], barcode: generateUniqueBarcode('21') };
-                                    setEditForm({ ...editForm, variants: updated });
-                                  }}
-                                  title="Auto generate barcode"
-                                  className="text-slate-400 hover:text-[#00df89] cursor-pointer ml-0.5"
+                                  onClick={() => handleRemoveEditProductAttrGroup(optIdx)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg cursor-pointer"
                                 >
-                                  <Sparkles className="w-3 h-3" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
 
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updated = editForm.variants.filter((_, i) => i !== vIdx);
-                                  setEditForm({ ...editForm, variants: updated });
-                                }}
-                                className="p-1 text-slate-400 hover:text-rose-500 rounded cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {/* Tags Input */}
+                              <div className="space-y-2">
+                                {opt.values && opt.values.length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-1.5 min-h-6">
+                                    {opt.values.map((val, valIdx) => (
+                                      <span
+                                        key={valIdx}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-[#00df89]/15 text-[#00a86b] dark:text-[#00df89] border border-[#00df89]/30 uppercase"
+                                      >
+                                        {val}
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveEditProductOptionValue(optIdx, valIdx)}
+                                          className="hover:text-rose-500 cursor-pointer ml-0.5"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <input
+                                  type="text"
+                                  placeholder={lang === 'bn' ? 'মান লিখে Enter চাপুন (যেমন: RED, BLUE, L)...' : 'Type value and press Enter...'}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ',') {
+                                      e.preventDefault();
+                                      handleAddEditProductOptionValue(optIdx, e.currentTarget.value);
+                                      e.currentTarget.value = '';
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 text-sm uppercase placeholder:normal-case outline-none focus:ring-1 focus:ring-[#00df89]"
+                                />
+                              </div>
                             </div>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-2">
-                            <div>
-                              <label className="text-[10px] text-slate-500 dark:text-zinc-400">Cost (৳)</label>
-                              <input
-                                type="number"
-                                value={v.cost_price}
-                                onChange={(e) => {
-                                  const updated = [...editForm.variants];
-                                  updated[vIdx] = { ...updated[vIdx], cost_price: e.target.value };
-                                  setEditForm({ ...editForm, variants: updated });
-                                }}
-                                className="w-full px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-slate-500 dark:text-zinc-400">Selling (৳)</label>
-                              <input
-                                type="number"
-                                value={v.selling_price}
-                                onChange={(e) => {
-                                  const updated = [...editForm.variants];
-                                  updated[vIdx] = { ...updated[vIdx], selling_price: e.target.value };
-                                  setEditForm({ ...editForm, variants: updated });
-                                }}
-                                className="w-full px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold text-[#00a86b] dark:text-[#00df89]"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-slate-500 dark:text-zinc-400">Stock (Qty)</label>
-                              <input
-                                type="number"
-                                value={v.stock_quantity}
-                                onChange={(e) => {
-                                  const updated = [...editForm.variants];
-                                  updated[vIdx] = { ...updated[vIdx], stock_quantity: e.target.value };
-                                  setEditForm({ ...editForm, variants: updated });
-                                }}
-                                className="w-full px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold"
-                              />
-                            </div>
-                          </div>
+                          ))}
+                          <div ref={editAttrEndRef} className="h-0" />
                         </div>
-                      ))}
+                      )}
+
+                      {(editForm.variation_options || []).length > 0 && (
+                        <Button
+                          type="button"
+                          onClick={generateEditProductCombinations}
+                          className="w-full bg-[#00df89] hover:bg-[#00c97b] text-[#011812] text-sm font-bold py-2 h-10 rounded-xl cursor-pointer shadow-xs gap-2"
+                        >
+                          <Boxes className="w-4 h-4" />
+                          <span>{lang === 'bn' ? 'ভ্যারিয়েশন কম্বিনেশন তৈরি করুন' : 'Generate Variants Matrix'}</span>
+                        </Button>
+                      )}
                     </div>
 
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between text-xs font-bold">
-                      <span className="text-slate-700 dark:text-zinc-300">
-                        {lang === 'bn' ? 'মোট সামগ্রিক স্টক:' : 'Total Combined Stock:'}
-                      </span>
-                      <span className="text-emerald-600 dark:text-[#00df89]">
-                        {editForm.variants.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0)} Pcs
-                      </span>
+                    {/* Step 2: Variants Matrix List */}
+                    <div className="space-y-2.5 pt-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[11px] text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                          <Boxes className="w-3.5 h-3.5 text-[#00df89]" />
+                          {lang === 'bn' ? `ভ্যারিয়েশনসমূহ (${editForm.variants.length} টি):` : `Variants List (${editForm.variants.length}):`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const baseCost = parseFloat(editForm.buyPrice) || 0;
+                            const baseSell = parseFloat(editForm.sellPrice) || 0;
+                            const newVar = {
+                              name: `Variant ${editForm.variants.length + 1}`,
+                              attributes: [],
+                              sku: `SKU-${Math.floor(1000 + Math.random() * 9000)}-V${editForm.variants.length + 1}`,
+                              barcode: generateUniqueBarcode('21'),
+                              cost_price: baseCost,
+                              selling_price: baseSell,
+                              stock_quantity: 0,
+                              low_stock_threshold: 5,
+                            };
+                            setEditForm({ ...editForm, variants: [...editForm.variants, newVar] });
+                          }}
+                          className="text-[10px] font-bold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Plus className="w-2.5 h-2.5" />
+                          {lang === 'bn' ? '+ নতুন ভ্যারিয়েশন' : '+ Add Variant'}
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                        {editForm.variants.map((v, vIdx) => (
+                          <div key={v._id || v.id || vIdx} className="p-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-xs shadow-2xs">
+                            <div className="flex items-center justify-between gap-1.5">
+                              <input
+                                type="text"
+                                placeholder="Variant Name (e.g. Red / XL)"
+                                value={v.name}
+                                onChange={(e) => handleUpdateEditProductVariant(vIdx, 'name', e.target.value)}
+                                className="flex-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-bold"
+                              />
+                              
+                              <div className="flex items-center gap-1">
+                                <div className="flex items-center px-1.5 py-0.5 rounded-md bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800">
+                                  <input
+                                    type="text"
+                                    placeholder="Barcode"
+                                    value={v.barcode || ''}
+                                    onChange={(e) => handleUpdateEditProductVariant(vIdx, 'barcode', e.target.value)}
+                                    className="w-24 bg-transparent outline-none font-mono text-[11px]"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateEditProductVariant(vIdx, 'barcode', generateUniqueBarcode('21'))}
+                                    title="Auto generate barcode"
+                                    className="text-slate-400 hover:text-[#00df89] cursor-pointer ml-0.5"
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveEditProductVariant(vIdx)}
+                                  className="p-1 text-slate-400 hover:text-rose-500 rounded cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-[10px] text-slate-500 dark:text-zinc-400">Cost (৳)</label>
+                                <input
+                                  type="number"
+                                  value={v.cost_price}
+                                  onChange={(e) => handleUpdateEditProductVariant(vIdx, 'cost_price', e.target.value)}
+                                  className="w-full px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-slate-500 dark:text-zinc-400">Selling (৳)</label>
+                                <input
+                                  type="number"
+                                  value={v.selling_price}
+                                  onChange={(e) => handleUpdateEditProductVariant(vIdx, 'selling_price', e.target.value)}
+                                  className="w-full px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold text-[#00a86b] dark:text-[#00df89]"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-slate-500 dark:text-zinc-400">Stock (Qty)</label>
+                                <input
+                                  type="number"
+                                  value={v.stock_quantity}
+                                  onChange={(e) => handleUpdateEditProductVariant(vIdx, 'stock_quantity', e.target.value)}
+                                  className="w-full px-2 py-1 rounded-lg bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between text-xs font-bold">
+                        <span className="text-slate-700 dark:text-zinc-300">
+                          {lang === 'bn' ? 'মোট সামগ্রিক স্টক:' : 'Total Combined Stock:'}
+                        </span>
+                        <span className="text-emerald-600 dark:text-[#00df89]">
+                          {editForm.variants.reduce((sum, v) => sum + (parseInt(v.stock_quantity, 10) || 0), 0)} Pcs
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}

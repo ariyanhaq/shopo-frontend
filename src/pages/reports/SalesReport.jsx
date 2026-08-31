@@ -73,21 +73,21 @@ export default function SalesReport() {
     <div className="space-y-6 font-sans">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <BarChart3 className="w-6 h-6 text-[#00df89]" />
+            <BarChart3 className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>{lang === 'bn' ? 'বিক্রয় রিপোর্ট ও এনালিটিক্স' : 'Sales Reports & Analytics'}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
             {lang === 'bn' ? 'দৈনিক ও মাসিক বিক্রয়ের লাইভ রিপোর্ট ও এক্সপোর্ট' : 'Detailed breakdown of retail revenue, volume, and top-selling SKUs'}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             onClick={handleExportCSV}
-            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs gap-1.5 shadow-xs"
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs sm:text-sm h-10 px-4 gap-1.5 shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
           >
             <Download className="w-4 h-4 stroke-[2]" />
             <span>{lang === 'bn' ? 'সিএসভি ডাউনলোড' : 'Export CSV'}</span>

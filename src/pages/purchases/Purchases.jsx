@@ -1251,10 +1251,10 @@ export default function Purchases() {
       {/* ---------------------------------------------------- */}
       {/* TOP HEADER & ACTION ROW                              */}
       {/* ---------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <ShoppingBag className="w-6 h-6 text-[#00df89]" />
+            <ShoppingBag className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>{lang === 'bn' ? 'পণ্য ক্রয় ও স্টক ইন খতিয়ান' : 'Purchases & Stock-In Ledger'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
@@ -1264,7 +1264,7 @@ export default function Purchases() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <Button
             type="button"
             variant="outline"
@@ -1272,7 +1272,7 @@ export default function Purchases() {
               setBarcodeModalProducts(products);
               setIsBarcodeModalOpen(true);
             }}
-            className="text-xs sm:text-sm h-10 px-3.5 gap-2 cursor-pointer border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs hover:border-[#00df89]"
+            className="text-xs sm:text-sm h-10 px-3.5 gap-2 cursor-pointer border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xs hover:border-[#00df89] whitespace-nowrap shrink-0"
           >
             <Printer className="w-4 h-4 text-[#00df89]" />
             <span>{lang === 'bn' ? 'বারকোড লেবেল প্রিন্ট' : 'Print Barcode Labels'}</span>
@@ -1280,7 +1280,7 @@ export default function Purchases() {
 
           <Button
             onClick={handleOpenNewPurchase}
-            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>{lang === 'bn' ? 'নতুন স্টক ক্রয় করুন' : 'New Purchase / Stock In'}</span>

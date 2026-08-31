@@ -128,27 +128,27 @@ export default function DashboardLayout() {
       <div className="flex-1 flex flex-col md:pl-64 min-w-0 transition-all">
         
         {/* STICKY TOP NAVBAR WITH SAFE AREA INSET SUPPORT */}
-        <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-md border-b border-slate-200/90 dark:border-zinc-800/80 px-4 sm:px-6 header-safe-top pb-3 md:py-0 h-auto md:h-14 flex items-center justify-between gap-2.5 sm:gap-4">
+        <header className="sticky top-0 z-30 bg-white/90 dark:bg-[#09090b]/90 backdrop-blur-md border-b border-slate-200/90 dark:border-zinc-800/80 px-3.5 sm:px-6 header-safe-top flex items-center justify-between gap-2 sm:gap-4">
           
           {/* Left Breadcrumb Navigation & Mobile Menu Button */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             
             {/* Mobile Hamburger Drawer Trigger */}
             <button
               type="button"
               onClick={() => setIsMobileDrawerOpen(true)}
-              className="w-8 h-8 rounded-xl bg-[#00df89] text-[#011812] flex items-center justify-center font-medium shadow-xs md:hidden cursor-pointer active:scale-95 transition-transform"
+              className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-[#121215] text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 flex items-center justify-center border border-slate-200/80 dark:border-zinc-800/80 md:hidden cursor-pointer active:scale-95 transition-all shrink-0"
               title={lang === 'bn' ? 'মেনু খুলুন' : 'Open Sidebar Menu'}
             >
               <Menu className="w-4.5 h-4.5" />
             </button>
 
             {/* Dynamic Breadcrumb Title */}
-            <div className="flex items-center gap-2 text-slate-800 dark:text-zinc-200 font-bold text-sm sm:text-base">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-slate-800 dark:text-zinc-200 font-bold text-sm sm:text-base min-w-0">
               <PageIcon className="w-4 h-4 text-[#00df89] hidden sm:inline shrink-0" />
-              <span>{pageInfo.title}</span>
+              <span className="whitespace-nowrap truncate">{pageInfo.title}</span>
               {(mongoShop?.name || activeShop?.name) && (
-                <span className="hidden sm:inline-block text-xs font-normal text-slate-400 dark:text-zinc-500">
+                <span className="hidden md:inline-block text-xs font-normal text-slate-400 dark:text-zinc-500 whitespace-nowrap truncate max-w-[120px] lg:max-w-[200px]">
                   / {mongoShop?.name || activeShop?.name}
                 </span>
               )}
@@ -167,13 +167,13 @@ export default function DashboardLayout() {
           </div>
 
           {/* Right Action Items */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             
             {/* SEGMENTED LANGUAGE TOGGLE SWITCH (EN | বাংলা) */}
-            <div className="bg-slate-100 dark:bg-[#121215] p-0.5 sm:p-1 rounded-full flex items-center gap-0.5 border border-slate-200/80 dark:border-zinc-800/80">
+            <div className="bg-slate-100 dark:bg-[#121215] p-0.5 rounded-full flex items-center gap-0.5 border border-slate-200/80 dark:border-zinc-800/80 shrink-0">
               <button
                 onClick={() => setLang('en')}
-                className={`px-3 py-1 rounded-full text-xs transition-all duration-150 cursor-pointer select-none ${
+                className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[11px] sm:text-xs transition-all duration-150 cursor-pointer select-none whitespace-nowrap ${
                   lang === 'en'
                     ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs font-medium'
                     : 'text-slate-500 hover:text-slate-900 dark:text-zinc-400 font-normal'
@@ -183,7 +183,7 @@ export default function DashboardLayout() {
               </button>
               <button
                 onClick={() => setLang('bn')}
-                className={`px-3 py-1 rounded-full text-xs transition-all duration-150 cursor-pointer select-none ${
+                className={`px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[11px] sm:text-xs transition-all duration-150 cursor-pointer select-none whitespace-nowrap ${
                   lang === 'bn'
                     ? 'bg-white dark:bg-zinc-800 text-slate-900 dark:text-white shadow-xs font-medium'
                     : 'text-slate-500 hover:text-slate-900 dark:text-zinc-400 font-normal'
@@ -193,24 +193,24 @@ export default function DashboardLayout() {
               </button>
             </div>
 
-            {/* Quick New Sale Button */}
+            {/* Quick New Sale Button (Desktop & Tablet only - Mobile uses bottom floating FAB) */}
             <Button
               variant="default"
               size="sm"
               onClick={() => navigate(isGym ? '/gym/sales' : isRestaurant ? '/restaurant/pos' : '/sales/new')}
-              className="gap-1 bg-[#00df89] text-[#011812] font-medium hover:bg-[#00c97b] cursor-pointer"
+              className="hidden sm:inline-flex items-center gap-1 bg-[#00df89] text-[#011812] font-semibold hover:bg-[#00c97b] cursor-pointer whitespace-nowrap shrink-0 h-8 px-3 text-xs shadow-2xs"
             >
-              <Plus className="w-4 h-4 stroke-[2]" />
-              <span className="hidden sm:inline">{t?.dashboard?.newSale || 'New Sale'}</span>
+              <Plus className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+              <span className="whitespace-nowrap">{t?.dashboard?.newSale || 'New Sale'}</span>
             </Button>
 
             {/* Notifications Popover */}
-            <div className="relative">
+            <div className="relative shrink-0">
               <button
                 onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-[#121215] text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 flex items-center justify-center relative transition-colors border border-transparent dark:border-zinc-800/80 cursor-pointer"
+                className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-[#121215] text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 flex items-center justify-center relative transition-colors border border-slate-200/80 dark:border-zinc-800/80 cursor-pointer shrink-0"
               >
-                <Bell className="w-4 h-4" />
+                <Bell className="w-4 h-4 shrink-0" />
                 <span className="w-2 h-2 rounded-full bg-rose-500 absolute top-1.5 right-1.5" />
               </button>
 
@@ -245,10 +245,10 @@ export default function DashboardLayout() {
             {/* Light/Dark Theme Switcher */}
             <button
               onClick={toggleTheme}
-              className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-[#121215] text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 flex items-center justify-center transition-colors border border-transparent dark:border-zinc-800/80 cursor-pointer"
+              className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-[#121215] text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-800 flex items-center justify-center transition-colors border border-slate-200/80 dark:border-zinc-800/80 cursor-pointer shrink-0"
               title="Toggle Theme"
             >
-              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400 shrink-0" /> : <Moon className="w-4 h-4 text-slate-700 shrink-0" />}
             </button>
 
           </div>
@@ -256,7 +256,7 @@ export default function DashboardLayout() {
         </header>
 
         {/* PAGE CONTENT ROUTE OUTLET - Keyed on mongoShop._id to automatically reset and reload all data on shop switch */}
-        <main className="flex-1 p-4 sm:p-6 pb-28 md:pb-8">
+        <main className="flex-1 p-4 sm:p-6 pb-32 md:pb-8">
           <Outlet key={mongoShop?._id || 'shop-root'} />
         </main>
 

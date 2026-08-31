@@ -82,13 +82,13 @@ export default function Categories() {
     <div className="space-y-6 font-sans">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <Tag className="w-6 h-6 text-[#00df89]" />
+            <Tag className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>{lang === 'bn' ? 'পণ্য ক্যাটাগরি ব্যবস্থাপনা' : 'Product Categories'}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
             {lang === 'bn' ? 'পণ্যের গ্রুপিং ও ক্যাটাগরি তৈরি করুন' : 'Organize and structure your catalog with product categories'}
           </p>
         </div>
@@ -100,7 +100,7 @@ export default function Categories() {
             setCategoryDesc('');
             setIsModalOpen(true);
           }}
-          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs gap-1.5 shadow-xs"
+          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-medium text-xs sm:text-sm h-10 px-4 gap-1.5 shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[2]" />
           <span>{lang === 'bn' ? 'নতুন ক্যাটাগরি' : 'Add Category'}</span>

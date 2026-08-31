@@ -106,20 +106,20 @@ export default function Salary() {
     <div className="space-y-6 font-sans pb-12">
       
       {/* HEADER SECTION */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-            <DollarSign className="w-6 h-6 text-[#00df89]" />
+            <DollarSign className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>Staff Payroll & Salary Disbursement</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
             Manage employee monthly payouts, payment vouchers, and staff ledger history.
           </p>
         </div>
 
         <Button
           onClick={() => setIsModalOpen(true)}
-          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2"
+          className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 whitespace-nowrap shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Disburse Salary</span>

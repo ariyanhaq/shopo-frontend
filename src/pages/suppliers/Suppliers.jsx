@@ -297,10 +297,10 @@ export default function Suppliers() {
       {/* ---------------------------------------------------- */}
       {/* TOP HEADER & ACTION ROW                              */}
       {/* ---------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <Building2 className="w-6 h-6 text-[#00df89]" />
+            <Building2 className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>{lang === 'bn' ? 'সাপ্লায়ার ও সরবরাহকারী ডিরেক্টরি' : 'Suppliers & Vendor Directory'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
@@ -310,10 +310,10 @@ export default function Suppliers() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 shrink-0">
           <Button
             onClick={() => handleOpenModal()}
-            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>{lang === 'bn' ? 'নতুন সাপ্লায়ার যোগ করুন' : 'Add Supplier'}</span>

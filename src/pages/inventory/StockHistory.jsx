@@ -60,13 +60,13 @@ export default function StockHistory() {
     <div className="space-y-6 font-sans pb-12">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-medium text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <Layers className="w-6 h-6 text-[#00df89]" />
+            <Layers className="w-6 h-6 text-[#00df89] shrink-0" />
             <span>{lang === 'bn' ? 'স্টক অডিট ও মুভমেন্ট হিস্ট্রি' : 'Stock Movements & Audit History'}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
             {lang === 'bn' ? 'প্রতিটি বিক্রয়, অ্যাডজাস্টমেন্ট ও রিস্টকের বিস্তারিত হিসাব' : 'Automatic inventory ledger recording every sale, restock, and manual adjustment'}
           </p>
         </div>

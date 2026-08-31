@@ -498,10 +498,12 @@ export default function Orders() {
       {/* ---------------------------------------------------- */}
       {/* HEADER SECTION                                       */}
       {/* ---------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      {/* TOP HEADER & ACTION ROW                              */}
+      {/* ---------------------------------------------------- */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#00df89]/10 text-[#00df89] flex items-center justify-center border border-[#00df89]/20 shadow-xs">
+            <div className="w-9 h-9 rounded-xl bg-[#00df89]/10 text-[#00df89] flex items-center justify-center border border-[#00df89]/20 shadow-xs shrink-0">
               <ShoppingCart className="w-5 h-5 stroke-[2.2]" />
             </div>
             <span>{lang === 'bn' ? 'বিক্রয় ও ইনভয়েস হিস্ট্রি' : 'Sales History & Invoices'}</span>
@@ -513,13 +515,13 @@ export default function Orders() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <Button
             variant="outline"
             size="sm"
             onClick={fetchSales}
             disabled={isLoading}
-            className="h-10 px-3.5 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 gap-1.5 cursor-pointer shadow-xs"
+            className="h-10 px-3.5 border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 gap-1.5 cursor-pointer shadow-xs whitespace-nowrap shrink-0"
             title="Refresh Sales"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-[#00df89]' : ''}`} />
@@ -528,7 +530,7 @@ export default function Orders() {
 
           <Button
             onClick={() => navigate('/sales/new')}
-            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-bold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>{lang === 'bn' ? 'নতুন বিক্রি তৈরি করুন' : 'New Sale'}</span>

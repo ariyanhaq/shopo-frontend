@@ -586,10 +586,10 @@ export default function Users() {
       {/* ---------------------------------------------------- */}
       {/* HEADER SECTION                                       */}
       {/* ---------------------------------------------------- */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#00df89]/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-[#00df89]/10 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center shrink-0">
               <ShieldCheck className="w-4.5 h-4.5" />
             </div>
             <span>{lang === 'bn' ? 'ব্যবহারকারী ও ডিভাইস' : 'Users & Devices'}</span>
@@ -601,12 +601,12 @@ export default function Users() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <Button
             variant="outline"
             disabled={isRefreshingAll}
             onClick={handleRefreshAll}
-            className="text-xs sm:text-sm h-10 px-3.5 gap-2 cursor-pointer border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] text-slate-700 dark:text-zinc-300 hover:border-slate-300 shadow-xs"
+            className="text-xs sm:text-sm h-10 px-3.5 gap-2 cursor-pointer border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121215] text-slate-700 dark:text-zinc-300 hover:border-slate-300 shadow-xs whitespace-nowrap shrink-0"
           >
             <RotateCw className={`w-3.5 h-3.5 ${isRefreshingAll ? 'animate-spin' : ''}`} />
             <span>{lang === 'bn' ? 'সেশন রিফ্রেশ' : 'Refresh Sessions'}</span>
@@ -614,7 +614,7 @@ export default function Users() {
 
           <Button
             onClick={handleOpenAdd}
-            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer"
+            className="bg-[#00df89] hover:bg-[#00c97b] text-[#011812] font-semibold text-xs sm:text-sm h-10 px-4 gap-2 shadow-xs cursor-pointer whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>{lang === 'bn' ? 'নতুন ব্যবহারকারী যোগ করুন' : 'Add User'}</span>
