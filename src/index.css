@@ -67,7 +67,7 @@
 }
 
 .bottom-nav-safe {
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.25rem);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
 }
 
 /* Toast Notifications Mobile & Safe-Area Top Spacing */
