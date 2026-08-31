@@ -127,38 +127,62 @@ export default function Salary() {
       </div>
 
       {/* KPI METRIC CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Staff</span>
-            <Briefcase className="w-4 h-4 text-blue-500" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
+              {lang === 'bn' ? 'মোট কর্মচারী' : 'Total Staff'}
+            </span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 flex items-center justify-center shrink-0">
+              <Briefcase className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
-            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : employees.length}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
+              {isLoading ? <div className="h-7 sm:h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-16" /> : employees.length}
+            </div>
+            <div className="text-[10px] sm:text-xs text-slate-400 font-medium truncate">
+              {lang === 'bn' ? 'সক্রিয় কর্মচারী' : 'Active staff'}
+            </div>
           </div>
-          <div className="text-xs text-slate-400 mt-1">Active staff members</div>
         </Card>
 
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Salary Outflow</span>
-            <DollarSign className="w-4 h-4 text-rose-500" />
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
+              {lang === 'bn' ? 'মোট বেতন প্রদান' : 'Salary Outflow'}
+            </span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-rose-500/10 dark:bg-rose-500/20 text-rose-500 flex items-center justify-center shrink-0">
+              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-rose-500 mt-2">
-            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${totalPaid.toLocaleString()}`}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-rose-500 tracking-tight truncate">
+              {isLoading ? <div className="h-7 sm:h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${totalPaid.toLocaleString()}`}
+            </div>
+            <div className="text-[10px] sm:text-xs text-rose-500 font-medium truncate">
+              {lang === 'bn' ? 'মোট বেতন খরচ' : 'Lifetime payroll'}
+            </div>
           </div>
-          <div className="text-xs text-rose-500 mt-1">Lifetime payroll expense</div>
         </Card>
 
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Monthly Projected</span>
-            <Calendar className="w-4 h-4 text-purple-500" />
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] col-span-2 sm:col-span-1 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
+              {lang === 'bn' ? 'মাসিক প্রক্ষেপণ' : 'Monthly Projected'}
+            </span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-purple-500/10 dark:bg-purple-500/20 text-purple-500 flex items-center justify-center shrink-0">
+              <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-purple-500 mt-2">
-            {isLoading ? <div className="h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${monthlyBudget.toLocaleString()}`}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-purple-500 tracking-tight truncate">
+              {isLoading ? <div className="h-7 sm:h-8 bg-slate-200 dark:bg-zinc-800 rounded animate-pulse w-24" /> : `৳ ${monthlyBudget.toLocaleString()}`}
+            </div>
+            <div className="text-[10px] sm:text-xs text-purple-500 font-medium truncate">
+              {lang === 'bn' ? 'চলতি মাসের বাজেট' : 'Base monthly liability'}
+            </div>
           </div>
-          <div className="text-xs text-purple-500 mt-1">Base monthly liability</div>
         </Card>
       </div>
 

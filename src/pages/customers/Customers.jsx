@@ -526,38 +526,62 @@ export default function Customers() {
       {/* ---------------------------------------------------- */}
       {/* KPI METRIC CARDS                                     */}
       {/* ---------------------------------------------------- */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Registered Customers</span>
-            <Users className="w-4 h-4 text-slate-400" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
+              {lang === 'bn' ? 'মোট গ্রাহক' : 'Total Customers'}
+            </span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-100 dark:bg-zinc-800/80 text-slate-500 dark:text-zinc-400 flex items-center justify-center shrink-0">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2">
-            {isLoading ? <Skeleton className="h-8 w-20 my-0.5" /> : customers.length}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
+              {isLoading ? <Skeleton className="h-7 sm:h-8 w-20 my-0.5" /> : customers.length}
+            </div>
+            <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">
+              {lang === 'bn' ? 'নাম বা ফোন নম্বরসহ' : 'With name or phone'}
+            </div>
           </div>
-          <div className="text-xs text-slate-500 mt-1">With name or phone number</div>
         </Card>
 
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Lifetime Customer Purchases</span>
-            <DollarSign className="w-4 h-4 text-[#00a86b] dark:text-[#00df89]" />
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
+              {lang === 'bn' ? 'মোট ক্রয় ভলিউম' : 'Lifetime Purchases'}
+            </span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center shrink-0">
+              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] mt-2">
-            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${totalSpentAll.toLocaleString()}`}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] tracking-tight truncate">
+              {isLoading ? <Skeleton className="h-7 sm:h-8 w-28 my-0.5" /> : `৳ ${totalSpentAll.toLocaleString()}`}
+            </div>
+            <div className="text-[10px] sm:text-xs text-[#00a86b] dark:text-[#00df89] font-medium truncate">
+              {lang === 'bn' ? 'কাস্টমারদের মোট ক্রয়' : 'Total customer volume'}
+            </div>
           </div>
-          <div className="text-xs text-[#00a86b] dark:text-[#00df89] mt-1">Total volume from customers</div>
         </Card>
 
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">Total Outstanding Customer Dues</span>
-            <DollarSign className="w-4 h-4 text-amber-500" />
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] col-span-2 sm:col-span-1 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
+              {lang === 'bn' ? 'মোট বাকি ব্যালেন্স' : 'Outstanding Dues'}
+            </span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-500/10 dark:bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0">
+              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-amber-500 mt-2">
-            {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${totalDuesAll.toLocaleString()}`}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-amber-500 tracking-tight truncate">
+              {isLoading ? <Skeleton className="h-7 sm:h-8 w-24 my-0.5" /> : `৳ ${totalDuesAll.toLocaleString()}`}
+            </div>
+            <div className="text-[10px] sm:text-xs text-amber-500 font-medium truncate">
+              {lang === 'bn' ? 'পেন্ডিং বকেয়া রিসিভেবল' : 'Receivables pending'}
+            </div>
           </div>
-          <div className="text-xs text-amber-500 mt-1">Receivables pending</div>
         </Card>
       </div>
 

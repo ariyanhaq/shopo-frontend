@@ -594,93 +594,121 @@ export default function ProfitLoss() {
       </Card>
 
       {/* ---------------------------------------------------- */}
-      {/* FINANCIAL SUMMARY KPI CARDS (5 COLUMNS)              */}
+      {/* FINANCIAL SUMMARY KPI CARDS (2 COLUMNS MOBILE / 5 DESKTOP) */}
       {/* ---------------------------------------------------- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         
         {/* Total Business Investment (Purchases + Expenses + Salaries) */}
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
-              {lang === 'bn' ? 'সর্বমোট বিনিয়োগ (মোট খরচ)' : 'Total Investment'}
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
+              {lang === 'bn' ? 'সর্বমোট বিনিয়োগ' : 'Total Investment'}
             </span>
-            <Coins className="w-4 h-4 text-[#00a86b] dark:text-[#00df89]" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center shrink-0">
+              <Coins className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2 font-mono">
-            {isLoading ? (
-              <Skeleton className="h-8 w-28 my-0.5" />
-            ) : (
-              `৳ ${safeMoney(investmentData.totalInvestment || investmentData.periodTotalInvestment)}`
-            )}
-          </div>
-          <div className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 truncate" title={lang === 'bn' ? 'পণ্য ক্রয় + পরিচালন ব্যয় + কর্মচারীদের বেতন' : 'Purchases + Operating Expenses + Salaries'}>
-            {isLoading ? '...' : (
-              <span>
-                {lang === 'bn' ? 'ক্রয় + খরচ + বেতন' : 'Purchases + Expenses + Salaries'}
-              </span>
-            )}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate font-mono">
+              {isLoading ? (
+                <Skeleton className="h-7 sm:h-8 w-24 my-0.5" />
+              ) : (
+                `৳ ${safeMoney(investmentData.totalInvestment || investmentData.periodTotalInvestment)}`
+              )}
+            </div>
+            <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate" title={lang === 'bn' ? 'পণ্য ক্রয় + পরিচালন ব্যয় + কর্মচারীদের বেতন' : 'Purchases + Operating Expenses + Salaries'}>
+              {isLoading ? '...' : (
+                <span>
+                  {lang === 'bn' ? 'ক্রয় + খরচ + বেতন' : 'Purchases + Expenses + Salaries'}
+                </span>
+              )}
+            </div>
           </div>
         </Card>
 
         {/* Gross Revenue */}
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
               {lang === 'bn' ? 'মোট বিক্রয় আয়' : 'Gross Sales Revenue'}
             </span>
-            <DollarSign className="w-4 h-4 text-[#00a86b] dark:text-[#00df89]" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center shrink-0">
+              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] mt-2 font-mono">
-            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${safeMoney(financialData.grossRevenue)}`}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] tracking-tight truncate font-mono">
+              {isLoading ? <Skeleton className="h-7 sm:h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.grossRevenue)}`}
+            </div>
+            <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">
+              {lang === 'bn' ? 'ইনভয়েস বিক্রয় হিসাব' : 'From invoice transactions'}
+            </div>
           </div>
-          <div className="text-xs text-slate-500 mt-1">From invoice transactions</div>
         </Card>
 
         {/* Cost of Goods Sold */}
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
-              {lang === 'bn' ? 'পণ্য কেনা খরচ (COGS)' : 'Cost of Goods (COGS)'}
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
+              {lang === 'bn' ? 'পণ্য কেনা খরচ' : 'Cost of Goods (COGS)'}
             </span>
-            <Receipt className="w-4 h-4 text-blue-500" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 flex items-center justify-center shrink-0">
+              <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-2 font-mono">
-            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${safeMoney(financialData.cogs)}`}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate font-mono">
+              {isLoading ? <Skeleton className="h-7 sm:h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.cogs)}`}
+            </div>
+            <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">
+              {lang === 'bn' ? 'পণ্য ক্রয় খরচ' : 'Direct product unit cost'}
+            </div>
           </div>
-          <div className="text-xs text-slate-500 mt-1">Direct product unit cost</div>
         </Card>
 
         {/* Operating Expenses */}
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
               {lang === 'bn' ? 'পরিচালন ও দোকান খরচ' : 'Operating Expenses'}
             </span>
-            <ArrowDownRight className="w-4 h-4 text-rose-500" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-rose-500/10 dark:bg-rose-500/20 text-rose-500 flex items-center justify-center shrink-0">
+              <ArrowDownRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-rose-500 mt-2 font-mono">
-            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${safeMoney(financialData.operatingExpenses)}`}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-rose-500 tracking-tight truncate font-mono">
+              {isLoading ? <Skeleton className="h-7 sm:h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.operatingExpenses)}`}
+            </div>
+            <div className="text-[10px] sm:text-xs text-rose-500 font-medium truncate">
+              {lang === 'bn' ? 'দোকান ভাড়া ও বিল' : 'Rent, bills & overheads'}
+            </div>
           </div>
-          <div className="text-xs text-rose-500 mt-1">Rent, bills & overheads</div>
         </Card>
 
         {/* Net Profit */}
-        <Card className="p-4 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-medium text-slate-500 dark:text-zinc-400">
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] col-span-2 sm:col-span-1 lg:col-span-1 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
               {lang === 'bn' ? 'নিট লাভ / লোকসান' : 'Net Profit / Loss'}
             </span>
-            {financialData.netProfit >= 0 ? (
-              <TrendingUp className="w-4 h-4 text-[#00df89]" />
-            ) : (
-              <TrendingDown className="w-4 h-4 text-rose-500" />
-            )}
+            <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 ${
+              financialData.netProfit >= 0 ? 'bg-emerald-500/10 dark:bg-emerald-500/20 text-[#00a86b] dark:text-[#00df89]' : 'bg-rose-500/10 dark:bg-rose-500/20 text-rose-500'
+            }`}>
+              {financialData.netProfit >= 0 ? (
+                <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              ) : (
+                <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              )}
+            </div>
           </div>
-          <div className={`text-2xl sm:text-3xl font-bold mt-2 font-mono ${financialData.netProfit >= 0 ? 'text-[#00a86b] dark:text-[#00df89]' : 'text-rose-500'}`}>
-            {isLoading ? <Skeleton className="h-8 w-28 my-0.5" /> : `৳ ${safeMoney(financialData.netProfit)}`}
-          </div>
-          <div className="text-xs font-semibold text-slate-500 mt-1">
-            {isLoading ? <Skeleton className="h-3 w-20 my-0.5" /> : `${financialData.profitMargin} Net Margin`}
+          <div className="mt-2 sm:mt-3 space-y-1">
+            <div className={`text-lg sm:text-2xl lg:text-3xl font-bold tracking-tight truncate font-mono ${financialData.netProfit >= 0 ? 'text-[#00a86b] dark:text-[#00df89]' : 'text-rose-500'}`}>
+              {isLoading ? <Skeleton className="h-7 sm:h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.netProfit)}`}
+            </div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500 dark:text-zinc-400 truncate">
+              {isLoading ? <Skeleton className="h-3 w-20 my-0.5" /> : `${financialData.profitMargin} ${lang === 'bn' ? 'নিট মার্জিন' : 'Net Margin'}`}
+            </div>
           </div>
         </Card>
 
