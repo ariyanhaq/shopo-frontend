@@ -608,10 +608,10 @@ export default function ProfitLoss() {
               <Coins className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="mt-2 sm:mt-3 space-y-1">
-            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate font-mono">
+          <div className="mt-2.5 sm:mt-3 space-y-1">
+            <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
               {isLoading ? (
-                <Skeleton className="h-7 sm:h-8 w-24 my-0.5" />
+                <Skeleton className="h-8 w-24 my-0.5" />
               ) : (
                 `৳ ${safeMoney(investmentData.totalInvestment || investmentData.periodTotalInvestment)}`
               )}
@@ -636,9 +636,9 @@ export default function ProfitLoss() {
               <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="mt-2 sm:mt-3 space-y-1">
-            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] tracking-tight truncate font-mono">
-              {isLoading ? <Skeleton className="h-7 sm:h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.grossRevenue)}`}
+          <div className="mt-2.5 sm:mt-3 space-y-1">
+            <div className="text-2xl sm:text-3xl font-bold text-[#00a86b] dark:text-[#00df89] tracking-tight truncate">
+              {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.grossRevenue)}`}
             </div>
             <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">
               {lang === 'bn' ? 'ইনভয়েস বিক্রয় হিসাব' : 'From invoice transactions'}
@@ -656,9 +656,9 @@ export default function ProfitLoss() {
               <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="mt-2 sm:mt-3 space-y-1">
-            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate font-mono">
-              {isLoading ? <Skeleton className="h-7 sm:h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.cogs)}`}
+          <div className="mt-2.5 sm:mt-3 space-y-1">
+            <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
+              {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.cogs)}`}
             </div>
             <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">
               {lang === 'bn' ? 'পণ্য ক্রয় খরচ' : 'Direct product unit cost'}
@@ -676,9 +676,9 @@ export default function ProfitLoss() {
               <ArrowDownRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="mt-2 sm:mt-3 space-y-1">
-            <div className="text-lg sm:text-2xl lg:text-3xl font-bold text-rose-500 tracking-tight truncate font-mono">
-              {isLoading ? <Skeleton className="h-7 sm:h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.operatingExpenses)}`}
+          <div className="mt-2.5 sm:mt-3 space-y-1">
+            <div className="text-2xl sm:text-3xl font-bold text-rose-500 tracking-tight truncate">
+              {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.operatingExpenses)}`}
             </div>
             <div className="text-[10px] sm:text-xs text-rose-500 font-medium truncate">
               {lang === 'bn' ? 'দোকান ভাড়া ও বিল' : 'Rent, bills & overheads'}
@@ -702,9 +702,9 @@ export default function ProfitLoss() {
               )}
             </div>
           </div>
-          <div className="mt-2 sm:mt-3 space-y-1">
-            <div className={`text-lg sm:text-2xl lg:text-3xl font-bold tracking-tight truncate font-mono ${financialData.netProfit >= 0 ? 'text-[#00a86b] dark:text-[#00df89]' : 'text-rose-500'}`}>
-              {isLoading ? <Skeleton className="h-7 sm:h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.netProfit)}`}
+          <div className="mt-2.5 sm:mt-3 space-y-1">
+            <div className={`text-2xl sm:text-3xl font-bold tracking-tight truncate ${financialData.netProfit >= 0 ? 'text-[#00a86b] dark:text-[#00df89]' : 'text-rose-500'}`}>
+              {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.netProfit)}`}
             </div>
             <div className="text-[10px] sm:text-xs font-semibold text-slate-500 dark:text-zinc-400 truncate">
               {isLoading ? <Skeleton className="h-3 w-20 my-0.5" /> : `${financialData.profitMargin} ${lang === 'bn' ? 'নিট মার্জিন' : 'Net Margin'}`}
