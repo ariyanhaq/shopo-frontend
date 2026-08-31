@@ -38,8 +38,8 @@
 
 /* iOS Dynamic Island & Notch Safe Area Inset Support */
 .header-safe-top {
-  padding-top: calc(env(safe-area-inset-top, 0px) + 3.5rem);
-  padding-bottom: 0.85rem;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 1.25rem);
+  padding-bottom: 0.75rem;
 }
 @media (min-width: 768px) {
   .header-safe-top {
@@ -72,7 +72,7 @@
 
 /* Toast Notifications Mobile & Safe-Area Top Spacing */
 .toast-container-safe {
-  top: calc(env(safe-area-inset-top, 0px) + 3.75rem) !important;
+  top: calc(env(safe-area-inset-top, 0px) + 1.5rem) !important;
 }
 @media (min-width: 768px) {
   .toast-container-safe {
