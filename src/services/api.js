@@ -7,20 +7,29 @@ import { auth } from '@/firebase.config';
 const DEFAULT_PROD_API_URL = 'https://shopo-api.vidflix.live';
 
 const getBaseUrl = () => {
+  const isLocalhost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === '0.0.0.0');
+
   const envUrl = (import.meta.env.VITE_API_URL || '').trim();
-  if (envUrl) {
+
+  // In local browser environment
+  if (isLocalhost) {
+    if (envUrl) {
+      return `${envUrl.replace(/\/+$/, '').replace(/\/api(\/v1)?\/?$/, '')}/api/v1`;
+    }
+    return 'http://localhost:8000/api/v1';
+  }
+
+  // In production or remote deployed environments:
+  // Use VITE_API_URL only if provided and not pointing to localhost
+  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
     return `${envUrl.replace(/\/+$/, '').replace(/\/api(\/v1)?\/?$/, '')}/api/v1`;
   }
 
-  if (
-    typeof window !== 'undefined' &&
-    window.location.hostname !== 'localhost' &&
-    window.location.hostname !== '127.0.0.1'
-  ) {
-    return `${DEFAULT_PROD_API_URL}/api/v1`;
-  }
-
-  return 'http://localhost:8000/api/v1';
+  return `${DEFAULT_PROD_API_URL}/api/v1`;
 };
 
 const BASE_URL = getBaseUrl();
