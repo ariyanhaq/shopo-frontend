@@ -584,7 +584,7 @@ export const api = {
 
     tables: {
       list: (params) => {
-        const qs = params ? new URLSearchParams(params).toString() : '';
+        const qs = toQueryString(params);
         return request(`/restaurant/tables${qs ? `?${qs}` : ''}`);
       },
       create: (data) =>
@@ -619,7 +619,7 @@ export const api = {
 
     menu: {
       list: (params) => {
-        const qs = params ? new URLSearchParams(params).toString() : '';
+        const qs = toQueryString(params);
         return request(`/restaurant/menu${qs ? `?${qs}` : ''}`);
       },
       create: (data) =>
@@ -640,7 +640,7 @@ export const api = {
 
     orders: {
       list: (params) => {
-        const qs = params ? new URLSearchParams(params).toString() : '';
+        const qs = toQueryString(params);
         return request(`/restaurant/orders${qs ? `?${qs}` : ''}`);
       },
       getById: (id) => request(`/restaurant/orders/${id}`),
@@ -648,6 +648,15 @@ export const api = {
         request('/restaurant/orders', {
           method: 'POST',
           body: JSON.stringify(data),
+        }),
+      update: (id, data) =>
+        request(`/restaurant/orders/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        }),
+      delete: (id) =>
+        request(`/restaurant/orders/${id}`, {
+          method: 'DELETE',
         }),
       appendItems: (id, data) =>
         request(`/restaurant/orders/${id}/append`, {
@@ -671,11 +680,16 @@ export const api = {
           method: 'POST',
           body: JSON.stringify(data),
         }),
+      updateAllItemsStatus: (data) =>
+        request('/restaurant/kds/all-items-status', {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
     },
 
     rawMaterials: {
       list: (params) => {
-        const qs = params ? new URLSearchParams(params).toString() : '';
+        const qs = toQueryString(params);
         return request(`/restaurant/raw-materials${qs ? `?${qs}` : ''}`);
       },
       create: (data) =>
@@ -701,7 +715,7 @@ export const api = {
 
     reservations: {
       list: (params) => {
-        const qs = params ? new URLSearchParams(params).toString() : '';
+        const qs = toQueryString(params);
         return request(`/restaurant/reservations${qs ? `?${qs}` : ''}`);
       },
       create: (data) =>

@@ -15,6 +15,7 @@ export default function ProductImageUploader({
   onChange,
   className = '',
   label = 'Product Photo (Optional)',
+  allowUrlPaste = true,
 }) {
   const fileInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -53,14 +54,16 @@ export default function ProductImageUploader({
           {label}
         </label>
         
-        <button
-          type="button"
-          onClick={() => setShowUrlInput(!showUrlInput)}
-          className="text-xs font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
-        >
-          <LinkIcon className="w-3 h-3" />
-          <span>{showUrlInput ? 'Upload Image File' : 'Paste Image URL'}</span>
-        </button>
+        {allowUrlPaste && (
+          <button
+            type="button"
+            onClick={() => setShowUrlInput(!showUrlInput)}
+            className="text-xs font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <LinkIcon className="w-3 h-3" />
+            <span>{showUrlInput ? 'Upload Image File' : 'Paste Image URL'}</span>
+          </button>
+        )}
       </div>
 
       {/* URL Input Mode */}

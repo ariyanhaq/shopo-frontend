@@ -6,14 +6,19 @@ import toast from 'react-hot-toast';
 import { Card, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { printSaleReceipt } from '@/utils/invoicePrinter';
 import {
-  Receipt, Search, RefreshCw, Printer, X, Eye, DollarSign,
-  Utensils, Clock, CheckCircle2, Flame
+  Receipt, Search, RefreshCw, Printer, X, Eye, Edit3, DollarSign,
+  Utensils, Clock, CheckCircle2, Flame, User, Phone, Check, Loader2,
+  AlertCircle, ShieldCheck
 } from 'lucide-react';
 
 export default function RestaurantOrders() {
   const { lang } = useLanguage();
-  const { activeShop } = useShop();
+  const { activeShop, mongoShop } = useShop();
 
   const [orders, setOrders] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState('all');
@@ -21,8 +26,22 @@ export default function RestaurantOrders() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Detail Modal
-  const [selectedOrder, setSelectedOrder] = useState(null);
+  // Modals state
+  const [receipt, setReceipt] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [editForm, setEditForm] = useState({
+    status: 'completed',
+    order_type: 'dine_in',
+    table_number: '',
+    customer_name: '',
+    customer_phone: '',
+    payment_status: 'paid',
+    payment_method: 'Cash',
+    paid_amount: 0,
+    discount_amount: 0,
+    special_instructions: '',
+  });
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const fetchOrders = async () => {
     try {
@@ -57,6 +76,93 @@ export default function RestaurantOrders() {
     );
   });
 
+  // Open Receipt in the exact same format as Restaurant POS
+  const handleOpenReceipt = (ord) => {
+    const subtotal = ord.subtotal || 0;
+    const vatAmount = ord.vat_amount || 0;
+    const vatPercent = ord.vat_percent || 0;
+    const serviceChargeAmount = ord.service_charge_amount || 0;
+    const serviceChargePercent = ord.service_charge_percent || 0;
+    const deliveryFee = ord.delivery_fee || 0;
+    const discountAmount = ord.discount_amount || 0;
+    const total = ord.total_amount || 0;
+    const paidAmount = ord.paid_amount !== undefined ? ord.paid_amount : total;
+    const changeToReturn = ord.change_returned || Math.max(0, paidAmount - total);
+
+    setReceipt({
+      invoice: ord.invoice_number || ord.order_number,
+      kotNumber: ord.kot_number || 'KOT-1',
+      date: new Date(ord.created_at).toLocaleString(),
+      orderType: ord.order_type,
+      tableNumber: ord.table_number || ord.table_id?.table_number || '',
+      waiterName: ord.waiter_name || '',
+      guestCount: ord.guest_count || 1,
+      customerName: ord.customer_name || 'Walk-in Guest',
+      customerPhone: ord.customer_phone || '',
+      customerAddress: ord.delivery_address || '',
+      paymentMethod: (ord.payment_method || 'Cash').toUpperCase() === 'CASH' ? 'Cash' : ord.payment_method || 'Cash',
+      items: (ord.items || []).map((it) => ({
+        name: it.name,
+        name_bn: it.name_bn,
+        modifiers: it.modifiers,
+        cooking_notes: it.cooking_notes,
+        price: it.unit_price || 0,
+        qty: it.quantity || 1,
+        subtotal: it.subtotal || (it.unit_price * (it.quantity || 1)),
+      })),
+      subtotal,
+      vatPercent,
+      vatAmount,
+      serviceChargePercent,
+      serviceChargeAmount,
+      deliveryFee,
+      discountAmount,
+      discountType: 'flat',
+      discountValue: discountAmount,
+      total,
+      paidAmount,
+      cashReceived: paidAmount,
+      changeToReturn,
+    });
+  };
+
+  // Open Edit Order Modal
+  const handleOpenEdit = (ord) => {
+    setEditingOrder(ord);
+    setEditForm({
+      status: ord.status || 'completed',
+      order_type: ord.order_type || 'dine_in',
+      table_number: ord.table_number || ord.table_id?.table_number || '',
+      customer_name: ord.customer_name || '',
+      customer_phone: ord.customer_phone || '',
+      payment_status: ord.payment_status || 'paid',
+      payment_method: ord.payment_method || 'Cash',
+      paid_amount: ord.paid_amount !== undefined ? ord.paid_amount : ord.total_amount,
+      discount_amount: ord.discount_amount || 0,
+      special_instructions: ord.special_instructions || '',
+    });
+  };
+
+  // Save Edit Order
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+
+    setIsUpdating(true);
+    try {
+      const res = await api.restaurant.orders.update(editingOrder._id, editForm);
+      if (res?.success) {
+        toast.success(lang === 'bn' ? 'অর্ডার সফলভাবে আপডেট করা হয়েছে!' : 'Order updated successfully!');
+        setEditingOrder(null);
+        fetchOrders();
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to update order');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <div className="space-y-6 font-sans pb-16">
       
@@ -71,14 +177,14 @@ export default function RestaurantOrders() {
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 font-normal mt-0.5">
             {lang === 'bn'
-              ? 'ডাইন-ইন, পার্সেল ও ডেলিভারি অর্ডারের সম্পূর্ণ ইতিহাস ও রসিদ রিপ্রিন্ট করুন।'
-              : 'Complete history of Dine-in, Takeaway and Delivery orders, KOT records & invoice reprints.'}
+              ? 'ডাইন-ইন, পার্সেল ও ডেলিভারি অর্ডারের সম্পূর্ণ ইতিহাস, এডিট ও রসিদ রিপ্রিন্ট করুন।'
+              : 'Complete history of Dine-in, Takeaway and Delivery orders, KOT records, invoice edits & reprints.'}
           </p>
         </div>
 
         <button
           onClick={fetchOrders}
-          className="p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 hover:bg-slate-100 text-slate-700 dark:text-zinc-300 transition-all cursor-pointer"
+          className="p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 transition-all cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
         </button>
@@ -104,7 +210,7 @@ export default function RestaurantOrders() {
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize whitespace-nowrap transition-all cursor-pointer ${
                 selectedType === type
                   ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
-                  : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200'
+                  : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700'
               }`}
             >
               {type.replace('_', ' ')}
@@ -129,7 +235,19 @@ export default function RestaurantOrders() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
-              {filteredOrders.length === 0 ? (
+              {isLoading ? (
+                [1, 2, 3, 4, 5, 6].map((i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-16 rounded" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-24 rounded" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-28 rounded" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-20 rounded" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-16 rounded" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-14 rounded-full" /></td>
+                    <td className="py-3 px-4 text-right"><Skeleton className="h-7 w-20 rounded-lg ml-auto" /></td>
+                  </tr>
+                ))
+              ) : filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400 text-xs">
                     No orders matching your criteria.
@@ -175,7 +293,13 @@ export default function RestaurantOrders() {
                             ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                             : ord.status === 'cooking'
                             ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
-                            : 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30'
+                            : ord.status === 'ready'
+                            ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30'
+                            : ord.status === 'served'
+                            ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30'
+                            : ord.status === 'cancelled'
+                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                            : 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300'
                         }`}
                       >
                         {ord.status}
@@ -183,13 +307,27 @@ export default function RestaurantOrders() {
                     </td>
 
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => setSelectedOrder(ord)}
-                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 hover:bg-slate-100 text-xs font-semibold text-slate-700 dark:text-zinc-300 cursor-pointer inline-flex items-center gap-1"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>View</span>
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReceipt(ord)}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-semibold text-slate-700 dark:text-zinc-300 cursor-pointer inline-flex items-center gap-1 transition-colors"
+                          title="View & Print Cash Memo"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>View</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(ord)}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-orange-500 hover:text-white dark:hover:bg-orange-500 dark:hover:text-white text-xs font-semibold text-slate-700 dark:text-zinc-300 cursor-pointer inline-flex items-center gap-1 transition-colors border border-transparent hover:border-orange-600"
+                          title="Edit Order Details & Status"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -199,100 +337,383 @@ export default function RestaurantOrders() {
         </div>
       </Card>
 
-      {/* DETAIL MODAL */}
-      {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <Card className="max-w-md w-full p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl rounded-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 mb-4">
-              <div>
-                <CardTitle className="text-base font-bold text-slate-900 dark:text-white">
-                  Invoice #{selectedOrder.order_number}
-                </CardTitle>
-                <div className="text-xs text-slate-500">
-                  {new Date(selectedOrder.created_at).toLocaleString()}
+      {/* ---------------------------------------------------- */}
+      {/* MODAL 1: POS-IDENTICAL CASH MEMO & RECEIPT VIEWER     */}
+      {/* ---------------------------------------------------- */}
+      {receipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in">
+          <Card className="max-w-sm w-full p-5 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 space-y-3.5 text-xs shadow-2xl relative">
+            
+            {/* Top Close Button */}
+            <button
+              type="button"
+              onClick={() => setReceipt(null)}
+              className="absolute top-3 right-3 p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800/80 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Receipt Header */}
+            <div className="text-center border-b border-dashed border-slate-200 dark:border-zinc-700 pb-2.5 pt-1">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">{mongoShop?.name || activeShop?.name || 'Shopo Restaurant'}</h3>
+              <p className="text-[10px] text-slate-400 font-mono mt-0.5">{receipt.invoice}</p>
+              <p className="text-[10px] text-slate-400">{receipt.date}</p>
+              <div className="mt-1 flex items-center justify-center gap-2">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 font-bold capitalize">
+                  {receipt.orderType?.replace('_', ' ')}
+                </span>
+                {receipt.tableNumber && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 font-bold">
+                    Table {receipt.tableNumber}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-zinc-400 font-semibold mt-1">
+                {receipt.customerName} {receipt.customerPhone ? `(${receipt.customerPhone})` : ''}
+              </p>
+            </div>
+
+            {/* Line Items */}
+            <div className="space-y-1.5 py-2 border-b border-dashed border-slate-200 dark:border-zinc-700 max-h-48 overflow-y-auto">
+              {receipt.items.map((it, idx) => (
+                <div key={idx} className="flex justify-between text-[11px] items-start">
+                  <div>
+                    <span className="font-semibold text-slate-900 dark:text-white">{it.name}</span>
+                    {it.modifiers && it.modifiers.length > 0 && (
+                      <div className="text-[10px] text-orange-600">
+                        + {it.modifiers.map((m) => m.name).join(', ')}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-slate-400">৳ {it.price} × {it.qty}</div>
+                  </div>
+                  <span className="font-bold text-slate-900 dark:text-white">৳ {it.subtotal.toLocaleString()}</span>
                 </div>
+              ))}
+            </div>
+
+            {/* Financial Summary */}
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between text-slate-500">
+                <span>Subtotal:</span>
+                <span>৳ {receipt.subtotal.toLocaleString()}</span>
+              </div>
+              {receipt.discountAmount > 0 && (
+                <div className="flex justify-between text-rose-500 font-medium">
+                  <span>Discount:</span>
+                  <span>- ৳ {receipt.discountAmount.toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-slate-500">
+                <span>VAT ({receipt.vatPercent}%):</span>
+                <span>৳ {receipt.vatAmount.toLocaleString()}</span>
+              </div>
+              {receipt.serviceChargeAmount > 0 && (
+                <div className="flex justify-between text-slate-500">
+                  <span>Service Charge ({receipt.serviceChargePercent}%):</span>
+                  <span>৳ {receipt.serviceChargeAmount.toLocaleString()}</span>
+                </div>
+              )}
+              {receipt.deliveryFee > 0 && (
+                <div className="flex justify-between text-slate-500">
+                  <span>Delivery Fee:</span>
+                  <span>৳ {receipt.deliveryFee.toLocaleString()}</span>
+                </div>
+              )}
+              
+              <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-1.5 border-t border-slate-200 dark:border-zinc-700">
+                <span>Net Total:</span>
+                <span className="text-[#00a86b] dark:text-[#00df89]">৳ {receipt.total.toLocaleString()}</span>
+              </div>
+
+              <div className="flex justify-between text-slate-700 dark:text-zinc-300">
+                <span>Paid ({receipt.paymentMethod}):</span>
+                <span className="font-bold">৳ {receipt.paidAmount.toLocaleString()}</span>
+              </div>
+
+              {receipt.changeToReturn > 0 && (
+                <div className="flex justify-between text-emerald-600 dark:text-[#00df89] font-bold">
+                  <span>Change Returned:</span>
+                  <span>৳ {receipt.changeToReturn.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Print & Close Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-zinc-800">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setReceipt(null)}
+                className="cursor-pointer font-medium text-xs rounded-xl"
+              >
+                Close
+              </Button>
+              <Button
+                size="sm"
+                onClick={() =>
+                  printSaleReceipt({
+                    order: {
+                      invoice_number: receipt.invoice,
+                      date: receipt.date,
+                      customer_name: receipt.customerName,
+                      customer_phone: receipt.customerPhone,
+                      payment_method: receipt.paymentMethod,
+                      items: receipt.items.map((it) => ({
+                        name: it.name,
+                        unit_price: it.price,
+                        quantity: it.qty,
+                        subtotal: it.subtotal,
+                      })),
+                      subtotal: receipt.subtotal,
+                      discount: receipt.discountAmount,
+                      tax: receipt.vatAmount,
+                      delivery_fee: receipt.deliveryFee,
+                      total: receipt.total,
+                      paid_amount: receipt.paidAmount,
+                      cash_received: receipt.cashReceived,
+                      change_amount: receipt.changeToReturn,
+                    },
+                    shop: mongoShop || activeShop,
+                    lang,
+                  })
+                }
+                className="bg-[#00df89] hover:bg-[#00c578] text-slate-950 font-bold text-xs gap-1.5 cursor-pointer shadow-xs rounded-xl"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>{lang === 'bn' ? 'ক্যাশ মেমো প্রিন্ট' : 'Print Cash Memo'}</span>
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* MODAL 2: EDIT ORDER MODAL                            */}
+      {/* ---------------------------------------------------- */}
+      {editingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in">
+          <Card className="max-w-lg w-full p-5 sm:p-6 bg-white dark:bg-[#121215] border-slate-200 dark:border-zinc-800 shadow-2xl rounded-2xl max-h-[90vh] overflow-y-auto space-y-4">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+              <div>
+                <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-orange-500" />
+                  <span>Edit Order #{editingOrder.order_number}</span>
+                </CardTitle>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                  Update order status, dining type, table, customer or payment info.
+                </p>
               </div>
               <button
-                onClick={() => setSelectedOrder(null)}
-                className="text-slate-400 hover:text-white cursor-pointer"
+                type="button"
+                onClick={() => setEditingOrder(null)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-4 text-xs">
-              <div className="p-3 bg-slate-50 dark:bg-zinc-800/40 rounded-xl space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Order Type:</span>
-                  <span className="font-bold capitalize">{selectedOrder.order_type.replace('_', ' ')}</span>
+            {/* Edit Form */}
+            <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs">
+              
+              {/* Order Status & Order Type */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                    Order Status *
+                  </label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(val) => setEditForm({ ...editForm, status: val })}
+                  >
+                    <SelectTrigger className="h-9.5 text-xs rounded-xl bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 font-semibold">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="completed">✓ Completed (Paid & Served)</SelectItem>
+                      <SelectItem value="cooking">⏳ Cooking in Kitchen</SelectItem>
+                      <SelectItem value="ready">🔔 Ready for Serving</SelectItem>
+                      <SelectItem value="served">🍽️ Served to Table</SelectItem>
+                      <SelectItem value="pending">📝 Pending</SelectItem>
+                      <SelectItem value="cancelled">❌ Cancelled / Void</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                {selectedOrder.table_number && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Table:</span>
-                    <span className="font-bold text-orange-600">Table {selectedOrder.table_number}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Customer:</span>
-                  <span className="font-bold">{selectedOrder.customer_name}</span>
+
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                    Dining Type *
+                  </label>
+                  <Select
+                    value={editForm.order_type}
+                    onValueChange={(val) => setEditForm({ ...editForm, order_type: val })}
+                  >
+                    <SelectTrigger className="h-9.5 text-xs rounded-xl bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 font-semibold">
+                      <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="dine_in">🍽️ Dine-in</SelectItem>
+                      <SelectItem value="takeaway">📦 Takeaway / Parcel</SelectItem>
+                      <SelectItem value="delivery">🛵 Delivery</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                {selectedOrder.waiter_name && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Waiter:</span>
-                    <span className="font-bold">{selectedOrder.waiter_name}</span>
-                  </div>
-                )}
               </div>
 
-              {/* Items List */}
-              <div className="space-y-1.5">
-                <span className="font-bold text-slate-900 dark:text-white block">Order Items:</span>
-                {selectedOrder.items.map((it, idx) => (
-                  <div key={idx} className="flex justify-between py-1 border-b border-dashed border-slate-200 dark:border-zinc-800">
-                    <div>
-                      <span className="font-bold">{it.name}</span>
-                      <span className="text-slate-500 ml-1">× {it.quantity}</span>
-                      {it.modifiers && it.modifiers.length > 0 && (
-                        <div className="text-[10px] text-orange-600">+ {it.modifiers.map(m => m.name).join(', ')}</div>
-                      )}
+              {/* Table & Customer Phone */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                    Table Number / Name
+                  </label>
+                  <Input
+                    placeholder="e.g. B-01, Table 4 (leave blank for Counter)"
+                    value={editForm.table_number}
+                    onChange={(e) => setEditForm({ ...editForm, table_number: e.target.value })}
+                    className="h-9.5 text-xs rounded-xl bg-white dark:bg-zinc-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                    Customer Phone
+                  </label>
+                  <Input
+                    placeholder="017XXXXXXXX"
+                    value={editForm.customer_phone}
+                    onChange={(e) => setEditForm({ ...editForm, customer_phone: e.target.value })}
+                    className="h-9.5 text-xs rounded-xl bg-white dark:bg-zinc-900"
+                  />
+                </div>
+              </div>
+
+              {/* Customer Name & Payment Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                    Customer Name
+                  </label>
+                  <Input
+                    placeholder="Walk-in Guest"
+                    value={editForm.customer_name}
+                    onChange={(e) => setEditForm({ ...editForm, customer_name: e.target.value })}
+                    className="h-9.5 text-xs rounded-xl bg-white dark:bg-zinc-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                    Payment Status
+                  </label>
+                  <Select
+                    value={editForm.payment_status}
+                    onValueChange={(val) => setEditForm({ ...editForm, payment_status: val })}
+                  >
+                    <SelectTrigger className="h-9.5 text-xs rounded-xl bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 font-semibold">
+                      <SelectValue placeholder="Payment Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="paid">✓ Paid</SelectItem>
+                      <SelectItem value="partially_paid">⏳ Partially Paid</SelectItem>
+                      <SelectItem value="unpaid">⚠️ Unpaid / Due</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Payment Method & Paid Amount */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                    Payment Method
+                  </label>
+                  <Select
+                    value={editForm.payment_method}
+                    onValueChange={(val) => setEditForm({ ...editForm, payment_method: val })}
+                  >
+                    <SelectTrigger className="h-9.5 text-xs rounded-xl bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 font-semibold">
+                      <SelectValue placeholder="Payment Method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="bKash">bKash</SelectItem>
+                      <SelectItem value="Nagad">Nagad</SelectItem>
+                      <SelectItem value="Card">Card</SelectItem>
+                      <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="Due">Due</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                    Paid Amount (৳)
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={editForm.paid_amount}
+                    onChange={(e) => setEditForm({ ...editForm, paid_amount: e.target.value })}
+                    className="h-9.5 text-xs font-mono font-bold rounded-xl bg-white dark:bg-zinc-900"
+                  />
+                </div>
+              </div>
+
+              {/* Special Notes / Instructions */}
+              <div>
+                <label className="font-semibold text-slate-700 dark:text-zinc-300 block mb-1">
+                  Special Instructions / Chef Notes
+                </label>
+                <Input
+                  placeholder="e.g. Less spicy, extra sauce side"
+                  value={editForm.special_instructions}
+                  onChange={(e) => setEditForm({ ...editForm, special_instructions: e.target.value })}
+                  className="h-9.5 text-xs rounded-xl bg-white dark:bg-zinc-900"
+                />
+              </div>
+
+              {/* Order Items Preview */}
+              <div className="p-3 bg-slate-50 dark:bg-zinc-800/40 rounded-xl border border-slate-200/80 dark:border-zinc-800 space-y-1.5">
+                <span className="font-bold text-slate-900 dark:text-white block">
+                  Items in this order ({editingOrder.items?.length || 0}):
+                </span>
+                <div className="space-y-1 max-h-24 overflow-y-auto">
+                  {editingOrder.items?.map((it, idx) => (
+                    <div key={idx} className="flex justify-between text-[11px] text-slate-600 dark:text-zinc-300">
+                      <span>{it.quantity}x {it.name}</span>
+                      <span className="font-mono font-bold">৳ {it.subtotal?.toLocaleString()}</span>
                     </div>
-                    <span className="font-mono font-bold">৳ {it.subtotal}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Summary */}
-              <div className="space-y-1 pt-2 border-t border-slate-200 dark:border-zinc-800">
-                <div className="flex justify-between text-slate-500">
-                  <span>Subtotal:</span>
-                  <span className="font-mono">৳ {selectedOrder.subtotal}</span>
+                  ))}
                 </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>VAT:</span>
-                  <span className="font-mono">৳ {selectedOrder.vat_amount}</span>
-                </div>
-                {selectedOrder.service_charge_amount > 0 && (
-                  <div className="flex justify-between text-slate-500">
-                    <span>Service Charge:</span>
-                    <span className="font-mono">৳ {selectedOrder.service_charge_amount}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-sm font-black pt-1 border-t border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white">
-                  <span>Total Amount:</span>
-                  <span className="text-orange-600 font-mono">৳ {selectedOrder.total_amount}</span>
+                <div className="flex justify-between text-xs font-black pt-1.5 border-t border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-white">
+                  <span>Total Bill:</span>
+                  <span className="text-[#00a86b] dark:text-[#00df89] font-mono">৳ {editingOrder.total_amount?.toLocaleString()}</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800">
-                <button
-                  onClick={() => window.print()}
-                  className="flex-1 py-2 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              {/* Footer Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-zinc-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingOrder(null)}
+                  className="cursor-pointer font-medium text-xs rounded-xl"
                 >
-                  <Printer className="w-4 h-4" />
-                  <span>Print Receipt</span>
-                </button>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isUpdating}
+                  size="sm"
+                  className="bg-[#00df89] hover:bg-[#00c578] text-slate-950 font-bold text-xs gap-1.5 cursor-pointer shadow-xs rounded-xl"
+                >
+                  {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>{isUpdating ? 'Saving...' : 'Save Order Changes'}</span>
+                </Button>
               </div>
-            </div>
+            </form>
           </Card>
         </div>
       )}

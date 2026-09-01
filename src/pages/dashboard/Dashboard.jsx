@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 
 import GymDashboard from '../gym/GymDashboard';
+import RestaurantDashboard from '../restaurant/RestaurantDashboard';
 import {
   ExpiringProductsWidget,
   GymAttendanceWidget,
@@ -38,7 +39,8 @@ export default function Dashboard() {
 
   const currentBusinessType = (mongoShop?.business_type || activeShop?.id || '').toLowerCase();
   const isGrocery = currentBusinessType === 'grocery';
-  const isGym = currentBusinessType === 'gym';
+  const isGym = currentBusinessType === 'gym' || currentBusinessType === 'fitness' || currentBusinessType === 'yoga';
+  const isRestaurant = currentBusinessType === 'restaurant' || currentBusinessType === 'cafe' || currentBusinessType === 'food' || currentBusinessType === 'bakery';
 
   const fetchMetrics = async (showRefreshSpinner = false) => {
     if (showRefreshSpinner) setIsRefreshing(true);
@@ -58,6 +60,10 @@ export default function Dashboard() {
   useEffect(() => {
     fetchMetrics();
   }, []);
+
+  if (isRestaurant) {
+    return <RestaurantDashboard />;
+  }
 
   if (isGym) {
     return <GymDashboard />;

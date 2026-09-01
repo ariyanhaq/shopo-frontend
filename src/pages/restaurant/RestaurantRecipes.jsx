@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import { Card, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import {
   BookOpen, Plus, Trash2, Edit3, DollarSign, Percent,
   Sparkles, RefreshCw, ChefHat, Layers, X, CheckCircle2
@@ -140,8 +142,35 @@ export default function RestaurantRecipes() {
       </div>
 
       {/* DISHES RECIPE LIST */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {dishes.map((dish) => {
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="p-4 rounded-2xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-3.5 shadow-2xs">
+              <div className="flex justify-between items-center">
+                <div className="space-y-1">
+                  <Skeleton className="h-3 w-16 rounded" />
+                  <Skeleton className="h-5 w-32 rounded-md" />
+                </div>
+                <Skeleton className="h-5 w-20 rounded-full" />
+              </div>
+              <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/20">
+                <div className="space-y-1 text-center"><Skeleton className="h-3 w-10 mx-auto rounded" /><Skeleton className="h-4 w-12 mx-auto rounded" /></div>
+                <div className="space-y-1 text-center"><Skeleton className="h-3 w-10 mx-auto rounded" /><Skeleton className="h-4 w-12 mx-auto rounded" /></div>
+                <div className="space-y-1 text-center"><Skeleton className="h-3 w-10 mx-auto rounded" /><Skeleton className="h-4 w-12 mx-auto rounded" /></div>
+              </div>
+              <Skeleton className="h-9 w-full rounded-xl pt-2" />
+            </div>
+          ))}
+        </div>
+      ) : dishes.length === 0 ? (
+        <div className="text-center py-20 bg-white dark:bg-zinc-900 rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800 p-8">
+          <BookOpen className="w-10 h-10 mx-auto text-slate-300 dark:text-zinc-600 mb-2" />
+          <div className="text-sm font-bold text-slate-900 dark:text-white">No Recipes Found</div>
+          <p className="text-xs text-slate-500 mt-1">Add dishes to your food menu first to configure recipes.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {dishes.map((dish) => {
           const ingredients = dish.recipe_ingredients || [];
           const foodCost = Number(dish.cost_price || 0);
           const price = Number(dish.price || 0);
@@ -222,6 +251,7 @@ export default function RestaurantRecipes() {
           );
         })}
       </div>
+      )}
 
       {/* MODAL: CONFIGURE RECIPE BOM */}
       {isRecipeModalOpen && selectedDish && (
@@ -248,18 +278,26 @@ export default function RestaurantRecipes() {
                 </label>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <select
-                    value={selectedIngredientId}
-                    onChange={(e) => setSelectedIngredientId(e.target.value)}
-                    className="sm:col-span-2 h-9 px-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs"
-                  >
-                    <option value="">-- Choose Ingredient --</option>
-                    {rawMaterials.map((r) => (
-                      <option key={r._id} value={r._id}>
-                        {r.name} ({r.current_stock} {r.unit} in stock - ৳{r.unit_cost}/{r.unit})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="sm:col-span-2">
+                    <Select
+                      value={selectedIngredientId}
+                      onValueChange={setSelectedIngredientId}
+                    >
+                      <SelectTrigger className="h-9 text-xs rounded-xl bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800">
+                        <SelectValue placeholder="Choose Ingredient" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-56">
+                        {rawMaterials.map((r) => (
+                          <SelectItem key={r._id} value={r._id}>
+                            <div className="flex items-center justify-between w-full gap-2 text-xs font-medium">
+                              <span>{r.name}</span>
+                              <span className="text-[11px] text-slate-400 font-mono">({r.current_stock} {r.unit} - ৳{r.unit_cost}/{r.unit})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
                   <div className="flex items-center gap-1">
                     <Input

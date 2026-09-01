@@ -31,6 +31,7 @@ import {
 } from '@/pages';
 
 import PermissionGuard from '@/components/common/PermissionGuard';
+import BusinessTypeGuard from '@/components/common/BusinessTypeGuard';
 
 export default function AppRoutes() {
   return (
@@ -81,53 +82,53 @@ export default function AppRoutes() {
           <Route path="/dashboard/settings" element={<Navigate to="/settings/store" replace />} />
           <Route path="/settings" element={<Navigate to="/settings/store" replace />} />
 
-          {/* Dedicated Gym Business Module Routes */}
-          <Route path="/gym/dashboard" element={<GymDashboard />} />
-          <Route path="/gym/sales" element={<PermissionGuard permission="orders"><GymSales /></PermissionGuard>} />
-          <Route path="/gym/products" element={<PermissionGuard permission="products"><GymProducts /></PermissionGuard>} />
-          <Route path="/gym/accounting" element={<PermissionGuard permission="accounting"><GymAccounting /></PermissionGuard>} />
-          <Route path="/gym/members" element={<PermissionGuard permission="customers"><GymMembers /></PermissionGuard>} />
-          <Route path="/gym/members/:id" element={<PermissionGuard permission="customers"><GymMemberProfile /></PermissionGuard>} />
-          <Route path="/gym/memberships" element={<PermissionGuard permission="customers"><GymMemberships /></PermissionGuard>} />
-          <Route path="/gym/attendance" element={<PermissionGuard permission="employees"><GymAttendance /></PermissionGuard>} />
-          <Route path="/gym/payments" element={<PermissionGuard permission="payments"><GymPayments /></PermissionGuard>} />
-          <Route path="/gym/packages" element={<PermissionGuard permission="products"><GymPackages /></PermissionGuard>} />
-          <Route path="/gym/trainers" element={<PermissionGuard permission="employees"><GymTrainers /></PermissionGuard>} />
-          <Route path="/gym/workout-plans" element={<PermissionGuard permission="employees"><GymWorkouts /></PermissionGuard>} />
-          <Route path="/gym/classes" element={<PermissionGuard permission="employees"><GymClasses /></PermissionGuard>} />
-          <Route path="/gym/equipment" element={<PermissionGuard permission="products"><GymEquipment /></PermissionGuard>} />
-          <Route path="/gym/expenses" element={<PermissionGuard permission="expenses"><GymExpenses /></PermissionGuard>} />
-          <Route path="/gym/reports" element={<PermissionGuard permission="accounting"><GymReports /></PermissionGuard>} />
-          <Route path="/gym/settings" element={<PermissionGuard permission="settings"><GymSettings /></PermissionGuard>} />
+          {/* Dedicated Gym Business Module Routes (Restricted strictly to Gym accounts) */}
+          <Route path="/gym/dashboard" element={<BusinessTypeGuard allowedTypes={['gym']}><GymDashboard /></BusinessTypeGuard>} />
+          <Route path="/gym/sales" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="orders"><GymSales /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/products" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="products"><GymProducts /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/accounting" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="accounting"><GymAccounting /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/members" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="customers"><GymMembers /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/members/:id" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="customers"><GymMemberProfile /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/memberships" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="customers"><GymMemberships /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/attendance" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="employees"><GymAttendance /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/payments" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="payments"><GymPayments /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/packages" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="products"><GymPackages /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/trainers" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="employees"><GymTrainers /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/workout-plans" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="employees"><GymWorkouts /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/classes" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="employees"><GymClasses /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/equipment" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="products"><GymEquipment /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/expenses" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="expenses"><GymExpenses /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/reports" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="accounting"><GymReports /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/gym/settings" element={<BusinessTypeGuard allowedTypes={['gym']}><PermissionGuard permission="settings"><GymSettings /></PermissionGuard></BusinessTypeGuard>} />
 
-          {/* Dedicated Restaurant & Cafe Business Module Routes */}
-          <Route path="/restaurant/dashboard" element={<RestaurantDashboard />} />
-          <Route path="/restaurant/tables" element={<PermissionGuard permission="orders"><RestaurantTables /></PermissionGuard>} />
-          <Route path="/restaurant/pos" element={<PermissionGuard permission={['orders', 'pos']}><RestaurantPOS /></PermissionGuard>} />
-          <Route path="/restaurant/kds" element={<PermissionGuard permission="orders"><RestaurantKDS /></PermissionGuard>} />
-          <Route path="/restaurant/menu" element={<PermissionGuard permission="products"><RestaurantMenu /></PermissionGuard>} />
-          <Route path="/restaurant/recipes" element={<PermissionGuard permission="products"><RestaurantRecipes /></PermissionGuard>} />
-          <Route path="/restaurant/inventory" element={<PermissionGuard permission="products"><RestaurantInventory /></PermissionGuard>} />
-          <Route path="/restaurant/reservations" element={<PermissionGuard permission="customers"><RestaurantReservations /></PermissionGuard>} />
-          <Route path="/restaurant/orders" element={<PermissionGuard permission="orders"><RestaurantOrders /></PermissionGuard>} />
-          <Route path="/restaurant/staff" element={<PermissionGuard permission="employees"><RestaurantStaff /></PermissionGuard>} />
-          <Route path="/restaurant/reports" element={<PermissionGuard permission="accounting"><RestaurantReports /></PermissionGuard>} />
-          <Route path="/restaurant/settings" element={<PermissionGuard permission="settings"><RestaurantSettings /></PermissionGuard>} />
+          {/* Dedicated Restaurant & Cafe Business Module Routes (Restricted strictly to Restaurant accounts) */}
+          <Route path="/restaurant/dashboard" element={<BusinessTypeGuard allowedTypes={['restaurant']}><RestaurantDashboard /></BusinessTypeGuard>} />
+          <Route path="/restaurant/tables" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission="orders"><RestaurantTables /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/restaurant/pos" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission={['orders', 'pos']}><RestaurantPOS /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/restaurant/kds" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission="orders"><RestaurantKDS /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/restaurant/menu" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission="products"><RestaurantMenu /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/restaurant/recipes" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission="products"><RestaurantRecipes /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/restaurant/inventory" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission="products"><RestaurantInventory /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/restaurant/reservations" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission="customers"><RestaurantReservations /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/restaurant/orders" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission="orders"><RestaurantOrders /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/restaurant/staff" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission="employees"><RestaurantStaff /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/restaurant/reports" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission="accounting"><RestaurantReports /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/restaurant/settings" element={<BusinessTypeGuard allowedTypes={['restaurant']}><PermissionGuard permission="settings"><RestaurantSettings /></PermissionGuard></BusinessTypeGuard>} />
 
-          {/* Distinct Core Feature Routes */}
-          <Route path="/sales" element={<PermissionGuard permission={['orders', 'pos']}><Orders /></PermissionGuard>} />
-          <Route path="/sales/new" element={<PermissionGuard permission={['orders', 'pos']}><NewSale /></PermissionGuard>} />
-          <Route path="/sales/pos" element={<PermissionGuard permission={['orders', 'pos']}><POS /></PermissionGuard>} />
-          <Route path="/pos" element={<PermissionGuard permission={['orders', 'pos']}><POS /></PermissionGuard>} />
+          {/* Retail & Standard Shop Routes (Restricted from Restaurant & Gym) */}
+          <Route path="/sales" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission={['orders', 'pos']}><Orders /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/sales/new" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission={['orders', 'pos']}><NewSale /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/sales/pos" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission={['orders', 'pos']}><POS /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/pos" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission={['orders', 'pos']}><POS /></PermissionGuard></BusinessTypeGuard>} />
 
           {/* Products & Inventory Routes */}
-          <Route path="/products" element={<PermissionGuard permission="products"><Products /></PermissionGuard>} />
-          <Route path="/products/add" element={<PermissionGuard permission="products"><Products /></PermissionGuard>} />
-          <Route path="/inventory" element={<PermissionGuard permission="products"><Products /></PermissionGuard>} />
-          <Route path="/inventory/products" element={<PermissionGuard permission="products"><Products /></PermissionGuard>} />
-          <Route path="/inventory/add-product" element={<PermissionGuard permission="products"><Products /></PermissionGuard>} />
-          <Route path="/inventory/categories" element={<PermissionGuard permission="products"><Categories /></PermissionGuard>} />
-          <Route path="/inventory/stock-history" element={<PermissionGuard permission="products"><StockHistory /></PermissionGuard>} />
+          <Route path="/products" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission="products"><Products /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/products/add" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission="products"><Products /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/inventory" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission="products"><Products /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/inventory/products" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission="products"><Products /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/inventory/add-product" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission="products"><Products /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/inventory/categories" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission="products"><Categories /></PermissionGuard></BusinessTypeGuard>} />
+          <Route path="/inventory/stock-history" element={<BusinessTypeGuard allowedTypes={['retail']}><PermissionGuard permission="products"><StockHistory /></PermissionGuard></BusinessTypeGuard>} />
 
           {/* Suppliers & Purchases */}
           <Route path="/suppliers" element={<PermissionGuard permission="suppliers"><Suppliers /></PermissionGuard>} />

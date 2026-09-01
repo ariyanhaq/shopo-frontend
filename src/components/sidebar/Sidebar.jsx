@@ -155,21 +155,39 @@ export default function Sidebar({ collapsed, isMobileOpen = false, onCloseMobile
 
   const restaurantMenuSections = [
     {
-      title: lang === 'bn' ? 'রেস্তোরাঁ ম্যানেজমেন্ট' : 'Restaurant Management',
+      title: lang === 'bn' ? 'রেস্তোরাঁ ও কিচেন' : 'Restaurant & Operations',
       items: [
         { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', path: '/restaurant/dashboard', icon: LayoutDashboard },
         { label: lang === 'bn' ? 'টেবিল ও ফ্লোর প্ল্যান' : 'Floor & Tables', path: '/restaurant/tables', icon: LayoutGrid, hasChevron: true, perm: 'orders' },
         { label: lang === 'bn' ? 'রেস্তোরাঁ পিওএস (POS)' : 'Restaurant POS', path: '/restaurant/pos', icon: ShoppingCart, hasChevron: true, perm: 'orders' },
         { label: lang === 'bn' ? 'কিচেন ডিসপ্লে (KDS)' : 'Kitchen Screen (KDS)', path: '/restaurant/kds', icon: Flame, hasChevron: true, perm: 'orders' },
         { label: lang === 'bn' ? 'খাবার মেনু ও আইটেম' : 'Food Menu', path: '/restaurant/menu', icon: Utensils, hasChevron: true, perm: 'products' },
-        { label: lang === 'bn' ? 'রেসিপি ও খাদ্য খরচ' : 'Recipe BOM', path: '/restaurant/recipes', icon: Layers, hasChevron: true, perm: 'products' },
+        { label: lang === 'bn' ? 'টেবিল বুকিং ও রিজার্ভেশন' : 'Table Bookings', path: '/restaurant/reservations', icon: Calendar, hasChevron: true, perm: 'customers' },
+        { label: lang === 'bn' ? 'রেসিপি ও খাদ্য খরচ (BOM)' : 'Recipe BOM', path: '/restaurant/recipes', icon: Layers, hasChevron: true, perm: 'products' },
         { label: lang === 'bn' ? 'কাঁচামাল ও প্যান্ট্রি' : 'Raw Materials', path: '/restaurant/inventory', icon: Package, hasChevron: true, perm: 'products' },
-        { label: lang === 'bn' ? 'টেবিল রিজার্ভেশন' : 'Table Bookings', path: '/restaurant/reservations', icon: Calendar, hasChevron: true, perm: 'customers' },
         { label: lang === 'bn' ? 'অর্ডার ও চালান ইতিহাস' : 'Restaurant Orders', path: '/restaurant/orders', icon: Receipt, hasChevron: true, perm: 'orders' },
-        { label: lang === 'bn' ? 'ওয়েটার ও স্টাফ' : 'Waiters & Staff', path: '/restaurant/staff', icon: UserCheck, hasChevron: true, perm: 'employees' },
-        { label: lang === 'bn' ? 'রেস্তোরাঁ রিপোর্ট' : 'Restaurant Reports', path: '/restaurant/reports', icon: FileBarChart, hasChevron: true, perm: 'accounting' },
-        { label: lang === 'bn' ? 'রেস্তোরাঁ সেটিংস' : 'Restaurant Settings', path: '/restaurant/settings', icon: Settings, hasChevron: true, perm: 'settings' },
-        { label: lang === 'bn' ? 'দোকানের মূল সেটিংস' : 'Store Settings', path: '/settings/store', icon: Store, hasChevron: true, perm: 'settings' },
+      ]
+    },
+    {
+      title: lang === 'bn' ? 'ব্যবসা ও হিসাব' : 'Business & Finance',
+      items: [
+        { label: lang === 'bn' ? 'কাস্টমার ও ডাইনার' : 'Customers', path: '/customers', icon: Users, hasChevron: true, perm: 'customers' },
+        { label: lang === 'bn' ? 'মেম্বারশিপ ও রিওয়ার্ড' : 'Members & Rewards', path: '/members', icon: Crown, hasChevron: true, perm: 'customers' },
+        { label: lang === 'bn' ? 'পণ্য ক্রয় (Purchases)' : 'Purchases', path: '/purchases', icon: ShoppingBag, hasChevron: true, perm: 'purchases' },
+        { label: lang === 'bn' ? 'সাপ্লায়ার (Suppliers)' : 'Suppliers', path: '/suppliers', icon: Building2, hasChevron: true, perm: 'suppliers' },
+        { label: lang === 'bn' ? 'দোকানের খরচ (Expenses)' : 'Expenses', path: '/expenses', icon: DollarSign, hasChevron: true, perm: 'expenses' },
+        { label: lang === 'bn' ? 'কর্মচারী ও বেতন' : 'Employees & Salary', path: '/employees', icon: UserCheck, hasChevron: true, perm: 'employees' },
+        { label: lang === 'bn' ? 'আর্থিক রিপোর্ট (Financial Reports)' : 'Financial Reports', path: '/financial-reports', icon: FileBarChart, hasChevron: true, perm: 'accounting' },
+        { label: lang === 'bn' ? 'রেস্তোরাঁ অ্যানালিটিক্স' : 'Restaurant Analytics', path: '/restaurant/reports', icon: BarChart3, hasChevron: true, perm: 'accounting' },
+      ]
+    },
+    {
+      title: lang === 'bn' ? 'সেটিংস ও প্রশাসন' : 'Settings & Admin',
+      items: [
+        { label: lang === 'bn' ? 'ব্যবহারকারী ও ডিভাইস' : 'Users & Devices', path: '/users', icon: ShieldCheck, hasChevron: true, perm: 'users' },
+        { label: lang === 'bn' ? 'রেস্তোরাঁ সেটিংস' : 'Restaurant Settings', path: '/restaurant/settings', icon: Sliders, hasChevron: true, perm: 'settings' },
+        { label: lang === 'bn' ? 'দোকানের সেটিংস' : 'Store Settings', path: '/settings/store', icon: Store, hasChevron: true, perm: 'settings' },
+        { label: lang === 'bn' ? 'প্রোফাইল সেটিংস' : 'Profile Settings', path: '/settings/profile', icon: User, hasChevron: true },
       ]
     }
   ];
@@ -186,8 +204,8 @@ export default function Sidebar({ collapsed, isMobileOpen = false, onCloseMobile
       
       {/* TOP BRAND HEADER */}
       <div className={`${isMobile ? 'p-3 pb-2 drawer-safe-top' : 'p-3.5 pb-2.5'} shrink-0 w-full relative z-30 border-b border-slate-100 dark:border-zinc-800/80`}>
-        <div className="flex items-center justify-between gap-2">
-          <DropdownMenu className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 w-full">
+          <DropdownMenu className="w-full min-w-0">
             <DropdownMenuTrigger className="w-full block outline-none">
               <div className={`w-full flex items-center justify-between ${isMobile ? 'p-2 rounded-xl' : 'p-2.5 rounded-2xl'} bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-800/80 hover:border-slate-300 dark:hover:border-zinc-700 transition-all text-left min-w-0 shadow-2xs cursor-pointer`}>
                 <div className={`flex items-center ${isMobile ? 'gap-2.5' : 'gap-3'} min-w-0 flex-1 overflow-hidden`}>
@@ -211,7 +229,7 @@ export default function Sidebar({ collapsed, isMobileOpen = false, onCloseMobile
               </div>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="left" width="w-64">
+            <DropdownMenuContent align="left" width="w-full">
               <DropdownMenuLabel className="flex items-center justify-between text-xs font-bold text-slate-500">
                 <span>{lang === 'bn' ? 'আমার দোকানসমূহ' : 'My Shops & Outlets'}</span>
                 <span className="text-[10px] bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-slate-500 font-mono">
@@ -384,7 +402,7 @@ export default function Sidebar({ collapsed, isMobileOpen = false, onCloseMobile
               </div>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="left" width="w-58" className="bottom-full mb-1.5 mt-0">
+            <DropdownMenuContent align="left" width="w-full" className="bottom-full mb-1.5 mt-0">
               <DropdownMenuLabel>
                 {lang === 'bn' ? 'অ্যাকাউন্ট ও সেটিংস' : 'Account & Settings'}
               </DropdownMenuLabel>

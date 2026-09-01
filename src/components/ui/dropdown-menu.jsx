@@ -31,8 +31,9 @@ export function DropdownMenu({ children, className }) {
       <div
         ref={menuRef}
         className={cn(
-          "relative inline-block text-left",
-          isOpen ? "z-50" : "z-auto",
+          "relative text-left",
+          className?.includes('block') || className?.includes('w-full') || className?.includes('flex') ? '' : 'inline-block',
+          isOpen ? "z-[100]" : "z-auto",
           className
         )}
       >

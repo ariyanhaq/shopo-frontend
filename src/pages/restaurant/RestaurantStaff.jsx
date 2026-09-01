@@ -5,7 +5,7 @@ import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { Card, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Users, UserCheck, Plus, RefreshCw, ChefHat, DollarSign,
   Utensils, Sparkles, Award
@@ -14,6 +14,7 @@ import {
 export default function RestaurantStaff() {
   const { lang } = useLanguage();
   const { activeShop } = useShop();
+  const [isLoading, setIsLoading] = useState(true);
 
   const [staff, setStaff] = useState([
     { id: 'S-1', name: 'Sajjad Hossain', role: 'Head Waiter / Captain', shift: 'Evening (4PM - 12AM)', tablesAssigned: 'T-01, T-02, VIP-1', monthlySales: '৳ 340,000', tipsEarned: '৳ 8,400', rating: '4.9 ★' },
@@ -21,6 +22,14 @@ export default function RestaurantStaff() {
     { id: 'S-3', name: 'Chef Rafiqul Islam', role: 'Executive Head Chef', shift: 'All Shifts', tablesAssigned: 'Main Kitchen', monthlySales: '—', tipsEarned: '—', rating: '5.0 ★' },
     { id: 'S-4', name: 'Kalam Hossain', role: 'Grill & BBQ Master', shift: 'Evening (4PM - 12AM)', tablesAssigned: 'Grill Station', monthlySales: '—', tipsEarned: '—', rating: '4.9 ★' },
   ]);
+
+  useEffect(() => {
+    setIsLoading(true);
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [activeShop]);
 
   return (
     <div className="space-y-6 font-sans pb-16">
@@ -44,7 +53,25 @@ export default function RestaurantStaff() {
 
       {/* STAFF CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {staff.map((member) => (
+        {isLoading ? (
+          [1, 2, 3, 4].map((i) => (
+            <div key={i} className="p-5 rounded-2xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 space-y-3.5 shadow-2xs">
+              <div className="flex justify-between items-center">
+                <Skeleton className="w-10 h-10 rounded-2xl" />
+                <Skeleton className="h-5 w-12 rounded-full" />
+              </div>
+              <div className="space-y-1 py-1">
+                <Skeleton className="h-4 w-28 rounded" />
+                <Skeleton className="h-3 w-20 rounded" />
+              </div>
+              <div className="space-y-2 p-2.5 rounded-xl border border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/20">
+                <div className="flex justify-between"><Skeleton className="h-3 w-16 rounded" /><Skeleton className="h-3 w-20 rounded" /></div>
+                <div className="flex justify-between"><Skeleton className="h-3 w-16 rounded" /><Skeleton className="h-3 w-16 rounded" /></div>
+              </div>
+            </div>
+          ))
+        ) : (
+          staff.map((member) => (
           <Card
             key={member.id}
             className="p-5 bg-white dark:bg-zinc-900 border-slate-200/80 dark:border-zinc-800 shadow-xs rounded-2xl flex flex-col justify-between"
@@ -89,7 +116,8 @@ export default function RestaurantStaff() {
               <span className="text-[10px] text-slate-400 font-semibold">Active On Duty</span>
             </div>
           </Card>
-        ))}
+        )))
+      }
       </div>
 
     </div>

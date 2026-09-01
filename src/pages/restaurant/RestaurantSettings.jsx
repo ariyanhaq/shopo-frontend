@@ -16,8 +16,8 @@ export default function RestaurantSettings() {
   const { mongoShop } = useAuth();
 
   const [form, setForm] = useState({
-    service_charge_percent: 5,
-    vat_percent: 5,
+    service_charge_percent: 0,
+    vat_percent: 0,
     default_prep_time: 15,
     enable_kot_sound: true,
     enable_table_qr_ordering: true,

@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
+import { useShop } from '@/context/ShopContext';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { Card, CardTitle, CardDescription } from '@/components/ui/card';
@@ -79,6 +80,9 @@ const safeMoney = (val, fallback = 0) => {
 export default function ProfitLoss() {
   const { lang, t } = useLanguage();
   const { mongoShop } = useAuth();
+  const { activeShop } = useShop();
+
+  const isRestaurant = activeShop?.business_type === 'restaurant' || mongoShop?.business_type === 'restaurant';
 
   const currentYear = new Date().getFullYear();
   const [dateFilter, setDateFilter] = useState('month');
@@ -204,7 +208,7 @@ export default function ProfitLoss() {
 
   useEffect(() => {
     fetchStatement();
-  }, [dateFilter, selectedMonth, selectedYear, specificDate, mongoShop?._id]);
+  }, [dateFilter, selectedMonth, selectedYear, specificDate, mongoShop?._id, activeShop?._id]);
 
   // Combined all available categories
   const allCategories = useMemo(() => {
@@ -594,43 +598,45 @@ export default function ProfitLoss() {
       </Card>
 
       {/* ---------------------------------------------------- */}
-      {/* FINANCIAL SUMMARY KPI CARDS (2 COLUMNS MOBILE / 5 DESKTOP) */}
+      {/* FINANCIAL SUMMARY KPI CARDS (3 CARDS FOR RESTAURANT / 5 FOR RETAIL) */}
       {/* ---------------------------------------------------- */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+      <div className={`grid gap-3 sm:gap-4 ${isRestaurant ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2 lg:grid-cols-5'}`}>
         
-        {/* Total Business Investment (Purchases + Expenses + Salaries) */}
-        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1.5">
-            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
-              {lang === 'bn' ? 'সর্বমোট বিনিয়োগ' : 'Total Investment'}
-            </span>
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center shrink-0">
-              <Coins className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        {/* Total Business Investment (Hidden for Restaurants) */}
+        {!isRestaurant && (
+          <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent flex flex-col justify-between">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
+                {lang === 'bn' ? 'সর্বমোট বিনিয়োগ' : 'Total Investment'}
+              </span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center shrink-0">
+                <Coins className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </div>
             </div>
-          </div>
-          <div className="mt-2.5 sm:mt-3 space-y-1">
-            <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
-              {isLoading ? (
-                <Skeleton className="h-8 w-24 my-0.5" />
-              ) : (
-                `৳ ${safeMoney(investmentData.totalInvestment || investmentData.periodTotalInvestment)}`
-              )}
+            <div className="mt-2.5 sm:mt-3 space-y-1">
+              <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
+                {isLoading ? (
+                  <Skeleton className="h-8 w-24 my-0.5" />
+                ) : (
+                  `৳ ${safeMoney(investmentData.totalInvestment || investmentData.periodTotalInvestment)}`
+                )}
+              </div>
+              <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate" title={lang === 'bn' ? 'পণ্য ক্রয় + পরিচালন ব্যয় + কর্মচারীদের বেতন' : 'Purchases + Operating Expenses + Salaries'}>
+                {isLoading ? '...' : (
+                  <span>
+                    {lang === 'bn' ? 'ক্রয় + খরচ + বেতন' : 'Purchases + Expenses + Salaries'}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate" title={lang === 'bn' ? 'পণ্য ক্রয় + পরিচালন ব্যয় + কর্মচারীদের বেতন' : 'Purchases + Operating Expenses + Salaries'}>
-              {isLoading ? '...' : (
-                <span>
-                  {lang === 'bn' ? 'ক্রয় + খরচ + বেতন' : 'Purchases + Expenses + Salaries'}
-                </span>
-              )}
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         {/* Gross Revenue */}
         <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
           <div className="flex items-center justify-between gap-1.5">
             <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
-              {lang === 'bn' ? 'মোট বিক্রয় আয়' : 'Gross Sales Revenue'}
+              {lang === 'bn' ? (isRestaurant ? 'খাবার বিক্রয় আয় (রাজস্ব)' : 'মোট বিক্রয় আয়') : (isRestaurant ? 'Gross Food Revenue' : 'Gross Sales Revenue')}
             </span>
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-[#00a86b] dark:text-[#00df89] flex items-center justify-center shrink-0">
               <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -641,36 +647,38 @@ export default function ProfitLoss() {
               {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.grossRevenue)}`}
             </div>
             <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">
-              {lang === 'bn' ? 'ইনভয়েস বিক্রয় হিসাব' : 'From invoice transactions'}
+              {lang === 'bn' ? (isRestaurant ? 'অর্ডার ও ডাইনিং ট্রানজেকশন' : 'ইনভয়েস বিক্রয় হিসাব') : (isRestaurant ? 'From food orders & dining' : 'From invoice transactions')}
             </div>
           </div>
         </Card>
 
-        {/* Cost of Goods Sold */}
-        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1.5">
-            <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
-              {lang === 'bn' ? 'পণ্য কেনা খরচ' : 'Cost of Goods (COGS)'}
-            </span>
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 flex items-center justify-center shrink-0">
-              <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        {/* Cost of Goods Sold (Hidden for Restaurants because raw materials are tracked in Expenses) */}
+        {!isRestaurant && (
+          <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
+                {lang === 'bn' ? 'পণ্য কেনা খরচ' : 'Cost of Goods (COGS)'}
+              </span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 flex items-center justify-center shrink-0">
+                <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </div>
             </div>
-          </div>
-          <div className="mt-2.5 sm:mt-3 space-y-1">
-            <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
-              {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.cogs)}`}
+            <div className="mt-2.5 sm:mt-3 space-y-1">
+              <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
+                {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.cogs)}`}
+              </div>
+              <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">
+                {lang === 'bn' ? 'পণ্য ক্রয় খরচ' : 'Direct product unit cost'}
+              </div>
             </div>
-            <div className="text-[10px] sm:text-xs text-slate-500 dark:text-zinc-400 font-medium truncate">
-              {lang === 'bn' ? 'পণ্য ক্রয় খরচ' : 'Direct product unit cost'}
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         {/* Operating Expenses */}
         <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
           <div className="flex items-center justify-between gap-1.5">
             <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
-              {lang === 'bn' ? 'পরিচালন ও দোকান খরচ' : 'Operating Expenses'}
+              {lang === 'bn' ? (isRestaurant ? 'মোট খরচ (কাঁচামাল ও অন্যান্য)' : 'পরিচালন ও দোকান খরচ') : (isRestaurant ? 'Total Expenses (Raw Materials & Ops)' : 'Operating Expenses')}
             </span>
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-rose-500/10 dark:bg-rose-500/20 text-rose-500 flex items-center justify-center shrink-0">
               <ArrowDownRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -681,13 +689,13 @@ export default function ProfitLoss() {
               {isLoading ? <Skeleton className="h-8 w-24 my-0.5" /> : `৳ ${safeMoney(financialData.operatingExpenses)}`}
             </div>
             <div className="text-[10px] sm:text-xs text-rose-500 font-medium truncate">
-              {lang === 'bn' ? 'দোকান ভাড়া ও বিল' : 'Rent, bills & overheads'}
+              {lang === 'bn' ? (isRestaurant ? 'কাঁচামাল ক্রয়, বিল ও বেতন' : 'দোকান ভাড়া ও বিল') : (isRestaurant ? 'Raw materials, utilities & salaries' : 'Rent, bills & overheads')}
             </div>
           </div>
         </Card>
 
         {/* Net Profit */}
-        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] col-span-2 sm:col-span-1 lg:col-span-1 flex flex-col justify-between">
+        <Card className="p-3.5 sm:p-5 border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215] flex flex-col justify-between">
           <div className="flex items-center justify-between gap-1.5">
             <span className="text-[11px] sm:text-sm font-medium text-slate-500 dark:text-zinc-400 truncate">
               {lang === 'bn' ? 'নিট লাভ / লোকসান' : 'Net Profit / Loss'}
@@ -717,7 +725,7 @@ export default function ProfitLoss() {
       {/* ---------------------------------------------------- */}
       {/* EXPENSE CATEGORIES, INVESTMENT, & P&L SUMMARY        */}
       {/* ---------------------------------------------------- */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={`grid gap-6 ${isRestaurant ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1 lg:grid-cols-3'}`}>
         
         {/* Expense Category Breakdown Card */}
         <Card className="p-6 space-y-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
@@ -768,98 +776,100 @@ export default function ProfitLoss() {
           )}
         </Card>
 
-        {/* Capital & Total Business Investment Card */}
-        <Card className="p-6 space-y-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Coins className="w-4 h-4 text-[#00df89]" />
-                <span>{lang === 'bn' ? 'সর্বমোট বিনিয়োগ ও মূলধনের হিসাব' : 'Total Investment Breakdown'}</span>
-              </CardTitle>
-              <CardDescription className="text-xs font-normal">
-                {lang === 'bn' ? 'পণ্য ক্রয়, দোকান পরিচালনা ব্যয় ও বেতনের যোগফল' : 'Purchases, operating expenses & salaries sum'}
-              </CardDescription>
-            </div>
-            <Link
-              to="/inventory"
-              className="text-xs font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <span>{lang === 'bn' ? 'ইনভেন্টরি' : 'Inventory'}</span>
-              <ArrowUpRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          <div className="space-y-2.5 text-xs pt-1">
-            {/* 3 Investment Outflow Pillars */}
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
-              <div className="flex justify-between text-slate-600 dark:text-zinc-400">
-                <span className="flex items-center gap-1.5">
-                  <ShoppingBag className="w-3.5 h-3.5 text-blue-500" />
-                  <span>{lang === 'bn' ? '১. পণ্য ক্রয় ও স্টক সংগ্রহ:' : '1. Product Purchases / Stock:'}</span>
-                </span>
-                <span className="font-bold text-slate-900 dark:text-white font-mono">
-                  ৳ {safeMoney(investmentData.periodPurchaseInvestment)}
-                </span>
+        {/* Capital & Total Business Investment Card (Hidden for Restaurants) */}
+        {!isRestaurant && (
+          <Card className="p-6 space-y-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-[#00df89]" />
+                  <span>{lang === 'bn' ? 'সর্বমোট বিনিয়োগ ও মূলধনের হিসাব' : 'Total Investment Breakdown'}</span>
+                </CardTitle>
+                <CardDescription className="text-xs font-normal">
+                  {lang === 'bn' ? 'পণ্য ক্রয়, দোকান পরিচালনা ব্যয় ও বেতনের যোগফল' : 'Purchases, operating expenses & salaries sum'}
+                </CardDescription>
               </div>
-
-              <div className="flex justify-between text-slate-600 dark:text-zinc-400">
-                <span className="flex items-center gap-1.5">
-                  <Receipt className="w-3.5 h-3.5 text-amber-500" />
-                  <span>{lang === 'bn' ? '২. দোকান ও পরিচালন খরচ:' : '2. Operating & Shop Expenses:'}</span>
-                </span>
-                <span className="font-bold text-slate-900 dark:text-white font-mono">
-                  ৳ {safeMoney(investmentData.periodOperatingExpenses)}
-                </span>
-              </div>
-
-              <div className="flex justify-between text-slate-600 dark:text-zinc-400">
-                <span className="flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-purple-500" />
-                  <span>{lang === 'bn' ? '৩. কর্মচারীদের বেতন ও পারিশ্রমিক:' : '3. Staff Salaries Paid:'}</span>
-                </span>
-                <span className="font-bold text-slate-900 dark:text-white font-mono">
-                  ৳ {safeMoney(investmentData.periodSalaryExpenses)}
-                </span>
-              </div>
-
-              {/* Total Sum Highlight */}
-              <div className="flex justify-between items-center text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-zinc-800">
-                <span className="font-bold text-xs">
-                  {lang === 'bn' ? 'নির্বাচিত সময়ের মোট বিনিয়োগ:' : 'Period Total Investment:'}
-                </span>
-                <span className="font-black text-sm text-[#00a86b] dark:text-[#00df89] font-mono">
-                  ৳ {safeMoney(investmentData.totalInvestment || investmentData.periodTotalInvestment)}
-                </span>
-              </div>
+              <Link
+                to="/inventory"
+                className="text-xs font-semibold text-[#00a86b] dark:text-[#00df89] hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>{lang === 'bn' ? 'ইনভেন্টরি' : 'Inventory'}</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
 
-            {/* Current Real-time Inventory Asset & Lifetime Stats */}
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-[11px]">
-              <div className="flex justify-between text-slate-500">
-                <span>{lang === 'bn' ? 'সাপ্লায়ার অবিক্রিত স্টক সম্পদ (বিনিয়োগ মূল্য):' : 'Supplier Stock Asset (Cost Investment):'}</span>
-                <span className="font-semibold text-slate-800 dark:text-zinc-200 font-mono">
-                  ৳ {safeMoney(investmentData.totalStockInvestment)}
-                </span>
-              </div>
-              {Number(investmentData.totalOwnStockValuation) > 0 && (
-                <div className="flex justify-between text-slate-500 text-[10px]">
-                  <span className="text-purple-600 dark:text-purple-400">
-                    {lang === 'bn' ? '↳ নিজস্ব পণ্য স্টক (বিনিয়োগে যুক্ত নয়):' : '↳ Own Product Stock (excluded from investment):'}
+            <div className="space-y-2.5 text-xs pt-1">
+              {/* 3 Investment Outflow Pillars */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
+                <div className="flex justify-between text-slate-600 dark:text-zinc-400">
+                  <span className="flex items-center gap-1.5">
+                    <ShoppingBag className="w-3.5 h-3.5 text-blue-500" />
+                    <span>{lang === 'bn' ? '১. পণ্য ক্রয় ও স্টক সংগ্রহ:' : '1. Product Purchases / Stock:'}</span>
                   </span>
-                  <span className="font-medium text-purple-600 dark:text-purple-400 font-mono">
-                    ৳ {safeMoney(investmentData.totalOwnStockValuation)}
+                  <span className="font-bold text-slate-900 dark:text-white font-mono">
+                    ৳ {safeMoney(investmentData.periodPurchaseInvestment)}
                   </span>
                 </div>
-              )}
-              <div className="flex justify-between text-slate-500">
-                <span>{lang === 'bn' ? 'সর্বমোট লাইফটাইম ব্যবসায়িক বিনিয়োগ:' : 'Lifetime Business Investment:'}</span>
-                <span className="font-medium text-slate-600 dark:text-zinc-400 font-mono">
-                  ৳ {safeMoney(investmentData.lifetimeTotalInvestment)}
-                </span>
+
+                <div className="flex justify-between text-slate-600 dark:text-zinc-400">
+                  <span className="flex items-center gap-1.5">
+                    <Receipt className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{lang === 'bn' ? '২. দোকান ও পরিচালন খরচ:' : '2. Operating & Shop Expenses:'}</span>
+                  </span>
+                  <span className="font-bold text-slate-900 dark:text-white font-mono">
+                    ৳ {safeMoney(investmentData.periodOperatingExpenses)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-slate-600 dark:text-zinc-400">
+                  <span className="flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-purple-500" />
+                    <span>{lang === 'bn' ? '৩. কর্মচারীদের বেতন ও পারিশ্রমিক:' : '3. Staff Salaries Paid:'}</span>
+                  </span>
+                  <span className="font-bold text-slate-900 dark:text-white font-mono">
+                    ৳ {safeMoney(investmentData.periodSalaryExpenses)}
+                  </span>
+                </div>
+
+                {/* Total Sum Highlight */}
+                <div className="flex justify-between items-center text-slate-900 dark:text-white pt-2 border-t border-slate-200 dark:border-zinc-800">
+                  <span className="font-bold text-xs">
+                    {lang === 'bn' ? 'নির্বাচিত সময়ের মোট বিনিয়োগ:' : 'Period Total Investment:'}
+                  </span>
+                  <span className="font-black text-sm text-[#00a86b] dark:text-[#00df89] font-mono">
+                    ৳ {safeMoney(investmentData.totalInvestment || investmentData.periodTotalInvestment)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Current Real-time Inventory Asset & Lifetime Stats */}
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-1.5 text-[11px]">
+                <div className="flex justify-between text-slate-500">
+                  <span>{lang === 'bn' ? 'সাপ্লায়ার অবিক্রিত স্টক সম্পদ (বিনিয়োগ মূল্য):' : 'Supplier Stock Asset (Cost Investment):'}</span>
+                  <span className="font-semibold text-slate-800 dark:text-zinc-200 font-mono">
+                    ৳ {safeMoney(investmentData.totalStockInvestment)}
+                  </span>
+                </div>
+                {Number(investmentData.totalOwnStockValuation) > 0 && (
+                  <div className="flex justify-between text-slate-500 text-[10px]">
+                    <span className="text-purple-600 dark:text-purple-400">
+                      {lang === 'bn' ? '↳ নিজস্ব পণ্য স্টক (বিনিয়োগে যুক্ত নয়):' : '↳ Own Product Stock (excluded from investment):'}
+                    </span>
+                    <span className="font-medium text-purple-600 dark:text-purple-400 font-mono">
+                      ৳ {safeMoney(investmentData.totalOwnStockValuation)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-500">
+                  <span>{lang === 'bn' ? 'সর্বমোট লাইফটাইম ব্যবসায়িক বিনিয়োগ:' : 'Lifetime Business Investment:'}</span>
+                  <span className="font-medium text-slate-600 dark:text-zinc-400 font-mono">
+                    ৳ {safeMoney(investmentData.lifetimeTotalInvestment)}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         {/* Quick Statement Card */}
         <Card className="p-6 space-y-4 border border-slate-200/90 dark:border-zinc-800/80 dark:bg-[#121215]">
@@ -875,7 +885,7 @@ export default function ProfitLoss() {
           <div className="space-y-3 text-xs pt-1">
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-zinc-800 space-y-2">
               <div className="flex justify-between text-slate-500">
-                <span>{lang === 'bn' ? 'মোট ইনভয়েস সংখ্যা:' : 'Total Invoices Issued:'}</span>
+                <span>{lang === 'bn' ? 'মোট ইনভয়েস / অর্ডার সংখ্যা:' : 'Total Orders / Invoices:'}</span>
                 <span className="font-semibold text-slate-800 dark:text-zinc-200">{financialData.totalSalesCount || 0}</span>
               </div>
               <div className="flex justify-between text-slate-500">
@@ -883,8 +893,10 @@ export default function ProfitLoss() {
                 <span className="font-semibold text-slate-800 dark:text-zinc-200">{financialData.totalExpensesCount || expenseBreakdown.length}</span>
               </div>
               <div className="flex justify-between text-slate-500 pt-1 border-t border-slate-200 dark:border-zinc-800">
-                <span>{lang === 'bn' ? 'মোট লাভ (বিক্রি - ক্রয়):' : 'Gross Profit (Revenue - COGS):'}</span>
-                <span className="font-bold text-slate-900 dark:text-white font-mono">৳ {(financialData.grossProfit || 0).toLocaleString()}</span>
+                <span>{lang === 'bn' ? (isRestaurant ? 'মোট বিক্রয় রাজস্ব:' : 'মোট লাভ (বিক্রি - ক্রয়):') : (isRestaurant ? 'Total Sales Revenue:' : 'Gross Profit (Revenue - COGS):')}</span>
+                <span className="font-bold text-slate-900 dark:text-white font-mono">
+                  ৳ {(isRestaurant ? financialData.grossRevenue : financialData.grossProfit || 0).toLocaleString()}
+                </span>
               </div>
             </div>
 
@@ -895,8 +907,8 @@ export default function ProfitLoss() {
               </div>
               <div className="text-[11px] text-slate-500 dark:text-zinc-400">
                 {lang === 'bn'
-                  ? 'দোকানের সকল পরিচালন ব্যয় এবং পণ্য ক্রয় খরচ বাদ দেওয়ার পর।'
-                  : 'After deducting all operating costs and product inventory purchase expenses.'}
+                  ? (isRestaurant ? 'রেস্তোরাঁর মোট রাজস্ব থেকে কাঁচামাল ও যাবতীয় পরিচালন খরচ বাদ দেওয়ার পর।' : 'দোকানের সকল পরিচালন ব্যয় এবং পণ্য ক্রয় খরচ বাদ দেওয়ার পর।')
+                  : (isRestaurant ? 'After deducting all raw material restocking and operating expenses from food sales revenue.' : 'After deducting all operating costs and product inventory purchase expenses.')}
               </div>
             </div>
           </div>

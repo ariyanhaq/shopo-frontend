@@ -10,6 +10,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useAuth } from '@/context/AuthContext';
 import Sidebar from '@/components/sidebar/Sidebar';
 import QuickActionModal from '@/components/dashboard/QuickActionModal';
+import GlobalSearchBar from '@/components/navbar/GlobalSearchBar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -156,15 +157,8 @@ export default function DashboardLayout() {
 
           </div>
 
-          {/* Center Search Input */}
-          <div className="hidden lg:flex items-center gap-2 flex-1 max-w-sm mx-4 relative">
-            <Search className="w-4 h-4 text-slate-400 dark:text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder={lang === 'bn' ? 'পণ্য, বিক্রি, কাস্টমার খুঁজুন...' : 'Search products, orders, customers...'}
-              className="w-full pl-9 pr-4 py-1.5 rounded-xl bg-slate-100 dark:bg-[#121215] border border-slate-200/80 dark:border-zinc-800/80 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#00df89] font-normal"
-            />
-          </div>
+          {/* Center Dynamic Business-Aware Search Bar */}
+          <GlobalSearchBar className="hidden md:flex flex-1 w-full min-w-[260px] max-w-[420px] mx-4" />
 
           {/* Right Action Items */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
